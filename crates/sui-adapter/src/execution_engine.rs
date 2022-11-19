@@ -129,6 +129,7 @@ pub fn execute_transaction_to_effects<
         status,
         gas,
         epoch_data.epoch_id(),
+        tx_ctx.call_traces(),
     );
     (inner, effects, execution_result)
 }

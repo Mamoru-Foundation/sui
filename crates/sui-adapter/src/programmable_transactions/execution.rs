@@ -331,6 +331,7 @@ fn execute_move_call<E: fmt::Debug, S: StorageView<E>, Mode: ExecutionMode>(
     let SerializedReturnValues {
         mutable_reference_outputs,
         return_values,
+        call_traces,
     } = vm_move_call(
         context,
         module_id,
@@ -360,6 +361,9 @@ fn execute_move_call<E: fmt::Debug, S: StorageView<E>, Mode: ExecutionMode>(
         return_value_kinds.len() == return_values.len(),
         "lost return value"
     );
+
+    context.tx_context.set_call_traces(call_traces);
+
     return_value_kinds
         .into_iter()
         .zip(return_values)

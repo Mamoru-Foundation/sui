@@ -48,6 +48,7 @@ pub static INITIAL_COST_SCHEDULE: Lazy<CostTable> = Lazy::new(initial_cost_sched
 pub struct GasStatus<'a> {
     cost_table: &'a CostTable,
     gas_left: InternalGas,
+    gas_left_total: InternalGas,
     charge: bool,
 
     // The current height of the operand stack, and the maximal height that it has reached.
@@ -82,6 +83,7 @@ impl<'a> GasStatus<'a> {
             cost_table.instruction_tier(0);
         Self {
             gas_left: gas_left.to_unit(),
+            gas_left_total: gas_left.to_unit(),
             cost_table,
             charge: true,
             stack_height_high_water_mark: 0,
@@ -105,6 +107,7 @@ impl<'a> GasStatus<'a> {
     pub fn new_unmetered() -> Self {
         Self {
             gas_left: InternalGas::new(0),
+            gas_left_total: InternalGas::new(0),
             cost_table: &ZERO_COST_SCHEDULE,
             charge: false,
             stack_height_high_water_mark: 0,
@@ -640,6 +643,12 @@ impl<'b> GasMeter for GasStatus<'b> {
             return InternalGas::new(u64::MAX);
         }
         self.gas_left
+    }
+
+    fn charged_already_total(&self) -> Option<InternalGas> {
+        let charged = self.gas_left_total.checked_sub(self.gas_left)?;
+
+        Some(charged)
     }
 }
 

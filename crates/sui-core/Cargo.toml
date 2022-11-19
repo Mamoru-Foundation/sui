@@ -47,6 +47,8 @@ sui-json-rpc-types = { path = "../sui-json-rpc-types" }
 sui-protocol-config = { path = "../sui-protocol-config" }
 lru = "0.10"
 
+mamoru-sui-sniffer = { path = "../mamoru-sui-sniffer" }
+
 move-binary-format.workspace = true
 move-bytecode-utils.workspace = true
 move-core-types.workspace = true
