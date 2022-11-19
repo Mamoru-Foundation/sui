@@ -11,6 +11,7 @@ use std::{
 use anyhow::Result;
 use leb128;
 use linked_hash_map::LinkedHashMap;
+use move_binary_format::file_format_common::VERSION_MAX;
 use move_binary_format::{
     access::ModuleAccess,
     binary_views::BinaryIndexedView,
@@ -25,6 +26,7 @@ use move_core_types::{
     resolver::{ModuleResolver, ResourceResolver},
     value::{MoveStruct, MoveTypeLayout, MoveValue},
 };
+use move_vm_runtime::config::VMConfig;
 pub use move_vm_runtime::move_vm::MoveVM;
 use move_vm_runtime::{
     native_extensions::NativeContextExtensions,
@@ -65,14 +67,17 @@ macro_rules! assert_invariant {
 }
 
 pub fn new_move_vm(natives: NativeFunctionTable) -> Result<MoveVM, SuiError> {
-    MoveVM::new_with_verifier_config(
+    MoveVM::new_with_config(
         natives,
-        VerifierConfig {
-            max_loop_depth: Some(5),
-            treat_friend_as_private: true,
-            max_generic_instantiation_length: Some(32),
-            max_function_parameters: Some(128),
-            max_basic_blocks: Some(1024),
+        VMConfig {
+            verifier: VerifierConfig {
+                max_loop_depth: Some(5),
+                treat_friend_as_private: true,
+                max_generic_instantiation_length: Some(32),
+                max_function_parameters: Some(128),
+                max_basic_blocks: Some(1024),
+            },
+            max_binary_format_version: VERSION_MAX,
         },
     )
     .map_err(|_| SuiError::ExecutionInvariantViolation)
@@ -211,6 +216,7 @@ fn execute_internal<
         SerializedReturnValues {
             mut mutable_reference_outputs,
             return_values,
+            call_traces,
         },
         (change_set, events, mut native_context_extensions),
     ) = session
@@ -291,6 +297,7 @@ fn execute_internal<
     let (empty_changes, empty_events) = session.finish()?;
     debug_assert!(empty_changes.into_inner().is_empty());
     debug_assert!(empty_events.is_empty());
+
     process_successful_execution(
         state_view,
         module_id,
@@ -302,6 +309,8 @@ fn execute_internal<
         user_events,
         ctx,
     )?;
+
+    ctx.set_call_traces(call_traces);
 
     Ok(())
 }
