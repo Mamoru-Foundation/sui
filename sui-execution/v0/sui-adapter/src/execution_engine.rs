@@ -197,6 +197,7 @@ mod checked {
             status,
             gas_charger,
             *epoch_id,
+            tx_ctx.call_traces(),
         );
         (inner, effects, execution_result)
     }

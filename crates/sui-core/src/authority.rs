@@ -16,6 +16,7 @@ use itertools::Itertools;
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::language_storage::ModuleId;
+use move_core_types::trace::CallTrace;
 use move_core_types::value::MoveStructLayout;
 use mysten_metrics::{TX_TYPE_SHARED_OBJ_TX, TX_TYPE_SINGLE_WRITER_TX};
 use parking_lot::Mutex;
@@ -50,6 +51,7 @@ use tracing::{debug, error, info, instrument, trace, warn, Instrument};
 use self::authority_store_pruner::AuthorityStorePruningMetrics;
 pub use authority_notify_read::EffectsNotifyRead;
 pub use authority_store::{AuthorityStore, ResolverWrapper, UpdateType};
+use mamoru_sui_sniffer::SuiSniffer;
 use mysten_metrics::{monitored_scope, spawn_monitored_task};
 use narwhal_config::{
     Committee as ConsensusCommittee, WorkerCache as ConsensusWorkerCache,
@@ -625,6 +627,8 @@ pub struct AuthorityState {
 
     /// Config for state dumping on forks
     debug_dump_config: StateDebugDumpConfig,
+
+    sniffer: Option<SuiSniffer>,
 }
 
 /// The authority state encapsulates all state, drives execution, and ensures safety.
@@ -972,6 +976,7 @@ impl AuthorityState {
         expected_effects_digest: Option<TransactionEffectsDigest>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
     ) -> SuiResult<(TransactionEffects, Option<ExecutionError>)> {
+        let before_ms = Utc::now().timestamp_millis();
         let digest = *certificate.digest();
         // The cert could have been processed by a concurrent attempt of the same cert, so check if
         // the effects have already been written.
@@ -1009,7 +1014,7 @@ impl AuthorityState {
         // non-transient (transaction input is invalid, move vm errors). However, all errors from
         // this function occur before we have written anything to the db, so we commit the tx
         // guard and rely on the client to retry the tx (if it was transient).
-        let (inner_temporary_store, effects, execution_error_opt) = match self
+        let (mut inner_temporary_store, effects, execution_error_opt) = match self
             .prepare_certificate(&execution_guard, certificate, epoch_store)
             .await
         {
@@ -1058,6 +1063,8 @@ impl AuthorityState {
             }
         }
 
+        let call_traces = std::mem::take(&mut inner_temporary_store.call_traces);
+
         fail_point_async!("crash");
 
         self.commit_cert_and_notify(
@@ -1067,8 +1074,17 @@ impl AuthorityState {
             tx_guard,
             execution_guard,
             epoch_store,
+            call_traces,
         )
         .await?;
+
+        let after_ms = Utc::now().timestamp_millis();
+
+        info!(
+            "Process certificate executed in {} ms.",
+            after_ms - before_ms,
+        );
+
         Ok((effects, execution_error_opt))
     }
 
@@ -1080,6 +1096,7 @@ impl AuthorityState {
         tx_guard: CertTxGuard,
         _execution_guard: ExecutionLockReadGuard<'_>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
+        call_traces: Vec<CallTrace>,
     ) -> SuiResult {
         let _scope: Option<mysten_metrics::MonitoredScopeGuard> =
             monitored_scope("Execution::commit_cert_and_notify");
@@ -1096,8 +1113,14 @@ impl AuthorityState {
             .map(|(_, ((id, seq, _), obj, _))| InputKey(*id, (!obj.is_package()).then_some(*seq)))
             .collect();
 
-        self.commit_certificate(inner_temporary_store, certificate, effects, epoch_store)
-            .await?;
+        self.commit_certificate(
+            inner_temporary_store,
+            certificate,
+            effects,
+            epoch_store,
+            call_traces,
+        )
+        .await?;
 
         // commit_certificate finished, the tx is fully committed to the store.
         tx_guard.commit_tx();
@@ -1996,6 +2019,16 @@ impl AuthorityState {
             indirect_objects_threshold,
             archive_readers,
         );
+
+        let sniffer = match std::env::var_os("MAMORU_SNIFFER_ENABLE") {
+            Some(_) => Some(
+                SuiSniffer::new()
+                    .await
+                    .expect("Failed to connect to validation chain"),
+            ),
+            None => None,
+        };
+
         let state = Arc::new(AuthorityState {
             name,
             secret,
@@ -2015,6 +2048,7 @@ impl AuthorityState {
             transaction_deny_config,
             certificate_deny_config,
             debug_dump_config,
+            sniffer,
         });
 
         // Start a task to execute ready certificates.
@@ -3401,6 +3435,7 @@ impl AuthorityState {
         certificate: &VerifiedExecutableTransaction,
         effects: &TransactionEffects,
         epoch_store: &Arc<AuthorityPerEpochStore>,
+        call_traces: Vec<CallTrace>,
     ) -> SuiResult {
         let _metrics_guard = self.metrics.commit_certificate_latency.start_timer();
 
@@ -3438,6 +3473,8 @@ impl AuthorityState {
         // Allow testing what happens if we crash here.
         fail_point_async!("crash");
 
+        let events = inner_temporary_store.events.data.clone();
+
         self.database
             .update_state(
                 inner_temporary_store,
@@ -3452,6 +3489,35 @@ impl AuthorityState {
                     "commit_certificate finished"
                 );
             })?;
+
+        let before_ms = Utc::now().timestamp_millis();
+
+        if let Some(sniffer) = &self.sniffer {
+            // extract sequence number is not trivial right now, let's say number is the current timestamp
+            let seq = Self::unixtime_now_ms();
+
+            if let Err(err) = sniffer
+                .observe_transaction(
+                    certificate.clone(),
+                    effects.clone(),
+                    events,
+                    call_traces,
+                    seq,
+                    Utc::now(),
+                )
+                .await
+            {
+                error!(?err, "Failed to observe transaction");
+            }
+        }
+
+        let after_ms = Utc::now().timestamp_millis();
+
+        info!(
+            tx_tash = Base58::encode(certificate.data().digest()),
+            "sniffer.observe_transaction() executed in {} ms.",
+            after_ms - before_ms,
+        );
 
         // todo - ideally move this metric in NotifyRead once we have metrics in AuthorityStore
         self.metrics

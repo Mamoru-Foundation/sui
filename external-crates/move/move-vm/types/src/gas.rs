@@ -241,6 +241,8 @@ pub trait GasMeter {
 
     #[cfg(debug_assertions)]
     fn set_profiler(&mut self, profiler: GasProfiler);
+
+    fn charged_already_total(&self) -> Option<InternalGas>;
 }
 
 /// A dummy gas meter that does not meter anything.
@@ -465,4 +467,8 @@ impl GasMeter for UnmeteredGasMeter {
 
     #[cfg(debug_assertions)]
     fn set_profiler(&mut self, _profiler: GasProfiler) {}
+
+    fn charged_already_total(&self) -> Option<InternalGas> {
+        Some(InternalGas::new(0))
+    }
 }

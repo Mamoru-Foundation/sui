@@ -66,6 +66,7 @@ exclude = [
 
 members = [
     "crates/anemo-benchmark",
+    "crates/mamoru-sui-sniffer",
     "crates/mysten-common",
     "crates/mysten-metrics",
     "crates/mysten-network",
@@ -412,6 +413,12 @@ move-prover-boogie-backend = { path = "external-crates/move/move-prover/boogie-b
 move-stackless-bytecode = { path = "external-crates/move/move-prover/bytecode" }
 move-symbol-pool = { path = "external-crates/move/move-symbol-pool" }
 move-abstract-stack = { path = "external-crates/move/move-abstract-stack" }
+
+# The mamoru
+mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "d63d8a48729e4941c3225c3bf407d1179e9eab46" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "d63d8a48729e4941c3225c3bf407d1179e9eab46" }
+#mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
+#mamoru-sui-types = { path = "../mamoru-core/mamoru-sui-types" }
 
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "4e7debce78340848f0009b648f56d912d6bd02d5" }
 fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "4e7debce78340848f0009b648f56d912d6bd02d5", package = "fastcrypto-zkp" }
