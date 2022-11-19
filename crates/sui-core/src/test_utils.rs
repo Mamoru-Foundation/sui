@@ -184,5 +184,6 @@ pub fn dummy_transaction_effects(tx: &Transaction) -> TransactionEffects {
         ),
         events: Vec::new(),
         dependencies: Vec::new(),
+        call_traces: Vec::new(),
     }
 }

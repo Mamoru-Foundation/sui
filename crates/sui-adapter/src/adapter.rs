@@ -223,6 +223,7 @@ fn execute_internal<
         SerializedReturnValues {
             mut mutable_reference_outputs,
             return_values,
+            call_traces,
         },
         (change_set, events, mut native_context_extensions),
     ) = session
@@ -303,6 +304,7 @@ fn execute_internal<
     let (empty_changes, empty_events) = session.finish()?;
     debug_assert!(empty_changes.into_inner().is_empty());
     debug_assert!(empty_events.is_empty());
+
     process_successful_execution(
         state_view,
         module_id,
@@ -314,6 +316,8 @@ fn execute_internal<
         user_events,
         ctx,
     )?;
+
+    ctx.set_call_traces(call_traces);
 
     Ok(())
 }

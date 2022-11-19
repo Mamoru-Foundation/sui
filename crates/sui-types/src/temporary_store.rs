@@ -8,6 +8,7 @@ use std::ops::Neg;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::language_storage::{ModuleId, StructTag};
 use move_core_types::resolver::{ModuleResolver, ResourceResolver};
+use move_core_types::trace::CallTrace;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use tracing::trace;
@@ -497,6 +498,7 @@ impl<S> TemporaryStore<S> {
         gas_cost_summary: GasCostSummary,
         status: ExecutionStatus,
         gas_object_ref: ObjectRef,
+        call_traces: Vec<CallTrace>,
     ) -> (InnerTemporaryStore, TransactionEffects) {
         let mut modified_at_versions = vec![];
 
@@ -560,6 +562,7 @@ impl<S> TemporaryStore<S> {
             gas_object: updated_gas_object_info,
             events,
             dependencies: transaction_dependencies,
+            call_traces,
         };
         (inner, effects)
     }

@@ -39,6 +39,7 @@ pub use authority_notify_read::EffectsNotifyRead;
 pub use authority_store::{
     AuthorityStore, GatewayStore, ResolverWrapper, SuiDataStore, UpdateType,
 };
+use mamoru_sniffer::SuiSniffer;
 use narwhal_config::{
     Committee as ConsensusCommittee, WorkerCache as ConsensusWorkerCache,
     WorkerId as ConsensusWorkerId,
@@ -535,6 +536,8 @@ pub struct AuthorityState {
     pub(crate) batch_notifier: Arc<authority_notifier::TransactionNotifier>, // TODO: remove pub
 
     pub metrics: Arc<AuthorityMetrics>,
+
+    sniffer: Option<Arc<tokio::sync::Mutex<SuiSniffer>>>,
 }
 
 /// The authority state encapsulates all state, drives execution, and ensures safety.
@@ -1258,6 +1261,11 @@ impl AuthorityState {
         u64::try_from(ts_ms).expect("Travelling in time machine")
     }
 
+    pub fn unixtime_now() -> u64 {
+        let ts = Utc::now().timestamp();
+        u64::try_from(ts).expect("Travelling in time machine")
+    }
+
     pub async fn handle_transaction_info_request(
         &self,
         request: TransactionInfoRequest,
@@ -1430,6 +1438,15 @@ impl AuthorityState {
             TransactionManager::new(store.clone(), tx_ready_certificates, metrics.clone()).await,
         );
 
+        let sniffer = match std::env::var_os("MAMORU_SNIFFER_ENABLE") {
+            Some(_) => Some(Arc::new(tokio::sync::Mutex::new(
+                SuiSniffer::new()
+                    .await
+                    .expect("Failed to connect to validation chain"),
+            ))),
+            None => None,
+        };
+
         let mut state = AuthorityState {
             name,
             secret,
@@ -1453,6 +1470,7 @@ impl AuthorityState {
                     .expect("Notifier cannot start."),
             ),
             metrics,
+            sniffer,
         };
 
         prometheus_registry
@@ -2021,6 +2039,25 @@ impl AuthorityState {
                 debug!(?digest, ?effects_digest, ?self.name, "commit_certificate finished");
             })?;
         // todo - ideally move this metric in NotifyRead once we have metrics in AuthorityStore
+
+        if let Some(sniffer) = &self.sniffer {
+            let mut sniffer = sniffer.lock().await;
+            let now = Self::unixtime_now();
+
+            if sniffer.should_update_rules(now) {
+                if let Err(err) = sniffer.update_rules(now).await {
+                    error!(?err, "Failed to update rules");
+                }
+            }
+
+            if let Err(err) = sniffer
+                .observe_transaction(certificate.clone(), signed_effects.clone(), seq, now)
+                .await
+            {
+                error!(?err, "Failed to observe transaction");
+            }
+        }
+
         self.metrics
             .pending_notify_read
             .set(self.database.effects_notify_read.num_pending() as i64);
