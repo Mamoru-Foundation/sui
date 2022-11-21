@@ -2559,7 +2559,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb21c69b9fea5e15dbc1049e4b77145dd0ba1c84019c488102de0dc4ea4b0a27"
 dependencies = [
  "cfg-if",
- "rustix 0.36.2",
+ "rustix",
  "windows-sys 0.42.0",
 ]
 
@@ -2702,15 +2702,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9c384f161156f5260c24a097c56119f9be8c798586aecc13afbcbe7b7e26bf8"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "fragile"
-version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7464c5c4a3f014d9b2ec4073650e5c06596f385060af740fc45ad5a19f959e8"
-dependencies = [
- "fragile 2.0.0",
 ]
 
 [[package]]
@@ -3569,12 +3560,6 @@ dependencies = [
 
 [[package]]
 name = "io-lifetimes"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ce5ef949d49ee85593fc4d3f3f95ad61657076395cbbce23e2121fc5542074"
-
-[[package]]
-name = "io-lifetimes"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7d367024b3f3414d8e01f437f704f41a9f64ab36f9067fa73e526ad4c763c87"
@@ -3996,12 +3981,6 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.0.46"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
-
-[[package]]
-name = "linux-raw-sys"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb68f22743a3fb35785f1e7f844ca5a3de2dde5bd0c0ef5b372065814699b121"
@@ -4202,7 +4181,7 @@ checksum = "50e4a1c770583dac7ab5e2f6c139153b783a53a1bbee9729613f193e59828326"
 dependencies = [
  "cfg-if",
  "downcast",
- "fragile 2.0.0",
+ "fragile",
  "lazy_static 1.4.0",
  "mockall_derive",
  "predicates",
@@ -6495,7 +6474,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54ff541861505aabf6ea722d2131ee980b8276e10a1297b94e896dd8b621850d"
 dependencies = [
  "predicates-core",
- "termtree 0.4.0",
+ "termtree",
 ]
 
 [[package]]
@@ -7345,29 +7324,15 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.35.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "727a1a6d65f786ec22df8a81ca3121107f235970dc1705ed681d3e6e8b9cd5f9"
-dependencies = [
- "bitflags",
- "errno",
- "io-lifetimes 0.7.5",
- "libc",
- "linux-raw-sys 0.0.46",
- "windows-sys 0.42.0",
-]
-
-[[package]]
-name = "rustix"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "203974af07ea769452490ee8de3e5947971efc3a090dca8a779dd432d3fa46a7"
 dependencies = [
  "bitflags",
  "errno",
- "io-lifetimes 1.0.1",
+ "io-lifetimes",
  "libc",
- "linux-raw-sys 0.1.2",
+ "linux-raw-sys",
  "windows-sys 0.42.0",
 ]
 
@@ -9491,12 +9456,6 @@ dependencies = [
 
 [[package]]
 name = "termtree"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "507e9898683b6c43a9aa55b64259b721b52ba226e0f3779137e50ad114a4c90b"
-
-[[package]]
-name = "termtree"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95059e91184749cb66be6dc994f67f182b6d897cb3df74a5bf66b5e709295fd8"
@@ -11009,6 +10968,8 @@ dependencies = [
  "core-foundation",
  "core-foundation-sys",
  "core2",
+ "cosmos-sdk-proto",
+ "cosmrs",
  "cpp_demangle",
  "cpufeatures",
  "crc",
@@ -11044,6 +11005,7 @@ dependencies = [
  "darling_core",
  "darling_macro",
  "dashmap 5.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dashmap 5.4.0 (git+https://github.com/velvia/dashmap?rev=a6e36242044f86412531c24c437e95beadc67b62)",
  "data-encoding",
  "data-encoding-macro",
  "data-encoding-macro-internal",
@@ -11090,6 +11052,7 @@ dependencies = [
  "endian-type",
  "enum_dispatch",
  "env_logger",
+ "envy",
  "errno",
  "error-code",
  "ethnum",
@@ -11108,6 +11071,7 @@ dependencies = [
  "fixedbitset 0.2.0",
  "fixedbitset 0.4.2",
  "flate2",
+ "flex-error",
  "flexstr",
  "float-cmp",
  "flume",
@@ -11115,7 +11079,7 @@ dependencies = [
  "foreign-types",
  "foreign-types-shared",
  "form_urlencoded",
- "fragile 1.2.2",
+ "fragile",
  "fs_extra",
  "funty",
  "futures",
@@ -11124,6 +11088,7 @@ dependencies = [
  "futures-executor",
  "futures-intrusive",
  "futures-io",
+ "futures-lite",
  "futures-macro",
  "futures-sink",
  "futures-task",
@@ -11150,6 +11115,7 @@ dependencies = [
  "hakari",
  "half",
  "hashbrown 0.12.3",
+ "hashbrown 0.13.1",
  "hashlink",
  "hdrhistogram",
  "heck 0.3.3",
@@ -11191,7 +11157,7 @@ dependencies = [
  "instant",
  "integer-encoding",
  "internment",
- "io-lifetimes 0.7.5",
+ "io-lifetimes",
  "ipnet",
  "itertools",
  "itoa 0.4.8",
@@ -11201,6 +11167,7 @@ dependencies = [
  "jobserver",
  "js-sys",
  "json",
+ "jsonpath_lib",
  "jsonrpsee",
  "jsonrpsee-client-transport",
  "jsonrpsee-core",
@@ -11226,10 +11193,11 @@ dependencies = [
  "libtest-mimic",
  "libz-sys",
  "linked-hash-map",
- "linux-raw-sys 0.0.46",
+ "linux-raw-sys",
  "lock_api",
  "log",
  "lru",
+ "mamoru-core",
  "match_opt",
  "matchers",
  "matchit",
@@ -11301,6 +11269,7 @@ dependencies = [
  "num",
  "num-bigint",
  "num-complex",
+ "num-derive",
  "num-format",
  "num-integer",
  "num-iter",
@@ -11339,6 +11308,7 @@ dependencies = [
  "owo-colors",
  "parity-scale-codec",
  "parity-scale-codec-derive",
+ "parking",
  "parking_lot 0.11.2",
  "parking_lot 0.12.1",
  "parking_lot_core 0.8.5",
@@ -11370,6 +11340,7 @@ dependencies = [
  "plotters-backend",
  "plotters-svg",
  "polyval",
+ "portable-atomic",
  "pprof",
  "ppv-lite86",
  "predicates",
@@ -11435,6 +11406,7 @@ dependencies = [
  "rgb",
  "ring",
  "ripemd",
+ "ripemd160",
  "roaring",
  "rocksdb",
  "rust-ini",
@@ -11444,7 +11416,7 @@ dependencies = [
  "rustc-hex",
  "rustc_version",
  "rusticata-macros",
- "rustix 0.35.13",
+ "rustix",
  "rustls",
  "rustls-native-certs",
  "rustls-pemfile 0.2.1",
@@ -11532,6 +11504,7 @@ dependencies = [
  "strum_macros",
  "subprocess",
  "subtle",
+ "subtle-encoding",
  "subtle-ng",
  "symbolic-common",
  "symbolic-demangle",
@@ -11545,16 +11518,19 @@ dependencies = [
  "target-lexicon",
  "target-spec",
  "tempfile",
+ "tendermint",
+ "tendermint-proto",
  "tera",
  "termcolor",
  "terminal_size",
- "termtree 0.2.4",
+ "termtree",
  "test-fuzz",
  "test-fuzz-internal",
  "test-fuzz-macro",
  "test-fuzz-runtime",
  "textwrap 0.11.0",
  "textwrap 0.15.2",
+ "textwrap 0.16.0",
  "thiserror",
  "thiserror-impl",
  "thousands",
@@ -11573,6 +11549,7 @@ dependencies = [
  "tokio-io-timeout",
  "tokio-macros 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-native-tls",
+ "tokio-rayon",
  "tokio-retry",
  "tokio-rustls",
  "tokio-stream",
@@ -11639,6 +11616,7 @@ dependencies = [
  "vte",
  "vte_generate_state_changes",
  "wait-timeout",
+ "waker-fn",
  "walkdir",
  "want",
  "wasm-bindgen",
@@ -11656,7 +11634,9 @@ dependencies = [
  "winapi",
  "winapi-util",
  "windows-sys 0.36.1",
+ "windows-sys 0.42.0",
  "windows_x86_64_msvc 0.36.1",
+ "windows_x86_64_msvc 0.42.0",
  "winreg",
  "wyhash",
  "wyz",
