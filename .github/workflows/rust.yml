@@ -35,6 +35,7 @@ jobs:
     runs-on: [furuensu]
     steps:
       - uses: actions/checkout@v3
+      - uses: arduino/setup-protoc@v1
       - uses: webfactory/ssh-agent@v0.6.0
         with:
           ssh-private-key: |
@@ -86,18 +87,3 @@ jobs:
         with:
           command: fmt
           args: --all --check
-
-  cargo-deny:
-    name: cargo-deny (advisories, licenses, bans, ...)
-    runs-on: [ubuntu-latest]
-    steps:
-    - uses: actions/checkout@v3
-    - uses: actions-rs/toolchain@v1
-    - uses: webfactory/ssh-agent@v0.6.0
-      with:
-        ssh-private-key: |
-          ${{ secrets.MAMORU_CORE_KEY }}
-          ${{ secrets.VALIDATION_CHAIN_KEY }}
-    - name: fetch deps
-      run: cargo fetch
-    - uses: EmbarkStudios/cargo-deny-action@v1
