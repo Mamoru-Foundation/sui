@@ -118,8 +118,8 @@ console-subscriber = { version = "0.1", features = ["env-filter"] }
 const-oid = { version = "0.9", default-features = false }
 constant_time_eq = { version = "0.1", default-features = false }
 core2 = { version = "0.4", default-features = false, features = ["alloc"] }
-cosmos-sdk-proto = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b2", default-features = false, features = ["grpc", "grpc-transport", "tonic"] }
-cosmrs = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b2", features = ["bip32", "grpc", "grpc-core"] }
+cosmos-sdk-proto = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b29", default-features = false, features = ["grpc", "grpc-transport", "tonic"] }
+cosmrs = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b29", features = ["bip32", "grpc", "grpc-core"] }
 crc = { version = "3", default-features = false }
 crc-catalog = { version = "2", default-features = false }
 crc32fast = { version = "1", features = ["std"] }
@@ -301,7 +301,7 @@ linked-hash-map = { version = "0.5", default-features = false }
 lock_api = { version = "0.4", default-features = false }
 log = { version = "0.4", default-features = false, features = ["serde", "std"] }
 lru = { version = "0.7", features = ["hashbrown"] }
-mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "3b4c950ea4a5e61b6a1f15cc53c8945d9033580d", default-features = false }
+mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "b57745b", default-features = false }
 match_opt = { version = "0.1", default-features = false }
 matchers = { version = "0.1", default-features = false }
 matchit = { version = "0.5" }
@@ -579,7 +579,7 @@ tokio-stream = { version = "0.1", features = ["fs", "net", "sync", "time", "toki
 tokio-util = { version = "0.7", features = ["codec", "compat", "futures-io", "tracing"] }
 toml = { version = "0.5", features = ["indexmap", "preserve_order"] }
 toml_edit = { version = "0.14", features = ["easy", "serde"] }
-tonic = { version = "0.8", features = ["async-trait", "axum", "channel", "codegen", "h2", "hyper", "hyper-timeout", "prost", "prost-derive", "prost1", "rustls-pemfile", "tls", "tokio", "tokio-rustls", "tower", "tracing-futures", "transport"] }
+tonic = { version = "0.8", features = ["async-trait", "axum", "channel", "codegen", "h2", "hyper", "hyper-timeout", "prost", "prost-derive", "prost1", "rustls-native-certs", "rustls-pemfile", "tls", "tls-roots", "tls-roots-common", "tokio", "tokio-rustls", "tower", "tracing-futures", "transport"] }
 tonic-health = { version = "0.7", features = ["transport"] }
 tower = { version = "0.4", features = ["__common", "balance", "buffer", "discover", "filter", "full", "futures-core", "futures-util", "hdrhistogram", "hedge", "indexmap", "limit", "load", "load-shed", "log", "make", "pin-project", "pin-project-lite", "rand", "ready-cache", "reconnect", "retry", "slab", "spawn-ready", "steer", "timeout", "tokio", "tokio-util", "tracing", "util"] }
 tower-http = { version = "0.3", features = ["cors", "map-response-body", "propagate-header", "set-header", "tower", "trace", "tracing", "util"] }
@@ -770,8 +770,8 @@ console-subscriber = { version = "0.1", features = ["env-filter"] }
 const-oid = { version = "0.9", default-features = false }
 constant_time_eq = { version = "0.1", default-features = false }
 core2 = { version = "0.4", default-features = false, features = ["alloc"] }
-cosmos-sdk-proto = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b2", default-features = false, features = ["grpc", "grpc-transport", "tonic"] }
-cosmrs = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b2", features = ["bip32", "grpc", "grpc-core"] }
+cosmos-sdk-proto = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b29", default-features = false, features = ["grpc", "grpc-transport", "tonic"] }
+cosmrs = { git = "https://github.com/Mamoru-Foundation/cosmos-rust.git", rev = "8c971b29", features = ["bip32", "grpc", "grpc-core"] }
 crc = { version = "3", default-features = false }
 crc-catalog = { version = "2", default-features = false }
 crc32fast = { version = "1", features = ["std"] }
@@ -976,7 +976,7 @@ linked-hash-map = { version = "0.5", default-features = false }
 lock_api = { version = "0.4", default-features = false }
 log = { version = "0.4", default-features = false, features = ["serde", "std"] }
 lru = { version = "0.7", features = ["hashbrown"] }
-mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "3b4c950ea4a5e61b6a1f15cc53c8945d9033580d", default-features = false }
+mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "b57745b", default-features = false }
 match_opt = { version = "0.1", default-features = false }
 matchers = { version = "0.1", default-features = false }
 matchit = { version = "0.5" }
@@ -1305,7 +1305,7 @@ tokio-stream = { version = "0.1", features = ["fs", "net", "sync", "time", "toki
 tokio-util = { version = "0.7", features = ["codec", "compat", "futures-io", "tracing"] }
 toml = { version = "0.5", features = ["indexmap", "preserve_order"] }
 toml_edit = { version = "0.14", features = ["easy", "serde"] }
-tonic = { version = "0.8", features = ["async-trait", "axum", "channel", "codegen", "h2", "hyper", "hyper-timeout", "prost", "prost-derive", "prost1", "rustls-pemfile", "tls", "tokio", "tokio-rustls", "tower", "tracing-futures", "transport"] }
+tonic = { version = "0.8", features = ["async-trait", "axum", "channel", "codegen", "h2", "hyper", "hyper-timeout", "prost", "prost-derive", "prost1", "rustls-native-certs", "rustls-pemfile", "tls", "tls-roots", "tls-roots-common", "tokio", "tokio-rustls", "tower", "tracing-futures", "transport"] }
 tonic-build = { version = "0.8", features = ["prost", "prost-build", "transport"] }
 tonic-health = { version = "0.7", features = ["transport"] }
 toolchain_find = { version = "0.2", default-features = false }

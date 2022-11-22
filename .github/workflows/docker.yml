@@ -1,8 +1,7 @@
 name: "Build docker image"
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ main ]
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer
@@ -51,12 +50,12 @@ jobs:
           file: ./docker/sui-node/Dockerfile
           build-args: |
             GIT_REVISION=${{ github.sha }}
-            BUILD_DATE="${{ steps.date.outputs.date }}"
+            BUILD_DATE=${{ steps.date.outputs.date }}
             PROFILE=release
           push: true
           tags: |
             ${{ env.REPOSITORY }}:latest
-            ${{ env.REPOSITORY }}:${{ github.ref_name }}
+            ${{ env.REPOSITORY }}:${{ github.sha }}
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
           cache-to: type=local,dest=/tmp/docker-cache

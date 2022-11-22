@@ -1429,7 +1429,7 @@ dependencies = [
 [[package]]
 name = "cosmos-sdk-proto"
 version = "0.15.0"
-source = "git+https://github.com/Mamoru-Foundation/cosmos-rust.git?rev=8c971b2#8c971b29b5396ad0525dfcedc85e225d16bfe7b4"
+source = "git+https://github.com/Mamoru-Foundation/cosmos-rust.git?rev=8c971b29#8c971b29b5396ad0525dfcedc85e225d16bfe7b4"
 dependencies = [
  "prost 0.11.2",
  "prost-types",
@@ -1440,7 +1440,7 @@ dependencies = [
 [[package]]
 name = "cosmrs"
 version = "0.10.0"
-source = "git+https://github.com/Mamoru-Foundation/cosmos-rust.git?rev=8c971b2#8c971b29b5396ad0525dfcedc85e225d16bfe7b4"
+source = "git+https://github.com/Mamoru-Foundation/cosmos-rust.git?rev=8c971b29#8c971b29b5396ad0525dfcedc85e225d16bfe7b4"
 dependencies = [
  "bip32",
  "cosmos-sdk-proto",
@@ -4017,7 +4017,7 @@ dependencies = [
 [[package]]
 name = "mamoru-core"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Mamoru-Foundation/mamoru-core.git?rev=3b4c950ea4a5e61b6a1f15cc53c8945d9033580d#3b4c950ea4a5e61b6a1f15cc53c8945d9033580d"
+source = "git+ssh://git@github.com/Mamoru-Foundation/mamoru-core.git?rev=b57745b#b57745b28c7e83ba0692c4de05724d4a3377efdb"
 dependencies = [
  "async-stream",
  "base64",
@@ -9902,6 +9902,7 @@ dependencies = [
  "pin-project",
  "prost 0.11.2",
  "prost-derive 0.11.2",
+ "rustls-native-certs",
  "rustls-pemfile 1.0.1",
  "tokio",
  "tokio-rustls",
