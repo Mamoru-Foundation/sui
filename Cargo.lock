@@ -942,6 +942,18 @@ checksum = "c3ac9f8b63eca6fd385229b3675f6cc0dc5c8a5c8a54a59d4f52ffd670d87b0c"
 [[package]]
 name = "bytecode-interpreter-crypto"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "curve25519-dalek-fiat",
+ "ed25519-dalek-fiat",
+ "sha2 0.9.9",
+ "sha3 0.9.1",
+]
+
+[[package]]
+name = "bytecode-interpreter-crypto"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
@@ -4042,12 +4054,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "mamoru-core"
+version = "0.1.0"
+source = "git+ssh://git@github.com/Mamoru-Foundation/mamoru-core.git?rev=b6199acbf2e79fa0cd68c988097fdaf3540ac3fd#b6199acbf2e79fa0cd68c988097fdaf3540ac3fd"
+dependencies = [
+ "async-stream",
+ "base64",
+ "chrono",
+ "cosmrs",
+ "envy",
+ "ethnum",
+ "futures",
+ "jsonpath_lib",
+ "prost 0.11.2",
+ "rayon",
+ "serde 1.0.147",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "thiserror",
+ "tokio",
+ "tokio-rayon",
+ "tonic",
+ "tonic-build",
+ "tracing",
+]
+
+[[package]]
 name = "mamoru-sniffer"
 version = "0.1.0"
 dependencies = [
  "fastcrypto",
- "mamoru-core",
- "move-core-types",
+ "mamoru-core 0.1.0 (git+ssh://git@github.com/Mamoru-Foundation/mamoru-core.git?rev=b6199acbf2e79fa0cd68c988097fdaf3540ac3fd)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "sui-types",
 ]
 
@@ -4203,18 +4242,48 @@ dependencies = [
 [[package]]
 name = "move-abigen"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "heck 0.3.3",
+ "log",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-abigen"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
  "bcs",
  "heck 0.3.3",
  "log",
- "move-binary-format",
- "move-bytecode-verifier",
- "move-command-line-common",
- "move-core-types",
- "move-model",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-binary-format"
+version = "0.0.3"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "ref-cast",
+ "serde 1.0.147",
+ "variant_count",
 ]
 
 [[package]]
@@ -4223,7 +4292,7 @@ version = "0.0.3"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "ref-cast",
  "serde 1.0.147",
@@ -4233,7 +4302,27 @@ dependencies = [
 [[package]]
 name = "move-borrow-graph"
 version = "0.0.1"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+
+[[package]]
+name = "move-borrow-graph"
+version = "0.0.1"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
+
+[[package]]
+name = "move-bytecode-source-map"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "serde 1.0.147",
+]
 
 [[package]]
 name = "move-bytecode-source-map"
@@ -4242,12 +4331,24 @@ source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4
 dependencies = [
  "anyhow",
  "bcs",
- "move-binary-format",
- "move-command-line-common",
- "move-core-types",
- "move-ir-types",
- "move-symbol-pool",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-bytecode-utils"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "petgraph 0.5.1",
+ "serde-reflection",
 ]
 
 [[package]]
@@ -4256,10 +4357,22 @@ version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-binary-format",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "petgraph 0.5.1",
  "serde-reflection",
+]
+
+[[package]]
+name = "move-bytecode-verifier"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "petgraph 0.5.1",
 ]
 
 [[package]]
@@ -4268,10 +4381,27 @@ version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-binary-format",
- "move-borrow-graph",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "petgraph 0.5.1",
+]
+
+[[package]]
+name = "move-bytecode-viewer"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "clap 3.2.23",
+ "crossterm 0.21.0",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-disassembler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "regex",
+ "tui",
 ]
 
 [[package]]
@@ -4282,13 +4412,59 @@ dependencies = [
  "anyhow",
  "clap 3.2.23",
  "crossterm 0.21.0",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-command-line-common",
- "move-disassembler",
- "move-ir-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-disassembler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "regex",
  "tui",
+]
+
+[[package]]
+name = "move-cli"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "clap 3.2.23",
+ "codespan-reporting",
+ "colored",
+ "difference",
+ "itertools",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-viewer 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-coverage 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-disassembler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-docgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-prover 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stdlib 0.1.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-unit-test 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "read-write-set 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "read-write-set-dynamic 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "reqwest",
+ "serde 1.0.147",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "toml_edit",
+ "walkdir",
 ]
 
 [[package]]
@@ -4303,31 +4479,31 @@ dependencies = [
  "colored",
  "difference",
  "itertools",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-bytecode-utils",
- "move-bytecode-verifier",
- "move-bytecode-viewer",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-coverage",
- "move-disassembler",
- "move-docgen",
- "move-errmapgen",
- "move-ir-types",
- "move-package",
- "move-prover",
- "move-resource-viewer",
- "move-stdlib",
- "move-symbol-pool",
- "move-unit-test",
- "move-vm-runtime",
- "move-vm-test-utils",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-viewer 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-coverage 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-disassembler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-docgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-package 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-prover 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stdlib 0.1.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-unit-test 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
- "read-write-set",
- "read-write-set-dynamic",
+ "read-write-set 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "read-write-set-dynamic 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "reqwest",
  "serde 1.0.147",
  "serde_json",
@@ -4340,17 +4516,63 @@ dependencies = [
 [[package]]
 name = "move-command-line-common"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "difference",
+ "dirs-next",
+ "hex",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num-bigint",
+ "once_cell",
+ "serde 1.0.147",
+ "sha2 0.9.9",
+ "walkdir",
+]
+
+[[package]]
+name = "move-command-line-common"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
  "difference",
  "dirs-next",
  "hex",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num-bigint",
  "once_cell",
  "serde 1.0.147",
  "sha2 0.9.9",
+ "walkdir",
+]
+
+[[package]]
+name = "move-compiler"
+version = "0.0.1"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "clap 3.2.23",
+ "codespan-reporting",
+ "difference",
+ "hex",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num-bigint",
+ "once_cell",
+ "petgraph 0.5.1",
+ "regex",
+ "sha3 0.9.1",
+ "tempfile",
  "walkdir",
 ]
 
@@ -4365,15 +4587,15 @@ dependencies = [
  "codespan-reporting",
  "difference",
  "hex",
- "move-binary-format",
- "move-borrow-graph",
- "move-bytecode-source-map",
- "move-bytecode-verifier",
- "move-command-line-common",
- "move-core-types",
- "move-ir-to-bytecode",
- "move-ir-types",
- "move-symbol-pool",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num-bigint",
  "once_cell",
  "petgraph 0.5.1",
@@ -4381,6 +4603,25 @@ dependencies = [
  "sha3 0.9.1",
  "tempfile",
  "walkdir",
+]
+
+[[package]]
+name = "move-core-types"
+version = "0.0.4"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "ethnum",
+ "hex",
+ "num",
+ "once_cell",
+ "primitive-types",
+ "rand 0.8.5",
+ "ref-cast",
+ "serde 1.0.147",
+ "serde_bytes",
+ "uint",
 ]
 
 [[package]]
@@ -4405,6 +4646,26 @@ dependencies = [
 [[package]]
 name = "move-coverage"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "clap 3.2.23",
+ "codespan",
+ "colored",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "petgraph 0.5.1",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-coverage"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
@@ -4412,14 +4673,32 @@ dependencies = [
  "clap 3.2.23",
  "codespan",
  "colored",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-command-line-common",
- "move-core-types",
- "move-ir-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "petgraph 0.5.1",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-disassembler"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "clap 3.2.23",
+ "colored",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-coverage 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
 ]
 
 [[package]]
@@ -4430,14 +4709,32 @@ dependencies = [
  "anyhow",
  "clap 3.2.23",
  "colored",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-bytecode-verifier",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-coverage",
- "move-ir-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-coverage 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+]
+
+[[package]]
+name = "move-docgen"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "codespan",
+ "codespan-reporting",
+ "itertools",
+ "log",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num",
+ "once_cell",
+ "regex",
+ "serde 1.0.147",
 ]
 
 [[package]]
@@ -4450,11 +4747,25 @@ dependencies = [
  "codespan-reporting",
  "itertools",
  "log",
- "move-compiler",
- "move-model",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num",
  "once_cell",
  "regex",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-errmapgen"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "log",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "serde 1.0.147",
 ]
 
@@ -4466,10 +4777,29 @@ dependencies = [
  "anyhow",
  "bcs",
  "log",
- "move-command-line-common",
- "move-core-types",
- "move-model",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-ir-compiler"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "clap 3.2.23",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "serde_json",
 ]
 
 [[package]]
@@ -4480,15 +4810,34 @@ dependencies = [
  "anyhow",
  "bcs",
  "clap 3.2.23",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-bytecode-verifier",
- "move-command-line-common",
- "move-core-types",
- "move-ir-to-bytecode",
- "move-ir-types",
- "move-symbol-pool",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "serde_json",
+]
+
+[[package]]
+name = "move-ir-to-bytecode"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "codespan-reporting",
+ "log",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-to-bytecode-syntax 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "ouroboros 0.9.5",
+ "thiserror",
 ]
 
 [[package]]
@@ -4499,15 +4848,28 @@ dependencies = [
  "anyhow",
  "codespan-reporting",
  "log",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-command-line-common",
- "move-core-types",
- "move-ir-to-bytecode-syntax",
- "move-ir-types",
- "move-symbol-pool",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-to-bytecode-syntax 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "ouroboros 0.9.5",
  "thiserror",
+]
+
+[[package]]
+name = "move-ir-to-bytecode-syntax"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "hex",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
 ]
 
 [[package]]
@@ -4517,10 +4879,24 @@ source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4
 dependencies = [
  "anyhow",
  "hex",
- "move-command-line-common",
- "move-core-types",
- "move-ir-types",
- "move-symbol-pool",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+]
+
+[[package]]
+name = "move-ir-types"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "hex",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "serde 1.0.147",
 ]
 
 [[package]]
@@ -4530,10 +4906,36 @@ source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4
 dependencies = [
  "anyhow",
  "hex",
- "move-command-line-common",
- "move-core-types",
- "move-symbol-pool",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-model"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "codespan",
+ "codespan-reporting",
+ "internment",
+ "itertools",
+ "log",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-disassembler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num",
+ "once_cell",
+ "regex",
  "serde 1.0.147",
 ]
 
@@ -4548,19 +4950,55 @@ dependencies = [
  "internment",
  "itertools",
  "log",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-bytecode-verifier",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-disassembler",
- "move-ir-types",
- "move-symbol-pool",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-disassembler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num",
  "once_cell",
  "regex",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-package"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "clap 3.2.23",
+ "colored",
+ "dirs-next",
+ "itertools",
+ "move-abigen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-docgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "named-lock",
+ "once_cell",
+ "petgraph 0.5.1",
+ "ptree",
+ "regex",
+ "reqwest",
+ "serde 1.0.147",
+ "serde_yaml",
+ "sha2 0.9.9",
+ "tempfile",
+ "toml",
+ "walkdir",
+ "whoami",
 ]
 
 [[package]]
@@ -4574,16 +5012,16 @@ dependencies = [
  "colored",
  "dirs-next",
  "itertools",
- "move-abigen",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-bytecode-utils",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-docgen",
- "move-model",
- "move-symbol-pool",
+ "move-abigen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-docgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "named-lock",
  "once_cell",
  "petgraph 0.5.1",
@@ -4602,6 +5040,43 @@ dependencies = [
 [[package]]
 name = "move-prover"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "atty",
+ "clap 3.2.23",
+ "codespan",
+ "codespan-reporting",
+ "futures",
+ "hex",
+ "itertools",
+ "log",
+ "move-abigen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-docgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-prover-boogie-backend 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num",
+ "once_cell",
+ "pretty",
+ "rand 0.8.5",
+ "serde 1.0.147",
+ "serde_json",
+ "simplelog",
+ "tokio",
+ "toml",
+]
+
+[[package]]
+name = "move-prover"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
@@ -4614,17 +5089,17 @@ dependencies = [
  "hex",
  "itertools",
  "log",
- "move-abigen",
- "move-binary-format",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-docgen",
- "move-errmapgen",
- "move-ir-types",
- "move-model",
- "move-prover-boogie-backend",
- "move-stackless-bytecode",
+ "move-abigen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-docgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-prover-boogie-backend 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num",
  "once_cell",
  "pretty",
@@ -4639,6 +5114,34 @@ dependencies = [
 [[package]]
 name = "move-prover-boogie-backend"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "codespan",
+ "codespan-reporting",
+ "futures",
+ "itertools",
+ "log",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num",
+ "once_cell",
+ "pretty",
+ "rand 0.8.5",
+ "regex",
+ "serde 1.0.147",
+ "serde_json",
+ "tera",
+ "tokio",
+]
+
+[[package]]
+name = "move-prover-boogie-backend"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
@@ -4648,11 +5151,11 @@ dependencies = [
  "futures",
  "itertools",
  "log",
- "move-binary-format",
- "move-command-line-common",
- "move-core-types",
- "move-model",
- "move-stackless-bytecode",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num",
  "once_cell",
  "pretty",
@@ -4667,11 +5170,37 @@ dependencies = [
 [[package]]
 name = "move-read-write-set-types"
 version = "0.0.3"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-read-write-set-types"
+version = "0.0.3"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-binary-format",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-resource-viewer"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "hex",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
  "serde 1.0.147",
 ]
 
@@ -4683,10 +5212,37 @@ dependencies = [
  "anyhow",
  "bcs",
  "hex",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-stackless-bytecode"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "codespan",
+ "codespan-reporting",
+ "ethnum",
+ "im",
+ "itertools",
+ "log",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "num",
+ "once_cell",
+ "paste",
+ "petgraph 0.5.1",
  "serde 1.0.147",
 ]
 
@@ -4701,15 +5257,15 @@ dependencies = [
  "im",
  "itertools",
  "log",
- "move-binary-format",
- "move-borrow-graph",
- "move-bytecode-verifier",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-ir-to-bytecode",
- "move-model",
- "move-read-write-set-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "num",
  "once_cell",
  "paste",
@@ -4720,19 +5276,60 @@ dependencies = [
 [[package]]
 name = "move-stackless-bytecode-interpreter"
 version = "0.1.0"
-source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
 dependencies = [
  "anyhow",
- "bytecode-interpreter-crypto",
+ "bytecode-interpreter-crypto 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "clap 3.2.23",
  "codespan-reporting",
  "itertools",
- "move-binary-format",
- "move-core-types",
- "move-model",
- "move-stackless-bytecode",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "num",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-stackless-bytecode-interpreter"
+version = "0.1.0"
+source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
+dependencies = [
+ "anyhow",
+ "bytecode-interpreter-crypto 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "clap 3.2.23",
+ "codespan-reporting",
+ "itertools",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "num",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-stdlib"
+version = "0.1.1"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "hex",
+ "log",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-docgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-prover 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "sha2 0.9.9",
+ "sha3 0.9.1",
+ "smallvec",
+ "walkdir",
 ]
 
 [[package]]
@@ -4743,19 +5340,28 @@ dependencies = [
  "anyhow",
  "hex",
  "log",
- "move-binary-format",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-docgen",
- "move-errmapgen",
- "move-prover",
- "move-vm-runtime",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-docgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-prover 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "sha2 0.9.9",
  "sha3 0.9.1",
  "smallvec",
  "walkdir",
+]
+
+[[package]]
+name = "move-symbol-pool"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "once_cell",
+ "serde 1.0.147",
 ]
 
 [[package]]
@@ -4770,18 +5376,66 @@ dependencies = [
 [[package]]
 name = "move-table-extension"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "better_any",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "sha3 0.9.1",
+ "smallvec",
+]
+
+[[package]]
+name = "move-table-extension"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
  "bcs",
  "better_any",
- "move-binary-format",
- "move-core-types",
- "move-vm-runtime",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "sha3 0.9.1",
  "smallvec",
+]
+
+[[package]]
+name = "move-transactional-test-runner"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "clap 3.2.23",
+ "colored",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-cli 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-disassembler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-compiler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stackless-bytecode-interpreter 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stdlib 0.1.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "rayon",
+ "regex",
+ "tempfile",
 ]
 
 [[package]]
@@ -4792,27 +5446,58 @@ dependencies = [
  "anyhow",
  "clap 3.2.23",
  "colored",
- "move-binary-format",
- "move-bytecode-source-map",
- "move-bytecode-utils",
- "move-cli",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-disassembler",
- "move-ir-compiler",
- "move-ir-types",
- "move-resource-viewer",
- "move-stackless-bytecode-interpreter",
- "move-stdlib",
- "move-symbol-pool",
- "move-vm-runtime",
- "move-vm-test-utils",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-cli 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-disassembler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-compiler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode-interpreter 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stdlib 0.1.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "rayon",
  "regex",
  "tempfile",
+]
+
+[[package]]
+name = "move-unit-test"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "better_any",
+ "clap 3.2.23",
+ "codespan-reporting",
+ "colored",
+ "itertools",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stackless-bytecode-interpreter 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stdlib 0.1.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-table-extension 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "rayon",
+ "regex",
 ]
 
 [[package]]
@@ -4826,24 +5511,41 @@ dependencies = [
  "codespan-reporting",
  "colored",
  "itertools",
- "move-binary-format",
- "move-bytecode-utils",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-ir-types",
- "move-model",
- "move-resource-viewer",
- "move-stackless-bytecode-interpreter",
- "move-stdlib",
- "move-symbol-pool",
- "move-table-extension",
- "move-vm-runtime",
- "move-vm-test-utils",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode-interpreter 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stdlib 0.1.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-table-extension 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "rayon",
  "regex",
+]
+
+[[package]]
+name = "move-vm-runtime"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "better_any",
+ "fail",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "parking_lot 0.11.2",
+ "sha3 0.9.1",
+ "tracing",
 ]
 
 [[package]]
@@ -4853,10 +5555,10 @@ source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4
 dependencies = [
  "better_any",
  "fail",
- "move-binary-format",
- "move-bytecode-verifier",
- "move-core-types",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "parking_lot 0.11.2",
  "sha3 0.9.1",
@@ -4866,14 +5568,40 @@ dependencies = [
 [[package]]
 name = "move-vm-test-utils"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "serde 1.0.147",
+]
+
+[[package]]
+name = "move-vm-test-utils"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-binary-format",
- "move-core-types",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "move-vm-types"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "bcs",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "once_cell",
+ "serde 1.0.147",
+ "smallvec",
 ]
 
 [[package]]
@@ -4882,8 +5610,8 @@ version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "bcs",
- "move-binary-format",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "once_cell",
  "serde 1.0.147",
  "smallvec",
@@ -7022,16 +7750,43 @@ dependencies = [
 [[package]]
 name = "read-write-set"
 version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-model 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "read-write-set-dynamic 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+]
+
+[[package]]
+name = "read-write-set"
+version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
- "move-model",
- "move-read-write-set-types",
- "move-stackless-bytecode",
- "read-write-set-dynamic",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "read-write-set-dynamic 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+]
+
+[[package]]
+name = "read-write-set-dynamic"
+version = "0.1.0"
+source = "git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f#306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f"
+dependencies = [
+ "anyhow",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
 ]
 
 [[package]]
@@ -7040,10 +7795,10 @@ version = "0.1.0"
 source = "git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84#6a3151995cd72a0a11b4acc12861d2ad64e57a84"
 dependencies = [
  "anyhow",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
- "move-read-write-set-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
 ]
 
 [[package]]
@@ -8282,12 +9037,12 @@ dependencies = [
  "hex",
  "jemalloc-ctl",
  "jsonrpsee",
- "move-cli",
- "move-core-types",
- "move-package",
- "move-prover",
- "move-prover-boogie-backend",
- "move-unit-test",
+ "move-cli 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-prover 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-prover-boogie-backend 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-unit-test 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "multiaddr",
  "mysten-network",
  "narwhal-executor",
@@ -8334,11 +9089,11 @@ dependencies = [
  "bcs",
  "leb128",
  "linked-hash-map",
- "move-binary-format",
- "move-bytecode-verifier",
- "move-core-types",
- "move-package",
- "move-vm-runtime",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "once_cell",
  "sui-cost-tables",
  "sui-framework",
@@ -8372,7 +9127,7 @@ dependencies = [
  "futures",
  "hdrhistogram",
  "indicatif",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "multiaddr",
  "narwhal-node",
  "num_cpus",
@@ -8417,7 +9172,7 @@ dependencies = [
  "fastcrypto",
  "futures",
  "jsonrpsee",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "prometheus",
  "reqwest",
  "serde 1.0.147",
@@ -8454,10 +9209,10 @@ dependencies = [
  "dirs",
  "fastcrypto",
  "insta",
- "move-binary-format",
- "move-core-types",
- "move-package",
- "move-vm-runtime",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "multiaddr",
  "narwhal-config",
  "narwhal-crypto",
@@ -8494,10 +9249,10 @@ dependencies = [
  "hex",
  "itertools",
  "mamoru-sniffer",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
- "move-vm-runtime",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "multiaddr",
  "mysten-network",
  "narwhal-config",
@@ -8553,9 +9308,9 @@ dependencies = [
  "anyhow",
  "bcs",
  "insta",
- "move-cli",
- "move-disassembler",
- "move-package",
+ "move-cli 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-disassembler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "serde 1.0.147",
  "serde_json",
  "strum",
@@ -8576,9 +9331,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bcs",
- "move-binary-format",
- "move-core-types",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "once_cell",
  "serde 1.0.147",
  "workspace-hack",
@@ -8627,17 +9382,17 @@ dependencies = [
  "digest 0.10.6",
  "fastcrypto",
  "linked-hash-map",
- "move-binary-format",
- "move-bytecode-verifier",
- "move-cli",
- "move-compiler",
- "move-core-types",
- "move-package",
- "move-stdlib",
- "move-unit-test",
- "move-vm-runtime",
- "move-vm-test-utils",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-cli 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stdlib 0.1.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-unit-test 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "num_enum",
  "once_cell",
  "serde 1.0.147",
@@ -8653,12 +9408,12 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "fastcrypto",
- "move-binary-format",
- "move-bytecode-utils",
- "move-bytecode-verifier",
- "move-compiler",
- "move-core-types",
- "move-package",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "once_cell",
  "serde-reflection",
  "sui-types",
@@ -8700,8 +9455,8 @@ dependencies = [
  "anyhow",
  "bcs",
  "hex",
- "move-binary-format",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "schemars",
  "serde 1.0.147",
  "serde_json",
@@ -8724,9 +9479,9 @@ dependencies = [
  "jsonrpsee",
  "jsonrpsee-core",
  "jsonrpsee-proc-macros",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "prometheus",
  "serde 1.0.147",
  "signature",
@@ -8756,9 +9511,9 @@ dependencies = [
  "either",
  "fastcrypto",
  "itertools",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "schemars",
  "serde 1.0.147",
  "serde_json",
@@ -8875,7 +9630,7 @@ dependencies = [
  "anyhow",
  "clap 3.2.23",
  "fastcrypto",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "pretty_assertions",
  "rand 0.8.5",
  "schemars",
@@ -8916,7 +9671,7 @@ dependencies = [
  "clap 3.2.23",
  "fastcrypto",
  "hyper",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "once_cell",
  "rand 0.8.5",
  "serde 1.0.147",
@@ -8958,9 +9713,9 @@ dependencies = [
  "futures",
  "futures-core",
  "jsonrpsee",
- "move-binary-format",
- "move-bytecode-utils",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "rand 0.8.5",
  "serde 1.0.147",
  "serde_json",
@@ -9004,8 +9759,8 @@ dependencies = [
  "fdlimit",
  "flexstr",
  "futures",
- "move-bytecode-utils",
- "move-core-types",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "num_cpus",
  "once_cell",
  "pretty_assertions",
@@ -9070,7 +9825,7 @@ dependencies = [
  "axum",
  "clap 3.2.23",
  "http",
- "move-package",
+ "move-package 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "serde 1.0.147",
  "serde_json",
  "sui",
@@ -9120,7 +9875,7 @@ dependencies = [
  "async-trait",
  "bcs",
  "futures",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "sui-adapter",
  "sui-json",
  "sui-json-rpc-types",
@@ -9135,14 +9890,14 @@ dependencies = [
  "anyhow",
  "bimap",
  "clap 3.2.23",
- "move-binary-format",
- "move-bytecode-utils",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-stdlib",
- "move-transactional-test-runner",
- "move-vm-runtime",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-compiler 0.0.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-stdlib 0.1.1 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-transactional-test-runner 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "once_cell",
  "rand 0.8.5",
  "sui-adapter",
@@ -9166,13 +9921,13 @@ dependencies = [
  "fastcrypto",
  "hex",
  "itertools",
- "move-binary-format",
- "move-bytecode-utils",
- "move-command-line-common",
- "move-core-types",
- "move-disassembler",
- "move-ir-types",
- "move-vm-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-disassembler 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-ir-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-vm-types 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "name-variant",
  "narwhal-executor",
  "once_cell",
@@ -9206,9 +9961,9 @@ dependencies = [
 name = "sui-verifier"
 version = "0.1.0"
 dependencies = [
- "move-binary-format",
- "move-bytecode-verifier",
- "move-core-types",
+ "move-binary-format 0.0.3 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "sui-types",
  "workspace-hack",
 ]
@@ -9526,7 +10281,7 @@ dependencies = [
  "futures",
  "jsonrpsee",
  "jsonrpsee-http-client",
- "move-core-types",
+ "move-core-types 0.0.4 (git+https://github.com/Queryable-Labs/move?rev=306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f)",
  "multiaddr",
  "mysten-network",
  "once_cell",
@@ -10923,7 +11678,7 @@ dependencies = [
  "bulletproofs",
  "bumpalo",
  "byte-slice-cast",
- "bytecode-interpreter-crypto",
+ "bytecode-interpreter-crypto 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "bytemuck",
  "byteorder",
  "bytes",
@@ -11198,7 +11953,7 @@ dependencies = [
  "lock_api",
  "log",
  "lru",
- "mamoru-core",
+ "mamoru-core 0.1.0 (git+ssh://git@github.com/Mamoru-Foundation/mamoru-core.git?rev=b57745b)",
  "match_opt",
  "matchers",
  "matchit",
@@ -11214,41 +11969,41 @@ dependencies = [
  "mio 0.8.5",
  "mockall",
  "mockall_derive",
- "move-abigen",
- "move-binary-format",
- "move-borrow-graph",
- "move-bytecode-source-map",
- "move-bytecode-utils",
- "move-bytecode-verifier",
- "move-bytecode-viewer",
- "move-cli",
- "move-command-line-common",
- "move-compiler",
- "move-core-types",
- "move-coverage",
- "move-disassembler",
- "move-docgen",
- "move-errmapgen",
- "move-ir-compiler",
- "move-ir-to-bytecode",
- "move-ir-to-bytecode-syntax",
- "move-ir-types",
- "move-model",
- "move-package",
- "move-prover",
- "move-prover-boogie-backend",
- "move-read-write-set-types",
- "move-resource-viewer",
- "move-stackless-bytecode",
- "move-stackless-bytecode-interpreter",
- "move-stdlib",
- "move-symbol-pool",
- "move-table-extension",
- "move-transactional-test-runner",
- "move-unit-test",
- "move-vm-runtime",
- "move-vm-test-utils",
- "move-vm-types",
+ "move-abigen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-binary-format 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-borrow-graph 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-source-map 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-verifier 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-bytecode-viewer 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-cli 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-command-line-common 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-compiler 0.0.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-core-types 0.0.4 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-coverage 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-disassembler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-docgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-errmapgen 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-compiler 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-to-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-to-bytecode-syntax 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-ir-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-model 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-package 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-prover 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-prover-boogie-backend 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-read-write-set-types 0.0.3 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-resource-viewer 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stackless-bytecode-interpreter 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-stdlib 0.1.1 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-symbol-pool 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-table-extension 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-transactional-test-runner 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-unit-test 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-runtime 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-test-utils 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "move-vm-types 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "multiaddr",
  "multibase",
  "multihash",
@@ -11392,8 +12147,8 @@ dependencies = [
  "rayon-core",
  "rcgen 0.10.0",
  "rcgen 0.9.3",
- "read-write-set",
- "read-write-set-dynamic",
+ "read-write-set 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
+ "read-write-set-dynamic 0.1.0 (git+https://github.com/Mamoru-Foundation/move?rev=6a3151995cd72a0a11b4acc12861d2ad64e57a84)",
  "readonly",
  "ref-cast",
  "ref-cast-impl",

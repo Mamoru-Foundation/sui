@@ -96,27 +96,27 @@ opt-level = 1
 [workspace.dependencies]
 
 # Move dependencies
-move-binary-format = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-bytecode-utils = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-bytecode-verifier = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-cli = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-compiler = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-core-types = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84", features = ["address20"] }
-move-disassembler = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-package = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-stdlib = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-vm-runtime = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-unit-test = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-vm-test-utils = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-vm-types = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-command-line-common = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-transactional-test-runner = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-ir-types = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-prover = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
-move-prover-boogie-backend = { git = "https://github.com/Mamoru-Foundation/move", rev = "6a3151995cd72a0a11b4acc12861d2ad64e57a84" }
+move-binary-format = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-bytecode-utils = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-bytecode-verifier = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-cli = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-compiler = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-core-types = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f", features = ["address20"] }
+move-disassembler = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-package = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-stdlib = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-vm-runtime = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-unit-test = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-vm-test-utils = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-vm-types = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-command-line-common = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-transactional-test-runner = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-ir-types = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-prover = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
+move-prover-boogie-backend = { git = "https://github.com/Queryable-Labs/move", rev = "306d8dbfc380b1f9ec0713bc4f7e235bc5ed412f" }
 
 # The mamoru
-mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "b57745b" }
+mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "b6199acbf2e79fa0cd68c988097fdaf3540ac3fd" }
 
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "12c522bea01e4a3d19ecae63d789edcdcce2d66c" }
 fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "12c522bea01e4a3d19ecae63d789edcdcce2d66c", package = "fastcrypto-zkp" }
