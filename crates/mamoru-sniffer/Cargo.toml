@@ -9,4 +9,7 @@ resolver = "2"
 fastcrypto = { workspace = true }
 mamoru-core = { workspace = true }
 move-core-types = { workspace = true }
+rayon = "1.5"
 sui-types = { path = "../sui-types" }
+tokio = { version = "1.20.1" }
+tokio-rayon = "2.1"

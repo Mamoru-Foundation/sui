@@ -4048,7 +4048,10 @@ dependencies = [
  "fastcrypto",
  "mamoru-core",
  "move-core-types",
+ "rayon",
  "sui-types",
+ "tokio",
+ "tokio-rayon",
 ]
 
 [[package]]

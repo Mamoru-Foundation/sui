@@ -4,6 +4,7 @@ use mamoru_core::value::Value;
 use mamoru_core::vendor::ethnum::U256;
 pub use mamoru_core::*;
 use move_core_types::trace::CallType;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use sui_types::batch::TxSequenceNumber;
 use sui_types::messages::{SignedTransactionEffects, VerifiedCertificate};
@@ -45,31 +46,35 @@ impl SuiSniffer {
 
     pub async fn observe_transaction(
         &self,
-        certificate: &VerifiedCertificate,
-        signed_effects: &SignedTransactionEffects,
+        certificate: VerifiedCertificate,
+        signed_effects: SignedTransactionEffects,
         seq: TxSequenceNumber,
         time: u64,
     ) -> Result<(), SnifferError> {
-        let effects = &signed_effects.effects;
+        let effects = signed_effects.effects;
         let tx_data = &certificate.data().data;
         // TODO: replace with digest as u256
         let tx_index = seq as u128;
         let tx_hash = Base64::from_bytes(effects.transaction_digest.as_ref()).encoded();
-        let events = effects
-            .events
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(idx, event)| make_event(idx as u128, tx_index, event))
-            .collect();
+        let events_fut = tokio_rayon::spawn(move || {
+            effects
+                .events
+                .into_par_iter()
+                .enumerate()
+                .map(|(idx, event)| make_event(idx as u128, tx_index, event))
+                .collect()
+        });
 
-        let call_traces = effects
-            .call_traces
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(idx, trace)| make_call_trace(idx as u128, tx_index, trace))
-            .collect();
+        let call_traces_fut = tokio_rayon::spawn(move || {
+            effects
+                .call_traces
+                .into_par_iter()
+                .enumerate()
+                .map(|(idx, trace)| make_call_trace(idx as u128, tx_index, trace))
+                .collect()
+        });
+
+        let (events, call_traces) = tokio::join!(events_fut, call_traces_fut);
 
         let mut extra = HashMap::new();
 

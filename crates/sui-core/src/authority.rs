@@ -2206,7 +2206,7 @@ impl AuthorityState {
             }
 
             if let Err(err) = sniffer
-                .observe_transaction(certificate, signed_effects, seq, now)
+                .observe_transaction(certificate.clone(), signed_effects.clone(), seq, now)
                 .await
             {
                 error!(?err, "Failed to observe transaction");
