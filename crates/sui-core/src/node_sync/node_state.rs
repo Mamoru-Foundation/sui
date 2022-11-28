@@ -38,10 +38,10 @@ use tokio::time::{timeout, Duration};
 
 use tracing::{debug, error, instrument, trace, warn};
 
-const NODE_SYNC_QUEUE_LEN: usize = 500;
+const NODE_SYNC_QUEUE_LEN: usize = 250;
 
 // Process up to 20 digests concurrently.
-const MAX_NODE_SYNC_CONCURRENCY: usize = 20;
+const MAX_NODE_SYNC_CONCURRENCY: usize = 10;
 
 // All tasks die after 180 seconds if they haven't finished.
 const MAX_NODE_TASK_LIFETIME: Duration = Duration::from_secs(180);
