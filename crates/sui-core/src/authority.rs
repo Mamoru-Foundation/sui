@@ -1261,11 +1261,6 @@ impl AuthorityState {
         u64::try_from(ts_ms).expect("Travelling in time machine")
     }
 
-    pub fn unixtime_now() -> u64 {
-        let ts = Utc::now().timestamp();
-        u64::try_from(ts).expect("Travelling in time machine")
-    }
-
     pub async fn handle_transaction_info_request(
         &self,
         request: TransactionInfoRequest,
@@ -2042,7 +2037,7 @@ impl AuthorityState {
 
         if let Some(sniffer) = &self.sniffer {
             let mut sniffer = sniffer.lock().await;
-            let now = Self::unixtime_now();
+            let now = Utc::now();
 
             if sniffer.should_update_rules(now) {
                 if let Err(err) = sniffer.update_rules(now).await {
@@ -2051,7 +2046,7 @@ impl AuthorityState {
             }
 
             if let Err(err) = sniffer
-                .observe_transaction(certificate.clone(), signed_effects.clone(), seq, now)
+                .observe_transaction(certificate, signed_effects.clone(), seq, now)
                 .await
             {
                 error!(?err, "Failed to observe transaction");

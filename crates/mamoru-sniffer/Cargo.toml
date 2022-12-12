@@ -6,10 +6,11 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chrono = { version = "0.4" }
 fastcrypto = { workspace = true }
 mamoru-core = { workspace = true }
+mamoru-sui-types = { workspace = true }
 move-core-types = { workspace = true }
-rayon = "1.5"
 sui-types = { path = "../sui-types" }
-tokio = { version = "1.20.1" }
-tokio-rayon = "2.1"
+tracing = "0.1"
+thiserror = "1.0"

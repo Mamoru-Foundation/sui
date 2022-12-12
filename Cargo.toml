@@ -120,7 +120,8 @@ move-prover = { git = "https://github.com/Mamoru-Foundation/move", rev = "f7b72e
 move-prover-boogie-backend = { git = "https://github.com/Mamoru-Foundation/move", rev = "f7b72eaaa36d06bcb98bebb485d7cd081c065f11" }
 
 # The mamoru
-mamoru-core = { git = "ssh://git@github.com/Mamoru-Foundation/mamoru-core.git", rev = "b6199acbf2e79fa0cd68c988097fdaf3540ac3fd" }
+mamoru-core = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963" }
 
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "3ac9fa490f2d7eecd133c87a7c616328a217b66a" }
 fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "3ac9fa490f2d7eecd133c87a7c616328a217b66a", package = "fastcrypto-zkp" }
