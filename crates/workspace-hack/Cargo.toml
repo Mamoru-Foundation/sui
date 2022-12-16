@@ -347,8 +347,8 @@ log = { version = "0.4", default-features = false, features = ["serde", "std"] }
 lz4 = { version = "1", default-features = false }
 lz4-sys = { version = "1", default-features = false }
 lzma-sys = { version = "0.1", default-features = false }
-mamoru-core = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963", default-features = false }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963", default-features = false }
+mamoru-core = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "926e3b0f829b49f0e503652076f13a3c8f536dc8", default-features = false }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "926e3b0f829b49f0e503652076f13a3c8f536dc8", default-features = false }
 match_opt = { version = "0.1", default-features = false }
 matchers = { version = "0.1", default-features = false }
 matchit = { version = "0.5" }
@@ -798,7 +798,7 @@ block-buffer-93f6ce9d446188ac = { package = "block-buffer", version = "0.10", de
 block-buffer-274715c4dabd11b0 = { package = "block-buffer", version = "0.9", default-features = false, features = ["block-padding"] }
 block-padding-6f8ce4dd05d13bba = { package = "block-padding", version = "0.2", default-features = false }
 block-padding-468e82937335b1c9 = { package = "block-padding", version = "0.3", default-features = false, features = ["std"] }
-blockchain-data-derive = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963", default-features = false }
+blockchain-data-derive = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "926e3b0f829b49f0e503652076f13a3c8f536dc8", default-features = false }
 blst = { version = "0.3" }
 brotli = { version = "3", default-features = false, features = ["alloc-stdlib", "std"] }
 brotli-decompressor = { version = "2", default-features = false, features = ["alloc-stdlib", "std"] }
@@ -1088,8 +1088,8 @@ log = { version = "0.4", default-features = false, features = ["serde", "std"] }
 lz4 = { version = "1", default-features = false }
 lz4-sys = { version = "1", default-features = false }
 lzma-sys = { version = "0.1", default-features = false }
-mamoru-core = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963", default-features = false }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "ae60aac4d09822d57f91d7994ecd35973a0f0963", default-features = false }
+mamoru-core = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "926e3b0f829b49f0e503652076f13a3c8f536dc8", default-features = false }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "926e3b0f829b49f0e503652076f13a3c8f536dc8", default-features = false }
 maplit = { version = "1", default-features = false }
 match_opt = { version = "0.1", default-features = false }
 matchers = { version = "0.1", default-features = false }
