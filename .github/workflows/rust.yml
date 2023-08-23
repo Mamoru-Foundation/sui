@@ -81,6 +81,7 @@ jobs:
             ${{ secrets.MAMORU_CORE_KEY }}
             ${{ secrets.VALIDATION_CHAIN_KEY }}
       - uses: ./.github/actions/rust-setup
+      - run: rustup component add clippy
 
       # TODO(bradh): debug and re-enable this; the caching is breaking the clippy build
       # Enable caching of the 'librocksdb-sys' crate by additionally caching the
