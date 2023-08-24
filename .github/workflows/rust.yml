@@ -91,7 +91,7 @@ jobs:
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - name: cargo clippy
-        run: cargo xclippy -D warnings
+        run: cargo clippy --all-targets --all-features  -- -Wclippy::all -Wclippy::disallowed_methods #cargo xclippy -D warnings
 
   rustfmt:
     runs-on: [ubuntu-latest]
