@@ -55,6 +55,9 @@ impl SuiSniffer {
 
             let gas_cost_summary = effects.gas_cost_summary();
 
+            let events_len = events.len();
+            let call_traces_len = call_traces.len();
+
             ctx_builder.data_mut().set_tx(Transaction {
                 seq,
                 digest: tx_hash,
@@ -87,6 +90,14 @@ impl SuiSniffer {
             info!(
                 "sniffer.register_call_traces() executed in {} ms.",
                 after_ms - before_ms,
+            );
+
+            // Set statistics
+            ctx_builder.set_statistics(0, 1, events_len as u64, call_traces_len as u64);
+
+            info!(
+                "sniffer collected {} events and {} call traces.",
+                events_len, call_traces_len,
             );
 
             let ctx = ctx_builder.build()?;
