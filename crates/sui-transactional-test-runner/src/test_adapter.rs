@@ -780,7 +780,13 @@ impl<'a> MoveTestAdapter<'a> for SuiTestAdapter<'a> {
                 for dep in dependencies.iter() {
                     let named_address_mapping = &mut self.compiled_state.named_address_mapping;
                     let dep = &Symbol::from(dep.as_str());
-                    let Some(orig_package) = self.package_upgrade_mapping.get(dep) else { continue };
+
+                    let orig_package = if let Some(orig_package) = self.package_upgrade_mapping.get(dep) {
+                        orig_package
+                    } else {
+                        continue;
+                    };
+
                     let Some(orig_package_address) = named_address_mapping.insert(orig_package.to_string(), zero) else { continue };
                     original_package_addrs.push((*orig_package, orig_package_address));
                     let dep_address = named_address_mapping
