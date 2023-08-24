@@ -69,7 +69,7 @@ impl SuiSniffer {
 
             let before_ms = Utc::now().timestamp_millis();
 
-            register_events(ctx_builder.data_mut(), seq, events);
+            register_events(ctx_builder.data_mut(), seq, events.clone());
 
             let after_ms = Utc::now().timestamp_millis();
 
@@ -80,13 +80,22 @@ impl SuiSniffer {
 
             let before_ms = Utc::now().timestamp_millis();
 
-            register_call_traces(ctx_builder.data_mut(), seq, call_traces);
+            register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
 
             let after_ms = Utc::now().timestamp_millis();
 
             info!(
                 "sniffer.register_call_traces() executed in {} ms.",
                 after_ms - before_ms,
+            );
+
+            // Set statistics
+            ctx_builder.set_statistics(0, 1, events.len() as u64, call_traces.len() as u64);
+
+            info!(
+                "sniffer collected {} events and {} call traces.",
+                events.len(),
+                call_traces.len(),
             );
 
             let ctx = ctx_builder.build()?;
