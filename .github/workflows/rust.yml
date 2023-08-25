@@ -69,7 +69,7 @@ jobs:
 
   clippy:
     runs-on: [self-hosted]
-    needs: clippy #rustfmt
+    needs: rustfmt
     steps:
       - uses: arduino/setup-protoc@v1
         with:
