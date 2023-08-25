@@ -100,7 +100,7 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets # --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
+          args: --all-targets  --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
       - name: cargo check
         run: cargo check
 
