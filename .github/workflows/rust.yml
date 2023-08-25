@@ -92,6 +92,7 @@ jobs:
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - name: setup clippy
         run: |
+          rustup self update
           rustup update 1.7.0-x86_64-unknown-linux-gnu
           rustup component add clippy --toolchain 1.7.0-x86_64-unknown-linux-gnu
 
