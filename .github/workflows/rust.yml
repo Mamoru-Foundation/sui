@@ -62,10 +62,10 @@ jobs:
         run: cargo --list
       - name: cargo test  # --profile ci --no-fail-fast
         run: |
-          #sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 
           cargo nextest run -h
           echo "fuck you!"
-          cargo nextest run --no-fail-fast
+          cargo nextest run --no-fail-fast --tests
       - name: External crates tests
         run: |
           cargo xtest
