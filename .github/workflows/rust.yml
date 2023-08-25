@@ -90,10 +90,15 @@ jobs:
       #     path: ~/.cargo/registry/src/**/librocksdb-sys-*
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
-      - name: install clippy
-        run: rustup component add clippy
-      - name: cargo clippy
-        run: cargo clippy --all-targets --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          components: clippy
+          override: true
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
       - name: cargo check
         run: cargo check
 
