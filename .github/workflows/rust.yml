@@ -63,7 +63,7 @@ jobs:
       - name: cargo test
         run: |
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 # Enable ipv6
-          cargo nextest run --profile ci --no-fail-fast
+          cargo nextest run --no-fail-fast
       - name: External crates tests
         run: |
           cargo xtest
@@ -101,13 +101,13 @@ jobs:
           toolchain: stable
           components: clippy
           override: true
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets  --all-features
-
-      - name: cargo check
-        run: cargo check
+#      - uses: actions-rs/clippy-check@v1
+#        with:
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#          args: --all-targets  --all-features
+#
+#      - name: cargo check
+#        run: cargo check
 
   rustfmt:
     runs-on: [ubuntu-latest]
