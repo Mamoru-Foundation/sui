@@ -55,17 +55,15 @@ jobs:
             ${{ secrets.MAMORU_CORE_KEY }}
             ${{ secrets.VALIDATION_CHAIN_KEY }}
       - uses: ./.github/actions/rust-setup
-      - uses: taiki-e/install-action@v2
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
+      - name: Enable ipv6
+        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
+      - name: Test with latest nextest release
+        uses: actions-rs/cargo@v1
         with:
-          tool: nextest # Install nextest
-      - name: cargo list
-        run: cargo --list
-      - name: cargo test  # --profile ci --no-fail-fast
-        run: |
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 
-          cargo nextest run -h
-          echo "fuck you!"
-          cargo nextest run
+          command: nextest
+          args: run  --profile ci --no-fail-fast
 
       - name: External crates tests
         run: |
@@ -104,8 +102,13 @@ jobs:
           toolchain: stable
           components: clippy
           override: true
-      - name: cargo clippy
-        run: cargo xclippy -D warnings
+
+#      - name: cargo clippy
+#        run: cargo xclippy -D warnings
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets  --all-features
 
 #      - name: cargo check
 #        run: cargo check
