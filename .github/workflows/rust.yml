@@ -69,7 +69,7 @@ jobs:
 
   clippy:
     runs-on: [self-hosted]
-    needs: rustfmt
+    needs: clippy
     steps:
       - uses: arduino/setup-protoc@v1
         with:
@@ -91,7 +91,7 @@ jobs:
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - name: cargo clippy
-        run: cargo clippy --all-targets --all-features #cargo xclippy -D warnings
+        run: cargo xclippy -D warnings
       - name: cargo check
         run: cargo check
 
