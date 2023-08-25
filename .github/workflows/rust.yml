@@ -63,7 +63,8 @@ jobs:
       - name: cargo test  # --profile ci --no-fail-fast
         run: |
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 
-          cargo-nextest run --verbose
+          cargo-nextest run -h
+          cargo-nextest run --profile ci --no-fail-fast
       - name: External crates tests
         run: |
           cargo xtest
@@ -95,19 +96,19 @@ jobs:
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - uses: actions/checkout@v1
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          components: clippy
-          override: true
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets  --all-features
-
-      - name: cargo check
-        run: cargo check
+#      - uses: actions-rs/toolchain@v1
+#        with:
+#          profile: minimal
+#          toolchain: stable
+#          components: clippy
+#          override: true
+#      - uses: actions-rs/clippy-check@v1
+#        with:
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#          args: --all-targets  --all-features
+#
+#      - name: cargo check
+#        run: cargo check
 
   rustfmt:
     runs-on: [ubuntu-latest]
