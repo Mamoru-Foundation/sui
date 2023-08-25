@@ -90,6 +90,8 @@ jobs:
       #     path: ~/.cargo/registry/src/**/librocksdb-sys-*
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
+      - name: setup clippy
+        run: rustup install clippy
       - name: cargo clippy
         run: cargo clippy --workspace -- -D warnings #cargo xclippy -D warnings
       - name: cargo check
