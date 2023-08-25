@@ -91,7 +91,7 @@ jobs:
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - name: cargo clippy
-        run: cargo xclippy -D warnings
+        run: cargo clippy --all-targets --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
       - name: cargo check
         run: cargo check
 
