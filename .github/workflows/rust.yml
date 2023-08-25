@@ -64,8 +64,8 @@ jobs:
       - name: Test with latest nextest release
         uses: actions-rs/cargo@v1
         with:
-          command: nextest
-          args: run --profile ci --no-fail-fast
+          command: test
+          args: --profile ci --no-fail-fast
 
       - name: External crates tests
         run: |
