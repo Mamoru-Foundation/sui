@@ -92,7 +92,7 @@ jobs:
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - name: setup clippy
         run: |
-          rustup component add clippy 
+          rustup component add clippy --toolchain stable
 
       - name: cargo clippy
         run: cargo clippy --workspace -- -D warnings #cargo xclippy -D warnings
