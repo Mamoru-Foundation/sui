@@ -63,7 +63,7 @@ jobs:
       - name: cargo test  # --profile ci --no-fail-fast
         run: |
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 
-          cargo nextest run --verbose
+          cargo-nextest run --verbose
       - name: External crates tests
         run: |
           cargo xtest
