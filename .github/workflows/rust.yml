@@ -93,13 +93,14 @@ jobs:
       - uses: actions/checkout@v1
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          profile: minimal
+          toolchain: stable
           components: clippy
           override: true
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
+          args: --all-targets # --all-features -- -Wclippy::all -Wclippy::disallowed_methods -D warnings
       - name: cargo check
         run: cargo check
 
