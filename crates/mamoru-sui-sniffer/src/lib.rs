@@ -55,6 +55,9 @@ impl SuiSniffer {
 
             let gas_cost_summary = effects.gas_cost_summary();
 
+            let events_len = events.len();
+            let call_traces_len = call_traces.len();
+
             ctx_builder.data_mut().set_tx(Transaction {
                 seq,
                 digest: tx_hash,
@@ -69,7 +72,7 @@ impl SuiSniffer {
 
             let before_ms = Utc::now().timestamp_millis();
 
-            register_events(ctx_builder.data_mut(), seq, events.clone());
+            register_events(ctx_builder.data_mut(), seq, events);
 
             let after_ms = Utc::now().timestamp_millis();
 
@@ -80,7 +83,7 @@ impl SuiSniffer {
 
             let before_ms = Utc::now().timestamp_millis();
 
-            register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
+            register_call_traces(ctx_builder.data_mut(), seq, call_traces);
 
             let after_ms = Utc::now().timestamp_millis();
 
@@ -90,12 +93,11 @@ impl SuiSniffer {
             );
 
             // Set statistics
-            ctx_builder.set_statistics(0, 1, events.len() as u64, call_traces.len() as u64);
+            ctx_builder.set_statistics(0, 1, events_len as u64, call_traces_len as u64);
 
             info!(
                 "sniffer collected {} events and {} call traces.",
-                events.len(),
-                call_traces.len(),
+                events_len, call_traces_len,
             );
 
             let ctx = ctx_builder.build()?;
