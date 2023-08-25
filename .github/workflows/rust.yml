@@ -65,7 +65,8 @@ jobs:
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0 
           cargo nextest run -h
           echo "fuck you!"
-          cargo nextest run --no-fail-fast --tests
+          cargo nextest run
+
       - name: External crates tests
         run: |
           cargo xtest
