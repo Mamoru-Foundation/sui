@@ -60,13 +60,12 @@ jobs:
       - name: Enable ipv6
         run: |
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
-          PATH=$PATH:/home/runner/.cargo/bin/
           which cargo
       - name: Test with latest nextest release
         uses: actions-rs/cargo@v1
         with:
-          command: test
-          args: --profile ci --no-fail-fast
+          command: nextest
+          args: run --profile ci --no-fail-fast
 
       - name: External crates tests
         run: |
