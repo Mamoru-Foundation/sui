@@ -98,17 +98,15 @@ jobs:
 
       # See '.cargo/config' for list of enabled/disappled clippy lints
       - uses: actions/checkout@v1
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: stable
-#          components: clippy
-#          override: true
-#      - uses: actions-rs/clippy-check@v1
-#        with:
-#          token: ${{ secrets.GITHUB_TOKEN }}
-#          args: --all-targets  --all-features
-#
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: clippy
+          override: true
+      - name: cargo clippy
+        run: cargo xclippy -D warnings
+
 #      - name: cargo check
 #        run: cargo check
 
