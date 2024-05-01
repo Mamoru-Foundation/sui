@@ -2310,6 +2310,7 @@ name = "move-vm-integration-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "expect-test",
  "fail",
  "memory-stats",
  "move-binary-format",
