@@ -54,7 +54,7 @@ env:
 
 jobs:
   diff:
-    runs-on: [ubuntu-latest]
+    runs-on: self-hosted
     outputs:
       isRust: ${{ steps.diff.outputs.isRust }}
       isMove: ${{ steps.diff.outputs.isMove }}
