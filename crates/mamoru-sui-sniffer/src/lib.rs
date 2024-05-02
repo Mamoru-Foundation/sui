@@ -5,19 +5,27 @@ use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
 use itertools::Itertools;
+use mamoru_sniffer::core::daemon::wit::component::guest::sui_ctx::{
+    SuiCalltrace, SuiCalltraceTypeArg,
+};
 use mamoru_sniffer::core::BlockchainData;
 use mamoru_sniffer::{
     core::{BlockchainDataBuilder, StructValue, Value, ValueData},
     Sniffer, SnifferConfig,
 };
+
 use mamoru_sui_types::{
     CallTrace, CallTraceArg, CallTraceTypeArg, CreatedObject, DeletedObject, Event as MamoruEvent,
     MutatedObject, ObjectOwner, ObjectOwnerKind, ProgrammableTransactionCommand,
     ProgrammableTransactionPublishCommand, ProgrammableTransactionPublishCommandDependency,
     ProgrammableTransactionPublishCommandModule, ProgrammableTransactionUpgradeCommand,
     ProgrammableTransactionUpgradeCommandDependency, ProgrammableTransactionUpgradeCommandModule,
-    SuiCtx, Transaction, UnwrappedObject, UnwrappedThenDeletedObject, WrappedObject,
+    SuiCalltraceArg, SuiCtx, Transaction, UnwrappedObject, UnwrappedThenDeletedObject,
+    WrappedObject,
 };
+
+pub use mamoru_sui_types::{SuiEvent, SuiTransaction};
+
 use tokio::time::Instant;
 use tracing::{info, span, warn, Level};
 
@@ -26,7 +34,7 @@ use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use sui_types::base_types::ObjectRef;
+use sui_types::base_types::{ObjectRef, ObjectType};
 use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
@@ -38,10 +46,69 @@ use sui_types::{
     transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
 };
 
+use mamoru_sui_types::{DTOCommand, DTOObject, DTOObjectType};
+use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
+
 mod error;
 
 pub struct SuiSniffer {
     inner: Sniffer,
+}
+
+const THRESHOLD_OVERFLOW: usize = 50000;
+
+fn inner_into_value_data(data: &MoveValue, stack: &mut Vec<ValueType>) -> Result<ValueType, ()> {
+    if stack.len() > THRESHOLD_OVERFLOW {
+        return Err(());
+    }
+
+    let result = match (*data).clone() {
+        MoveValue::Bool(value) => ValueType::Bool(value),
+        MoveValue::U8(value) => ValueType::U64(value as u64),
+        MoveValue::U16(value) => ValueType::U64(value as u64),
+        MoveValue::U32(value) => ValueType::U64(value as u64),
+        MoveValue::U64(value) => ValueType::U64(value as u64),
+        MoveValue::U128(value) => ValueType::String(format!("{:#x}", value)),
+        MoveValue::U256(value) => ValueType::String(format!("{:#x}", value)),
+        MoveValue::Address(addr) | MoveValue::Signer(addr) => {
+            ValueType::String(format_object_id(addr))
+        }
+        MoveValue::Vector(list_) => {
+            let list_values = list_
+                .iter()
+                .map(|elem| -> Result<u64, ()> {
+                    let parsed_type = inner_into_value_data(elem, stack)?;
+                    let index = stack.len();
+                    (*stack).push(parsed_type);
+                    Ok(index as u64)
+                })
+                .collect::<Result<Vec<u64>, ()>>()?;
+            ValueType::List(list_values)
+        }
+        MoveValue::Struct(struct_) => {
+            let MoveStruct { type_, fields } = struct_;
+            let elems: Vec<(String, u64)> = fields
+                .iter()
+                .map(|(field, value)| {
+                    let parsed_type = inner_into_value_data(value, stack)?;
+                    let index = stack.len();
+                    (*stack).push(parsed_type);
+                    Ok((field.clone().into_string(), index as u64))
+                })
+                .collect::<Result<Vec<(String, u64)>, ()>>()?;
+            ValueType::Struct((type_.to_canonical_string(true), elems))
+        }
+    };
+    Ok(result)
+}
+
+fn into_value_data(item: MoveValue) -> Result<SuiValueData, ()> {
+    let mut stack: Vec<ValueType> = Vec::new();
+    let value_data: ValueType = inner_into_value_data(&item, &mut stack)?;
+    Ok(SuiValueData {
+        value: value_data,
+        data: if stack.is_empty() { None } else { Some(stack) },
+    })
 }
 
 impl SuiSniffer {
@@ -50,6 +117,311 @@ impl SuiSniffer {
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
 
         Ok(Self { inner: sniffer })
+    }
+
+    pub fn new_transaction(
+        &self,
+        verified_transaction: &VerifiedExecutableTransaction,
+        effects: &TransactionEffects,
+        time: DateTime<Utc>,
+    ) {
+        let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
+        let time = time.timestamp();
+
+        let tx_data = verified_transaction.data().transaction_data();
+        let tx_hash = format_tx_digest(effects.transaction_digest());
+        let sender = format_object_id(verified_transaction.sender_address());
+        let gas_cost_summary = effects.gas_cost_summary();
+
+        let sui_transaction = SuiTransaction {
+            seq,
+            digest: tx_hash,
+            time,
+            gas_used: gas_cost_summary.gas_used(),
+            gas_computation_cost: gas_cost_summary.computation_cost,
+            gas_storage_cost: gas_cost_summary.storage_cost,
+            gas_budget: tx_data.gas_budget(),
+            sender,
+            kind: tx_data.kind().to_string(),
+            success: effects.status().is_ok(),
+        };
+
+        if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
+            self.set_up_programmable_transaction(&sui_transaction, programmable_tx);
+        }
+    }
+
+    fn set_up_programmable_transaction(
+        &self,
+        transaction: &SuiTransaction,
+        tx: &ProgrammableTransaction,
+    ) {
+        let mut commands: Vec<DTOCommand> = Vec::new();
+        for (seq, command) in tx.commands.iter().enumerate() {
+            let mut modules_for_command: Vec<Vec<u8>> = Vec::new();
+            let kind: &'static str = command.into();
+
+            /*
+            ctx.programmable_transaction_commands
+                .push(ProgrammableTransactionCommand {
+                    seq: seq as u64,
+                    kind: kind.to_owned(),
+                });
+            */
+
+            match command {
+                Command::Publish(modules, dependencies) => {
+                    modules_for_command.extend(modules.clone());
+                    dependencies
+                        .iter()
+                        .map(|elem| format_object_id(elem))
+                        .collect::<Vec<String>>();
+                }
+                Command::Upgrade(modules, dependencies, package_id, _) => {
+                    modules_for_command.extend(modules.clone());
+                    dependencies
+                        .iter()
+                        .map(|elem| format_object_id(elem))
+                        .collect::<Vec<String>>();
+                }
+                _ => continue,
+            }
+        }
+    }
+
+    fn extract_events(
+        &self,
+        data: &mut SuiCtx,
+        layout_resolver: &mut dyn LayoutResolver,
+        tx_seq: u64,
+        events: &[Event],
+    ) -> Vec<SuiEvent> {
+        let mamoru_events: Vec<_> = events
+            .iter()
+            .filter_map(|event| {
+                let Ok(event_struct_layout) = layout_resolver.get_annotated_layout(&event.type_)
+                else {
+                    warn!(%event.type_, "Can't fetch layout by type");
+                    return None;
+                };
+
+                let Ok(event_struct) =
+                    Event::move_event_to_move_struct(&event.contents, event_struct_layout)
+                else {
+                    warn!(%event.type_, "Can't parse event contents");
+                    return None;
+                };
+
+                let Ok(contents) = into_value_data(MoveValue::Struct(event_struct)) else {
+                    warn!(%event.type_, "Can't convert event contents to ValueData");
+                    return None;
+                };
+
+                Some(SuiEvent {
+                    tx_seq,
+                    package_id: format_object_id(event.package_id),
+                    transaction_module: event.transaction_module.clone().into_string(),
+                    sender: format_object_id(event.sender),
+                    typ: event.type_.to_canonical_string(true),
+                    contents,
+                })
+            })
+            .collect();
+
+        mamoru_events
+    }
+
+    pub fn extract_calltraces(tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
+        let mut call_traces: Vec<SuiCalltrace> = Vec::new();
+        let mut call_traces_type_args: Vec<SuiCalltraceTypeArg> = Vec::new();
+        let mut call_traces_args: Vec<SuiCalltraceArg> = Vec::new();
+
+        let call_trace_type_args_len = call_traces_type_args.len();
+        let call_trace_args_len = call_traces_args.len();
+
+        let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
+            .into_iter()
+            .zip(0..)
+            .map(|(trace, trace_seq)| {
+                let trace_seq = trace_seq as u64;
+
+                let call_trace = SuiCalltrace {
+                    seq: trace_seq,
+                    tx_seq,
+                    depth: trace.depth,
+                    call_type: match trace.call_type {
+                        MoveCallType::Call => 0,
+                        MoveCallType::CallGeneric => 1,
+                    },
+                    gas_used: trace.gas_used,
+                    transaction_module: trace.module_id.map(|module| module.short_str_lossless()),
+                    function: trace.function.to_string(),
+                };
+
+                let mut cta: Vec<SuiCalltraceTypeArg> = vec![];
+                let mut ca: Vec<SuiCalltraceArg> = vec![];
+
+                for (arg, seq) in trace
+                    .ty_args
+                    .into_iter()
+                    .zip(call_trace_type_args_len as u64..)
+                {
+                    cta.push(SuiCalltraceTypeArg {
+                        seq,
+                        calltrace_seq: trace_seq,
+                        arg: arg.to_canonical_string(true),
+                    });
+                }
+
+                for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
+                    match into_value_data(arg.as_ref().clone()) {
+                        Ok(arg) => {
+                            ca.push(SuiCalltraceArg {
+                                seq,
+                                calltrace_seq: trace_seq,
+                                arg,
+                            });
+                        }
+                        Err(_) => continue,
+                    }
+                }
+
+                (call_trace, (ca, cta))
+            })
+            .unzip();
+
+        //ctx.call_traces.extend(call_traces);
+        //ctx.call_trace_args.extend(args.into_iter().flatten());
+        //ctx.call_trace_type_args
+        //    .extend(type_args.into_iter().flatten());
+    }
+    fn extract_objects(
+        data: &mut SuiCtx,
+        layout_resolver: &mut dyn LayoutResolver,
+        effects: &TransactionEffects,
+        inner_temporary_store: &InnerTemporaryStore,
+    ) {
+        let written = &inner_temporary_store.written;
+
+        let mut fetch_move_value = |object_ref: &ObjectRef| {
+            let object_id = object_ref.0;
+
+            match written.get_object(&object_id) {
+                Ok(Some(object)) => {
+                    if let Data::Move(move_object) = &object.as_inner().data {
+                        let struct_tag = move_object.type_().clone().into();
+                        let Ok(layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                            warn!(%object_id, "Can't fetch layout by struct tag");
+                            return None;
+                        };
+
+                        let Ok(move_value) = move_object.to_move_struct(&layout) else {
+                            warn!(%object_id, "Can't convert to move value");
+                            return None;
+                        };
+
+                        return Some((object, MoveValue::Struct(move_value)));
+                    }
+
+                    None
+                }
+                Ok(None) => {
+                    warn!(%object_id, "Can't fetch object by object id");
+
+                    None
+                }
+                Err(err) => {
+                    warn!(%err, "Can't fetch object by object id, error");
+
+                    None
+                }
+            }
+        };
+
+        let mut objects: Vec<DTOObject> = Vec::new();
+        for (seq, (created, owner)) in effects.created().iter().enumerate() {
+            if let Some((object, move_value)) = fetch_move_value(created) {
+                let Some(object_data) = ValueData::new(to_value(&move_value)) else {
+                    warn!("Can't make ValueData from move value");
+                    continue;
+                };
+                objects.push(DTOObject {
+                    object_id: format_object_id(object.id()),
+                    type_: DTOObjectType::Created,
+                });
+
+                //TODO Add owners
+                /*
+                data.object_changes.created.push(CreatedObject {
+                    seq: seq as u64,
+                    owner_seq: object_owner_seq,
+                    id: format_object_id(object.id()),
+                    data: object_data,
+                });
+
+                data.object_changes
+                    .owners
+                    .push(sui_owner_to_mamoru(object_owner_seq, *owner));
+                object_owner_seq += 1;
+                */
+            }
+        }
+
+        for (seq, (mutated, owner)) in effects.mutated().iter().enumerate() {
+            if let Some((object, move_value)) = fetch_move_value(mutated) {
+                let Some(object_data) = ValueData::new(to_value(&move_value)) else {
+                    warn!("Can't make ValueData from move value");
+                    continue;
+                };
+
+                objects.push(DTOObject {
+                    object_id: format_object_id(object.id()),
+                    type_: DTOObjectType::Mutated,
+                });
+
+                /*
+                data.object_changes.mutated.push(MutatedObject {
+                    seq: seq as u64,
+                    owner_seq: object_owner_seq,
+                    id: format_object_id(object.id()),
+                    data: object_data,
+                });
+
+                data.object_changes
+                    .owners
+                    .push(sui_owner_to_mamoru(object_owner_seq, *owner));
+                object_owner_seq += 1;
+                */
+            }
+        }
+
+        for (seq, deleted) in effects.deleted().iter().enumerate() {
+            objects.push(DTOObject {
+                object_id: format_object_id(deleted.0),
+                type_: DTOObjectType::Deleted,
+            });
+        }
+
+        for (seq, wrapped) in effects.wrapped().iter().enumerate() {
+            objects.push(DTOObject {
+                object_id: format_object_id(wrapped.0),
+                type_: DTOObjectType::Wrapped,
+            });
+        }
+
+        for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
+            objects.push(DTOObject {
+                object_id: format_object_id(unwrapped.0),
+                type_: DTOObjectType::Unwrapped,
+            });
+        }
+
+        for (seq, unwrapped_then_deleted) in effects.unwrapped_then_deleted().iter().enumerate() {
+            objects.push(DTOObject {
+                object_id: format_object_id(unwrapped_then_deleted.0),
+                type_: DTOObjectType::UnwrappedThenDeletedObject,
+            });
+        }
     }
 
     pub fn prepare_ctx(

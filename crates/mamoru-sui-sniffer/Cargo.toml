@@ -17,3 +17,4 @@ sui-types = { path = "../sui-types" }
 tracing = "0.1"
 thiserror = "1.0"
 tokio = "1"
+derive_builder.workspace = true
