@@ -14,15 +14,7 @@ use mamoru_sniffer::{
     Sniffer, SnifferConfig,
 };
 
-use mamoru_sui_types::{
-    CallTrace, CallTraceArg, CallTraceTypeArg, CreatedObject, DeletedObject, Event as MamoruEvent,
-    MutatedObject, ObjectOwner, ObjectOwnerKind, ProgrammableTransactionCommand,
-    ProgrammableTransactionPublishCommand, ProgrammableTransactionPublishCommandDependency,
-    ProgrammableTransactionPublishCommandModule, ProgrammableTransactionUpgradeCommand,
-    ProgrammableTransactionUpgradeCommandDependency, ProgrammableTransactionUpgradeCommandModule,
-    SuiCalltraceArg, SuiCtx, Transaction, UnwrappedObject, UnwrappedThenDeletedObject,
-    WrappedObject,
-};
+use mamoru_sui_types::{CallTrace, CallTraceArg, CallTraceTypeArg, CreatedObject, DTOOwner, DTOOwnerType, DeletedObject, Event as MamoruEvent, MutatedObject, ObjectOwner, ObjectOwnerKind, ProgrammableTransactionCommand, ProgrammableTransactionPublishCommand, ProgrammableTransactionPublishCommandDependency, ProgrammableTransactionPublishCommandModule, ProgrammableTransactionUpgradeCommand, ProgrammableTransactionUpgradeCommandDependency, ProgrammableTransactionUpgradeCommandModule, SuiCalltraceArg, SuiCtx, Transaction, UnwrappedObject, UnwrappedThenDeletedObject, WrappedObject, CommandType, DTOCalltrace, DTOTransaction};
 
 pub use mamoru_sui_types::{SuiEvent, SuiTransaction};
 
@@ -34,7 +26,7 @@ use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use sui_types::base_types::{ObjectRef, ObjectType};
+use sui_types::base_types::ObjectRef;
 use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
@@ -46,7 +38,9 @@ use sui_types::{
     transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
 };
 
-use mamoru_sui_types::{DTOCommand, DTOObject, DTOObjectType};
+use mamoru_sui_types::{
+    DTOCommand, DTOCreatedObject, DTOMutatedObject, DTOObject, DTOObjectType, DTOOtherObject,
+};
 use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
 
 mod error;
@@ -124,7 +118,9 @@ impl SuiSniffer {
         verified_transaction: &VerifiedExecutableTransaction,
         effects: &TransactionEffects,
         time: DateTime<Utc>,
-    ) {
+        inner_temporary_store: &InnerTemporaryStore,
+        layout_resolver: &mut dyn LayoutResolver
+    ) -> Some<DTOTransaction> {
         let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
         let time = time.timestamp();
 
@@ -146,52 +142,63 @@ impl SuiSniffer {
             success: effects.status().is_ok(),
         };
 
+
         if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
-            self.set_up_programmable_transaction(&sui_transaction, programmable_tx);
+            let commands = self.set_up_programmable_transaction(programmable_tx);
+            let objects = self.extract_objects(layout_resolver, effects, inner_temporary_store);
+            DTOTransaction { inner_transaction: sui_transaction, inputs: objects, commands };
         }
+        None
     }
 
-    fn set_up_programmable_transaction(
-        &self,
-        transaction: &SuiTransaction,
-        tx: &ProgrammableTransaction,
-    ) {
+    fn set_up_programmable_transaction(&self, tx: &ProgrammableTransaction) -> Vec<DTOCommand> {
         let mut commands: Vec<DTOCommand> = Vec::new();
         for (seq, command) in tx.commands.iter().enumerate() {
-            let mut modules_for_command: Vec<Vec<u8>> = Vec::new();
-            let kind: &'static str = command.into();
+            //let kind: &'static str = command.into();
 
-            /*
-            ctx.programmable_transaction_commands
-                .push(ProgrammableTransactionCommand {
-                    seq: seq as u64,
-                    kind: kind.to_owned(),
-                });
-            */
-
-            match command {
+            let command = match command {
                 Command::Publish(modules, dependencies) => {
-                    modules_for_command.extend(modules.clone());
-                    dependencies
+                    //modules_for_command.extend(modules.clone());
+                    let deps = dependencies
                         .iter()
                         .map(|elem| format_object_id(elem))
                         .collect::<Vec<String>>();
+                    DTOCommand {
+                        type_: CommandType::Publish,
+                        seq: seq as u64,
+                        module_contents: modules.clone(),
+                        dependencies: deps,
+                    }
                 }
                 Command::Upgrade(modules, dependencies, package_id, _) => {
-                    modules_for_command.extend(modules.clone());
-                    dependencies
+                    //modules_for_command.extend(modules.clone());
+                    let deps = dependencies
                         .iter()
                         .map(|elem| format_object_id(elem))
                         .collect::<Vec<String>>();
+                    DTOCommand {
+                        type_: CommandType::Upgrade,
+                        seq: seq as u64,
+                        module_contents: modules.clone(),
+                        dependencies: deps,
+                    }
                 }
-                _ => continue,
-            }
+                _ => {
+                    DTOCommand {
+                        type_: CommandType::Other,
+                        seq: seq as u64,
+                        module_contents: Vec::new(),
+                        dependencies: Vec::new(),
+                    }
+                }
+            };
+            commands.push(command);
         }
+        commands
     }
 
     fn extract_events(
         &self,
-        data: &mut SuiCtx,
         layout_resolver: &mut dyn LayoutResolver,
         tx_seq: u64,
         events: &[Event],
@@ -231,7 +238,7 @@ impl SuiSniffer {
         mamoru_events
     }
 
-    pub fn extract_calltraces(tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
+    pub fn extract_calltraces(tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) -> Vec<DTOCalltrace> {
         let mut call_traces: Vec<SuiCalltrace> = Vec::new();
         let mut call_traces_type_args: Vec<SuiCalltraceTypeArg> = Vec::new();
         let mut call_traces_args: Vec<SuiCalltraceArg> = Vec::new();
@@ -239,7 +246,7 @@ impl SuiSniffer {
         let call_trace_type_args_len = call_traces_type_args.len();
         let call_trace_args_len = call_traces_args.len();
 
-        let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
+        move_call_traces
             .into_iter()
             .zip(0..)
             .map(|(trace, trace_seq)| {
@@ -286,21 +293,18 @@ impl SuiSniffer {
                     }
                 }
 
-                (call_trace, (ca, cta))
-            })
-            .unzip();
-
-        //ctx.call_traces.extend(call_traces);
-        //ctx.call_trace_args.extend(args.into_iter().flatten());
-        //ctx.call_trace_type_args
-        //    .extend(type_args.into_iter().flatten());
+                DTOCalltrace {
+                    inner_calltrace: call_trace,
+                    call_trace_args: ca,
+                    call_trace_type_args: cta,
+                }
+            }).collect()
     }
     fn extract_objects(
-        data: &mut SuiCtx,
         layout_resolver: &mut dyn LayoutResolver,
         effects: &TransactionEffects,
         inner_temporary_store: &InnerTemporaryStore,
-    ) {
+    ) -> Vec<DTOObject> {
         let written = &inner_temporary_store.written;
 
         let mut fetch_move_value = |object_ref: &ObjectRef| {
@@ -341,87 +345,64 @@ impl SuiSniffer {
         let mut objects: Vec<DTOObject> = Vec::new();
         for (seq, (created, owner)) in effects.created().iter().enumerate() {
             if let Some((object, move_value)) = fetch_move_value(created) {
-                let Some(object_data) = ValueData::new(to_value(&move_value)) else {
-                    warn!("Can't make ValueData from move value");
+                let Ok(object_data) = into_value_data(move_value) else {
+                    warn!("Can't make ValueData contents to ValueData");
                     continue;
                 };
                 objects.push(DTOObject {
                     object_id: format_object_id(object.id()),
-                    type_: DTOObjectType::Created,
+                    type_: DTOObjectType::Created(DTOCreatedObject {
+                        data: object_data,
+                        owner: sui_owner_to_wit_mamoru(*owner),
+                    }),
                 });
-
-                //TODO Add owners
-                /*
-                data.object_changes.created.push(CreatedObject {
-                    seq: seq as u64,
-                    owner_seq: object_owner_seq,
-                    id: format_object_id(object.id()),
-                    data: object_data,
-                });
-
-                data.object_changes
-                    .owners
-                    .push(sui_owner_to_mamoru(object_owner_seq, *owner));
-                object_owner_seq += 1;
-                */
             }
         }
 
         for (seq, (mutated, owner)) in effects.mutated().iter().enumerate() {
             if let Some((object, move_value)) = fetch_move_value(mutated) {
-                let Some(object_data) = ValueData::new(to_value(&move_value)) else {
-                    warn!("Can't make ValueData from move value");
+                let Ok(object_data) = into_value_data(move_value) else {
+                    warn!("Can't make ValueData contents to ValueData");
                     continue;
                 };
 
                 objects.push(DTOObject {
                     object_id: format_object_id(object.id()),
-                    type_: DTOObjectType::Mutated,
+                    type_: DTOObjectType::Mutated(DTOMutatedObject {
+                        data: object_data,
+                        owner: sui_owner_to_wit_mamoru(*owner),
+                    }),
                 });
-
-                /*
-                data.object_changes.mutated.push(MutatedObject {
-                    seq: seq as u64,
-                    owner_seq: object_owner_seq,
-                    id: format_object_id(object.id()),
-                    data: object_data,
-                });
-
-                data.object_changes
-                    .owners
-                    .push(sui_owner_to_mamoru(object_owner_seq, *owner));
-                object_owner_seq += 1;
-                */
             }
         }
 
         for (seq, deleted) in effects.deleted().iter().enumerate() {
             objects.push(DTOObject {
                 object_id: format_object_id(deleted.0),
-                type_: DTOObjectType::Deleted,
+                type_: DTOObjectType::Deleted(DTOOtherObject {}),
             });
         }
 
         for (seq, wrapped) in effects.wrapped().iter().enumerate() {
             objects.push(DTOObject {
                 object_id: format_object_id(wrapped.0),
-                type_: DTOObjectType::Wrapped,
+                type_: DTOObjectType::Wrapped(DTOOtherObject {}),
             });
         }
 
         for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
             objects.push(DTOObject {
                 object_id: format_object_id(unwrapped.0),
-                type_: DTOObjectType::Unwrapped,
+                type_: DTOObjectType::Unwrapped(DTOOtherObject {}),
             });
         }
-
         for (seq, unwrapped_then_deleted) in effects.unwrapped_then_deleted().iter().enumerate() {
             objects.push(DTOObject {
                 object_id: format_object_id(unwrapped_then_deleted.0),
-                type_: DTOObjectType::UnwrappedThenDeletedObject,
+                type_: DTOObjectType::UnwrappedThenDeletedObject(DTOOtherObject {}),
             });
         }
+        objects
     }
 
     pub fn prepare_ctx(
@@ -432,7 +413,7 @@ impl SuiSniffer {
         call_traces: Vec<MoveCallTrace>,
         time: DateTime<Utc>,
         emit_debug_info: bool,
-        layout_resolver: &mut dyn LayoutResolver,
+        layout_resolver: &mut dyn LayoutResolver
     ) -> Result<BlockchainData<SuiCtx>, SuiSnifferError> {
         if emit_debug_info {
             emit_debug_stats(&call_traces);
@@ -454,53 +435,25 @@ impl SuiSniffer {
         let mut ctx_builder = BlockchainDataBuilder::<SuiCtx>::new();
         ctx_builder.set_tx_data(format!("{}", seq), tx_hash.clone());
 
-        let gas_cost_summary = effects.gas_cost_summary();
-
-        ctx_builder.data_mut().set_tx(Transaction {
-            seq,
-            digest: tx_hash,
-            time: time.timestamp(),
-            gas_used: gas_cost_summary.gas_used(),
-            gas_computation_cost: gas_cost_summary.computation_cost,
-            gas_storage_cost: gas_cost_summary.storage_cost,
-            gas_budget: tx_data.gas_budget(),
-            sender: format_object_id(certificate.sender_address()),
-            kind: tx_data.kind().to_string(),
-            success: effects.status().is_ok(),
-        });
+        //let gas_cost_summary = effects.gas_cost_summary();
+        ctx_builder.data_mut().set_dto_tx(self.new_transaction(&certificate, &effects, time, inner_temporary_store, layout_resolver));
 
         let events_timer = Instant::now();
-        register_events(ctx_builder.data_mut(), layout_resolver, seq, events);
 
+        ctx_builder.data_mut().dto_events = self.extract_events(layout_resolver, seq, events);
         info!(
             duration_ms = events_timer.elapsed().as_millis(),
             "sniffer.register_events() executed",
         );
 
         let call_traces_timer = Instant::now();
-        register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
+
+        ctx_builder.data_mut().dto_calltraces = self.extract_calltraces(seq, call_traces.clone());
 
         info!(
             duration_ms = call_traces_timer.elapsed().as_millis(),
             "sniffer.register_call_traces() executed",
         );
-
-        let object_changes_timer = Instant::now();
-        register_object_changes(
-            ctx_builder.data_mut(),
-            layout_resolver,
-            &effects,
-            inner_temporary_store,
-        );
-
-        info!(
-            duration_ms = object_changes_timer.elapsed().as_millis(),
-            "sniffer.register_object_changes() executed",
-        );
-
-        if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
-            register_programmable_transaction(ctx_builder.data_mut(), programmable_tx);
-        }
 
         ctx_builder.set_statistics(0, 1, events_len as u64, call_traces_len as u64);
 
@@ -514,345 +467,22 @@ impl SuiSniffer {
     }
 }
 
-fn register_programmable_transaction(ctx: &mut SuiCtx, tx: &ProgrammableTransaction) {
-    let mut publish_command_seq = 0u64;
-    let mut publish_command_module_seq = 0u64;
-    let mut publish_command_dependency_seq = 0u64;
 
-    let mut upgrade_command_seq = 0u64;
-    let mut upgrade_command_module_seq = 0u64;
-    let mut upgrade_command_dependency_seq = 0u64;
-
-    for (seq, command) in tx.commands.iter().enumerate() {
-        let kind: &'static str = command.into();
-
-        ctx.programmable_transaction_commands
-            .push(ProgrammableTransactionCommand {
-                seq: seq as u64,
-                kind: kind.to_owned(),
-            });
-
-        match command {
-            Command::Publish(modules, dependencies) => {
-                ctx.publish_commands
-                    .push(ProgrammableTransactionPublishCommand {
-                        seq: publish_command_seq,
-                        command_seq: seq as u64,
-                    });
-
-                for module in modules {
-                    ctx.publish_command_modules
-                        .push(ProgrammableTransactionPublishCommandModule {
-                            seq: publish_command_module_seq,
-                            publish_seq: publish_command_seq,
-                            contents: module.clone(),
-                        });
-
-                    publish_command_module_seq += 1;
-                }
-
-                for dependency in dependencies {
-                    ctx.publish_command_dependencies.push(
-                        ProgrammableTransactionPublishCommandDependency {
-                            seq: publish_command_dependency_seq,
-                            publish_seq: publish_command_seq,
-                            object_id: format_object_id(dependency),
-                        },
-                    );
-
-                    publish_command_dependency_seq += 1;
-                }
-
-                publish_command_seq += 1;
-            }
-            Command::Upgrade(modules, dependencies, package_id, _) => {
-                ctx.upgrade_commands
-                    .push(ProgrammableTransactionUpgradeCommand {
-                        seq: upgrade_command_seq,
-                        command_seq: seq as u64,
-                        package_id: format_object_id(package_id),
-                    });
-
-                for module in modules {
-                    ctx.upgrade_command_modules
-                        .push(ProgrammableTransactionUpgradeCommandModule {
-                            seq: upgrade_command_module_seq,
-                            upgrade_seq: upgrade_command_seq,
-                            contents: module.clone(),
-                        });
-
-                    upgrade_command_module_seq += 1;
-                }
-
-                for dependency in dependencies {
-                    ctx.upgrade_command_dependencies.push(
-                        ProgrammableTransactionUpgradeCommandDependency {
-                            seq: upgrade_command_dependency_seq,
-                            upgrade_seq: upgrade_command_seq,
-                            object_id: format_object_id(dependency),
-                        },
-                    );
-
-                    upgrade_command_dependency_seq += 1;
-                }
-
-                upgrade_command_seq += 1;
-            }
-            _ => continue,
-        }
-    }
-}
-
-fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
-    let mut call_trace_args_len = ctx.call_trace_args.len();
-    let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
-
-    let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
-        .into_iter()
-        .zip(0..)
-        .map(|(trace, trace_seq)| {
-            let trace_seq = trace_seq as u64;
-
-            let call_trace = CallTrace {
-                seq: trace_seq,
-                tx_seq,
-                depth: trace.depth,
-                call_type: match trace.call_type {
-                    MoveCallType::Call => 0,
-                    MoveCallType::CallGeneric => 1,
-                },
-                gas_used: trace.gas_used,
-                transaction_module: trace.module_id.map(|module| module.short_str_lossless()),
-                function: trace.function.to_string(),
-            };
-
-            let mut cta = vec![];
-            let mut ca = vec![];
-
-            for (arg, seq) in trace
-                .ty_args
-                .into_iter()
-                .zip(call_trace_type_args_len as u64..)
-            {
-                cta.push(CallTraceTypeArg {
-                    seq,
-                    call_trace_seq: trace_seq,
-                    arg: arg.to_canonical_string(true),
-                });
-            }
-
-            call_trace_type_args_len += cta.len();
-
-            for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
-                match ValueData::new(to_value(&arg)) {
-                    Some(arg) => {
-                        ca.push(CallTraceArg {
-                            seq,
-                            call_trace_seq: trace_seq,
-                            arg,
-                        });
-                    }
-                    None => continue,
-                }
-            }
-
-            call_trace_args_len += ca.len();
-
-            (call_trace, (ca, cta))
-        })
-        .unzip();
-
-    ctx.call_traces.extend(call_traces);
-    ctx.call_trace_args.extend(args.into_iter().flatten());
-    ctx.call_trace_type_args
-        .extend(type_args.into_iter().flatten());
-}
-
-fn register_events(
-    data: &mut SuiCtx,
-    layout_resolver: &mut dyn LayoutResolver,
-    tx_seq: u64,
-    events: &[Event],
-) {
-    let mamoru_events: Vec<_> = events
-        .iter()
-        .filter_map(|event| {
-            let Ok(event_struct_layout) = layout_resolver.get_annotated_layout(&event.type_) else {
-                warn!(%event.type_, "Can't fetch layout by type");
-                return None;
-            };
-
-            let Ok(event_struct) =
-                Event::move_event_to_move_struct(&event.contents, event_struct_layout)
-            else {
-                warn!(%event.type_, "Can't parse event contents");
-                return None;
-            };
-
-            let Some(contents) = ValueData::new(to_value(&MoveValue::Struct(event_struct))) else {
-                warn!(%event.type_, "Can't convert event contents to ValueData");
-                return None;
-            };
-
-            Some(MamoruEvent {
-                tx_seq,
-                package_id: format_object_id(event.package_id),
-                transaction_module: event.transaction_module.clone().into_string(),
-                sender: format_object_id(event.sender),
-                typ: event.type_.to_canonical_string(true),
-                contents,
-            })
-        })
-        .collect();
-
-    data.events.extend(mamoru_events);
-}
-
-fn register_object_changes(
-    data: &mut SuiCtx,
-    layout_resolver: &mut dyn LayoutResolver,
-    effects: &TransactionEffects,
-    inner_temporary_store: &InnerTemporaryStore,
-) {
-    let written = &inner_temporary_store.written;
-
-    let mut fetch_move_value = |object_ref: &ObjectRef| {
-        let object_id = object_ref.0;
-
-        match written.get_object(&object_id) {
-            Ok(Some(object)) => {
-                if let Data::Move(move_object) = &object.as_inner().data {
-                    let struct_tag = move_object.type_().clone().into();
-                    let Ok(layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
-                        warn!(%object_id, "Can't fetch layout by struct tag");
-                        return None;
-                    };
-
-                    let Ok(move_value) = move_object.to_move_struct(&layout) else {
-                        warn!(%object_id, "Can't convert to move value");
-                        return None;
-                    };
-
-                    return Some((object, MoveValue::Struct(move_value)));
-                }
-
-                None
-            }
-            Ok(None) => {
-                warn!(%object_id, "Can't fetch object by object id");
-
-                None
-            }
-            Err(err) => {
-                warn!(%err, "Can't fetch object by object id, error");
-
-                None
-            }
-        }
-    };
-
-    let mut object_owner_seq = 0u64;
-
-    for (seq, (created, owner)) in effects.created().iter().enumerate() {
-        if let Some((object, move_value)) = fetch_move_value(created) {
-            let Some(object_data) = ValueData::new(to_value(&move_value)) else {
-                warn!("Can't make ValueData from move value");
-                continue;
-            };
-
-            data.object_changes.created.push(CreatedObject {
-                seq: seq as u64,
-                owner_seq: object_owner_seq,
-                id: format_object_id(object.id()),
-                data: object_data,
-            });
-
-            data.object_changes
-                .owners
-                .push(sui_owner_to_mamoru(object_owner_seq, *owner));
-            object_owner_seq += 1;
-        }
-    }
-
-    for (seq, (mutated, owner)) in effects.mutated().iter().enumerate() {
-        if let Some((object, move_value)) = fetch_move_value(mutated) {
-            let Some(object_data) = ValueData::new(to_value(&move_value)) else {
-                warn!("Can't make ValueData from move value");
-                continue;
-            };
-
-            data.object_changes.mutated.push(MutatedObject {
-                seq: seq as u64,
-                owner_seq: object_owner_seq,
-                id: format_object_id(object.id()),
-                data: object_data,
-            });
-
-            data.object_changes
-                .owners
-                .push(sui_owner_to_mamoru(object_owner_seq, *owner));
-            object_owner_seq += 1;
-        }
-    }
-
-    for (seq, deleted) in effects.deleted().iter().enumerate() {
-        data.object_changes.deleted.push(DeletedObject {
-            seq: seq as u64,
-            id: format_object_id(deleted.0),
-        });
-    }
-
-    for (seq, wrapped) in effects.wrapped().iter().enumerate() {
-        data.object_changes.wrapped.push(WrappedObject {
-            seq: seq as u64,
-            id: format_object_id(wrapped.0),
-        });
-    }
-
-    for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
-        data.object_changes.unwrapped.push(UnwrappedObject {
-            seq: seq as u64,
-            id: format_object_id(unwrapped.0),
-        });
-    }
-
-    for (seq, unwrapped_then_deleted) in effects.unwrapped_then_deleted().iter().enumerate() {
-        data.object_changes
-            .unwrapped_then_deleted
-            .push(UnwrappedThenDeletedObject {
-                seq: seq as u64,
-                id: format_object_id(unwrapped_then_deleted.0),
-            });
-    }
-}
-
-fn sui_owner_to_mamoru(seq: u64, owner: Owner) -> ObjectOwner {
+fn sui_owner_to_wit_mamoru(owner: Owner) -> DTOOwner {
     match owner {
-        Owner::AddressOwner(address) => ObjectOwner {
-            seq,
-            owner_kind: ObjectOwnerKind::Address as u32,
-            owner_address: Some(format_object_id(address)),
-            initial_shared_version: None,
+        Owner::AddressOwner(address) => DTOOwner {
+            typ_: DTOOwnerType::Address(format_object_id(address)),
         },
-        Owner::ObjectOwner(address) => ObjectOwner {
-            seq,
-            owner_kind: ObjectOwnerKind::Object as u32,
-            owner_address: Some(format_object_id(address)),
-            initial_shared_version: None,
+        Owner::ObjectOwner(address) => DTOOwner {
+            typ_: DTOOwnerType::Object(format_object_id(address)),
+        },
+        Owner::Immutable => DTOOwner {
+            typ_: DTOOwnerType::Immutable,
         },
         Owner::Shared {
             initial_shared_version,
-        } => ObjectOwner {
-            seq,
-            owner_kind: ObjectOwnerKind::Shared as u32,
-            owner_address: None,
-            initial_shared_version: Some(initial_shared_version.into()),
-        },
-        Owner::Immutable => ObjectOwner {
-            seq,
-            owner_kind: ObjectOwnerKind::Immutable as u32,
-            owner_address: None,
-            initial_shared_version: None,
+        } => DTOOwner {
+            typ_: DTOOwnerType::Shared(initial_shared_version.to_string()),
         },
     }
 }
