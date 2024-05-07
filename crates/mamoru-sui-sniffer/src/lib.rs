@@ -36,6 +36,7 @@ use sui_types::{
 use mamoru_sui_types::{SuiCommand, SuiCtx, SuiCalltrace, SuiCalltraceArg, SuiCalltraceTypeArg, SuiCommandType, SuiObjectType, SuiMutatedObject, SuiMutatedObj, SuiCreatedObj, SuiOwnerType};
 use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
 pub use mamoru_sui_types::{SuiEvent, SuiTransaction, SuiObject};
+use sui_types::transaction::{TransactionData, TransactionDataV1};
 
 mod error;
 
@@ -115,10 +116,31 @@ impl SuiSniffer {
         inner_temporary_store: &InnerTemporaryStore,
         layout_resolver: &mut dyn LayoutResolver
     ) -> Option<SuiTransaction> {
+        //TODO move this in the builder?
         let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
         let time = time.timestamp();
 
-        let tx_data = verified_transaction.data().transaction_data();
+        let tx_data: &TransactionData = verified_transaction.data().transaction_data();
+
+        if let TransactionData::V1(info) = tx_data {
+            let signers = info.signers();
+            let data = info.gas_data();
+            let gas_owner = info.gas_owner();
+            let gas_price = info.gas_price();
+            let gas_budget = info.gas_budget();
+            let expiration = info.expiration();
+            let contains_shared_object = info.contains_shared_object();
+            let shared_input_objects = info.shared_input_objects();
+            let receiving_objects = info.receiving_objects();
+            let is_system_tx = info.is_system_x();
+            let is_genesis_tx = info.is_genesis_tx();
+            let is_end_of_epoch = info.is_end_of_epoch();
+            let is_sponsored_tx = info.is_sponsored_tx();
+        }
+
+        //gas_owner
+        tx_data.clone().signers();
+
         let tx_hash = format_tx_digest(effects.transaction_digest());
         let sender = format_object_id(verified_transaction.sender_address());
         let gas_cost_summary = effects.gas_cost_summary();
