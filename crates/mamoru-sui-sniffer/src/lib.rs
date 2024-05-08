@@ -11,8 +11,6 @@ use mamoru_sniffer::{
     Sniffer, SnifferConfig,
 };
 
-
-
 use tokio::time::Instant;
 use tracing::{info, span, warn, Level};
 
@@ -21,9 +19,9 @@ use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use sui_types::base_types::ObjectRef;
+use sui_types::base_types::{ObjectDigest, ObjectRef, SequenceNumber};
 use sui_types::inner_temporary_store::InnerTemporaryStore;
-use sui_types::object::{Data, Owner};
+use sui_types::object::{Data, Object, Owner};
 use sui_types::storage::ObjectStore;
 use sui_types::type_resolver::LayoutResolver;
 use sui_types::{
@@ -33,10 +31,11 @@ use sui_types::{
     transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
 };
 
-use mamoru_sui_types::{SuiCommand, SuiCtx, SuiCalltrace, SuiCalltraceArg, SuiCalltraceTypeArg, SuiCommandType, SuiObjectType, SuiMutatedObject, SuiMutatedObj, SuiCreatedObj, SuiOwnerType};
+use mamoru_sui_types::{SuiCtx, SuiCalltrace, SuiCalltraceArg, SuiCalltraceTypeArg, SuiCommand, SuiObjectType, SuiMutatedObject, SuiCreatedObject, SuiOwner};
+use mamoru_sui_types::{SuiPublishCommand, SuiUpgradeCommand, SuiTransactionExpiration, SuiGasData};
 use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
 pub use mamoru_sui_types::{SuiEvent, SuiTransaction, SuiObject};
-use sui_types::transaction::{TransactionData, TransactionDataV1};
+use sui_types::transaction::{TransactionData, TransactionExpiration};
 
 mod error;
 
@@ -45,6 +44,7 @@ pub struct SuiSniffer {
 }
 
 const THRESHOLD_OVERFLOW: usize = 50000;
+
 
 fn inner_into_value_data(data: &MoveValue, stack: &mut Vec<ValueType>) -> Result<ValueType, ()> {
     if stack.len() > THRESHOLD_OVERFLOW {
@@ -100,6 +100,17 @@ fn into_value_data(item: MoveValue) -> Result<SuiValueData, ()> {
     })
 }
 
+fn format_object_ref(object_ref: &ObjectRef) -> String {
+    let object_id = object_ref.0;
+    let seq = object_ref.1;
+    let digest = object_ref.2;
+    format!("0x{}-{}-{}", Hex::encode(object_id), seq.to_string(), digest.to_string())
+}
+
+fn into_sui_gas_data(gas_data: &sui_types::transaction::GasData) -> SuiGasData {
+    SuiGasData { payment: gas_data.payment.iter().map(|elem| format_object_ref(elem)).collect(), owner: gas_data.owner.to_string(), price: gas_data.price, budget: gas_data.budget }
+}
+
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
@@ -119,57 +130,52 @@ impl SuiSniffer {
         //TODO move this in the builder?
         let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
         let time = time.timestamp();
-
         let tx_data: &TransactionData = verified_transaction.data().transaction_data();
 
         if let TransactionData::V1(info) = tx_data {
-            let signers = info.signers();
-            let data = info.gas_data();
-            let gas_owner = info.gas_owner();
-            let gas_price = info.gas_price();
-            let gas_budget = info.gas_budget();
-            let expiration = info.expiration();
-            let contains_shared_object = info.contains_shared_object();
-            let shared_input_objects = info.shared_input_objects();
-            let receiving_objects = info.receiving_objects();
-            let is_system_tx = info.is_system_x();
-            let is_genesis_tx = info.is_genesis_tx();
-            let is_end_of_epoch = info.is_end_of_epoch();
-            let is_sponsored_tx = info.is_sponsored_tx();
-        }
+            let expiration = match info.expiration() {
+                TransactionExpiration::None => SuiTransactionExpiration::None,
+                TransactionExpiration::Epoch(val) => SuiTransactionExpiration::Epoch((*val).into()),
+            };
+            let gas_cost_summary = effects.gas_cost_summary();
 
-        //gas_owner
-        tx_data.clone().signers();
-
-        let tx_hash = format_tx_digest(effects.transaction_digest());
-        let sender = format_object_id(verified_transaction.sender_address());
-        let gas_cost_summary = effects.gas_cost_summary();
-
-        let mut sui_transaction = SuiTransaction {
-            seq,
-            digest: tx_hash,
-            time,
-            gas_used: gas_cost_summary.gas_used(),
-            gas_computation_cost: gas_cost_summary.computation_cost,
-            gas_storage_cost: gas_cost_summary.storage_cost,
-            gas_budget: tx_data.gas_budget(),
-            sender,
-            kind: tx_data.kind().to_string(),
-            success: effects.status().is_ok(),
-            inputs: Vec::new(),
-            objects: Vec::new(),
-            commands: Vec::new()
-        };
+            let mut sui_transaction = SuiTransaction {
+                seq,
+                digest: format_tx_digest(effects.transaction_digest()),
+                time,
+                gas_used: gas_cost_summary.gas_used(),
+                gas_computation_cost: gas_cost_summary.computation_cost,
+                gas_storage_cost: gas_cost_summary.storage_cost,
+                gas_budget: tx_data.gas_budget(),
+                gas_price: info.gas_price(),
+                sender: format_object_id(verified_transaction.sender_address()),
+                kind: tx_data.kind().to_string(),
+                success: effects.status().is_ok(),
+                inputs: Vec::new(),
+                objects: Vec::new(),
+                commands: Vec::new(),
+                expiration,
+                gas_data: into_sui_gas_data(info.gas_data()).clone().into(),
+                gas_owner: info.gas_owner().to_string(),
+                is_end_of_epoch: info.is_end_of_epoch_tx(),
+                is_genesis_tx: info.is_genesis_tx(),
+                is_sponsored_tx: info.is_sponsored_tx(),
+                is_system_tx: info.is_system_tx(),
+                receiving_objects: receiving_objects.iter().map(|elem| format_object_ref(elem)).collect(),
+                signers: info.signers().iter().map(|signer| signer.to_string()).collect::<Vec<String>>(),
+            };
 
 
-        if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
-            let commands = self.set_up_programmable_transaction(programmable_tx);
-            let objects = self.extract_objects(layout_resolver, effects, inner_temporary_store);
-            let inputs = Vec::new();
-            sui_transaction.commands = commands;
-            sui_transaction.objects = objects;
-            sui_transaction.inputs = inputs;
-            return Some(sui_transaction);
+            if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
+                let commands = self.set_up_programmable_transaction(programmable_tx);
+                let objects = self.extract_objects(layout_resolver, effects, inner_temporary_store);
+                let inputs = Vec::new();
+                sui_transaction.commands = commands;
+                sui_transaction.objects = objects;
+                sui_transaction.inputs = inputs;
+                return Some(sui_transaction);
+            }
+
         }
         None
     }
@@ -186,30 +192,28 @@ impl SuiSniffer {
                         .iter()
                         .map(|elem| format_object_id(elem))
                         .collect::<Vec<String>>();
-                    SuiCommand {
-                        typ: SuiCommandType::Publish,
+                    SuiCommand::Publish(SuiPublishCommand {
+                        seq: seq.to_string(),
                         module_contents: modules.clone(),
                         dependencies: deps,
-                    }
+                    })
                 }
-                Command::Upgrade(modules, dependencies, package_id, _) => {
+                Command::Upgrade(modules, dependencies, package_id, arg) => {
                     //modules_for_command.extend(modules.clone());
                     let deps = dependencies
                         .iter()
                         .map(|elem| format_object_id(elem))
                         .collect::<Vec<String>>();
-                    SuiCommand {
-                        typ: SuiCommandType::Publish,
+                    SuiCommand::Upgrade(SuiUpgradeCommand {
+                        seq: seq.to_string(),
                         module_contents: modules.clone(),
                         dependencies: deps,
-                    }
+                        package_id: format_object_id(package_id),
+                        argument: arg.to_string()
+                    })
                 }
                 _ => {
-                    SuiCommand {
-                        typ: SuiCommandType::Upgrade,
-                        module_contents: Vec::new(),
-                        dependencies: Vec::new(),
-                    }
+                    SuiCommand::Other
                 }
             };
             commands.push(command);
@@ -363,7 +367,7 @@ impl SuiSniffer {
                 };
                 objects.push(SuiObject {
                     id: format_object_id(object.id()),
-                    typ: SuiObjectType::Created(SuiCreatedObj { data: object_data, owner: sui_owner_to_wit_mamoru(*owner) }),
+                    typ: SuiObjectType::Created(SuiCreatedObject { data: object_data, owner: sui_owner_to_wit_mamoru(*owner) }),
                 });
             }
         }
@@ -377,7 +381,7 @@ impl SuiSniffer {
 
                 objects.push(SuiObject {
                     id: format_object_id(object.id()),
-                    typ: SuiObjectType::Mutated(SuiMutatedObj {
+                    typ: SuiObjectType::Mutated(SuiMutatedObject {
                         data: object_data,
                         owner: sui_owner_to_wit_mamoru(*owner),
                     }),
@@ -477,12 +481,12 @@ impl SuiSniffer {
 }
 
 
-fn sui_owner_to_wit_mamoru(owner: Owner) -> SuiOwnerType {
+fn sui_owner_to_wit_mamoru(owner: Owner) -> SuiOwner {
     match owner {
-        Owner::AddressOwner(address) => SuiOwnerType::Address(format_object_id(address)),
-        Owner::ObjectOwner(address) => SuiOwnerType::Object(format_object_id(address)),
-        Owner::Immutable => SuiOwnerType::Inmutable,
-        Owner::Shared { initial_shared_version } => SuiOwnerType::Shared(initial_shared_version.to_string()),
+        Owner::AddressOwner(address) => SuiOwner::Address(format_object_id(address)),
+        Owner::ObjectOwner(address) => SuiOwner::Object(format_object_id(address)),
+        Owner::Immutable => SuiOwner::Inmutable,
+        Owner::Shared { initial_shared_version } => SuiOwner::Shared(initial_shared_version.to_string()),
     }
 }
 
