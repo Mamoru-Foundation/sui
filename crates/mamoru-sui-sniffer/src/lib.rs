@@ -7,7 +7,7 @@ use fastcrypto::encoding::{Base58, Encoding, Hex};
 use itertools::Itertools;
 use mamoru_sniffer::core::BlockchainData;
 use mamoru_sniffer::{
-    core::{BlockchainDataBuilder, StructValue, Value, ValueData},
+    core::{BlockchainDataBuilder},
     Sniffer, SnifferConfig,
 };
 
@@ -19,9 +19,9 @@ use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use sui_types::base_types::{ObjectDigest, ObjectRef, SequenceNumber};
+use sui_types::base_types::{ObjectRef};
 use sui_types::inner_temporary_store::InnerTemporaryStore;
-use sui_types::object::{Data, Object, Owner};
+use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
 use sui_types::type_resolver::LayoutResolver;
 use sui_types::{
@@ -112,16 +112,19 @@ fn into_sui_gas_data(gas_data: &sui_types::transaction::GasData) -> SuiGasData {
     SuiGasData { payment: gas_data.payment.iter().map(|elem| format_object_ref(elem)).collect(), owner: gas_data.owner.to_string(), price: gas_data.price, budget: gas_data.budget }
 }
 
-impl SuiSniffer {
-    pub async fn new() -> Result<Self, SuiSnifferError> {
-        let sniffer =
-            Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
+pub struct SuiTransactionBuilder {
+    calltrace_identifier: u64,
+    calltrace_arg_identifier: u64,
+    calltrace_type_arg_identifier: u64,
+}
 
-        Ok(Self { inner: sniffer })
+impl SuiTransactionBuilder {
+    pub fn new() -> Self {
+        Self { calltrace_identifier: 0, calltrace_arg_identifier: 0, calltrace_type_arg_identifier: 0 }
     }
 
     pub fn new_transaction(
-        &self,
+        &mut self,
         verified_transaction: &VerifiedExecutableTransaction,
         effects: &TransactionEffects,
         time: DateTime<Utc>,
@@ -133,55 +136,55 @@ impl SuiSniffer {
         let time = time.timestamp();
         let tx_data: &TransactionData = verified_transaction.data().transaction_data();
 
-        if let TransactionData::V1(info) = tx_data {
-            let expiration = match info.expiration() {
-                TransactionExpiration::None => SuiTransactionExpiration::None,
-                TransactionExpiration::Epoch(val) => SuiTransactionExpiration::Epoch((*val).into()),
-            };
-            let gas_cost_summary = effects.gas_cost_summary();
+        let TransactionData::V1(info) = tx_data;
+        let expiration = match info.expiration() {
+            TransactionExpiration::None => SuiTransactionExpiration::None,
+            TransactionExpiration::Epoch(val) => SuiTransactionExpiration::Epoch((*val).into()),
+        };
+        let gas_cost_summary = effects.gas_cost_summary();
 
-            let mut sui_transaction = SuiTransaction {
-                seq,
-                digest: format_tx_digest(effects.transaction_digest()),
-                time,
-                gas_used: gas_cost_summary.gas_used(),
-                gas_computation_cost: gas_cost_summary.computation_cost,
-                gas_storage_cost: gas_cost_summary.storage_cost,
-                gas_budget: tx_data.gas_budget(),
-                gas_price: info.gas_price(),
-                sender: format_object_id(verified_transaction.sender_address()),
-                kind: tx_data.kind().to_string(),
-                success: effects.status().is_ok(),
-                inputs: Vec::new(),
-                objects: Vec::new(),
-                commands: Vec::new(),
-                expiration,
-                gas_data: into_sui_gas_data(info.gas_data()).clone().into(),
-                gas_owner: info.gas_owner().to_string(),
-                is_end_of_epoch: info.is_end_of_epoch_tx(),
-                is_genesis_tx: info.is_genesis_tx(),
-                is_sponsored_tx: info.is_sponsored_tx(),
-                is_system_tx: info.is_system_tx(),
-                receiving_objects: info.receiving_objects().iter().map(|elem| format_object_ref(elem)).collect(),
-                signers: info.signers().iter().map(|signer| signer.to_string()).collect::<Vec<String>>(),
-            };
+        let mut sui_transaction = SuiTransaction {
+            seq,
+            digest: format_tx_digest(effects.transaction_digest()),
+            time,
+            gas_used: gas_cost_summary.gas_used(),
+            gas_computation_cost: gas_cost_summary.computation_cost,
+            gas_storage_cost: gas_cost_summary.storage_cost,
+            gas_budget: tx_data.gas_budget(),
+            gas_price: info.gas_price(),
+            sender: format_object_id(verified_transaction.sender_address()),
+            kind: tx_data.kind().to_string(),
+            success: effects.status().is_ok(),
+            inputs: Vec::new(),
+            objects: Vec::new(),
+            commands: Vec::new(),
+            expiration,
+            gas_data: into_sui_gas_data(info.gas_data()).clone().into(),
+            gas_owner: info.gas_owner().to_string(),
+            is_end_of_epoch: info.is_end_of_epoch_tx(),
+            is_genesis_tx: info.is_genesis_tx(),
+            is_sponsored_tx: info.is_sponsored_tx(),
+            is_system_tx: info.is_system_tx(),
+            receiving_objects: info.receiving_objects().iter().map(|elem| format_object_ref(elem)).collect(),
+            signers: info.signers().iter().map(|signer| signer.to_string()).collect::<Vec<String>>(),
+        };
 
 
-            if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
-                let commands = self.set_up_programmable_transaction(programmable_tx);
-                let objects = self.extract_objects(layout_resolver, effects, inner_temporary_store);
-                let inputs = Vec::new();
-                sui_transaction.commands = commands;
-                sui_transaction.objects = objects;
-                sui_transaction.inputs = inputs;
-                return Some(sui_transaction);
-            }
-
+        if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
+            let commands = self.build_programmable_transactions(programmable_tx);
+            let objects = self.build_objects(layout_resolver, effects, inner_temporary_store);
+            let inputs = Vec::new();
+            sui_transaction.commands = commands;
+            sui_transaction.objects = objects;
+            sui_transaction.inputs = inputs;
+            return Some(sui_transaction);
         }
+
         None
     }
 
-    fn set_up_programmable_transaction(&self, tx: &ProgrammableTransaction) -> Vec<SuiCommand> {
+    fn build_programmable_transactions(&mut self, tx: &ProgrammableTransaction) -> Vec<SuiCommand> {
+
         let mut commands: Vec<SuiCommand> = Vec::new();
         for (seq, command) in tx.commands.iter().enumerate() {
             //let kind: &'static str = command.into();
@@ -209,7 +212,7 @@ impl SuiSniffer {
                         module_contents: modules.clone(),
                         dependencies: deps,
                         package_id: format_object_id(package_id),
-                        argument: arg.to_string()
+                        argument: arg.to_string(),
                     })
                 },
                 Command::MakeMoveVec(typ, value) => {
@@ -244,9 +247,6 @@ impl SuiSniffer {
                         n_coins.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()
                     );
                     SuiCommand::Mergecoins(values)
-                },
-                _ => {
-                    SuiCommand::Other
                 }
             };
             commands.push(command);
@@ -255,7 +255,7 @@ impl SuiSniffer {
     }
 
     fn extract_events(
-        &self,
+        &mut self,
         layout_resolver: &mut dyn LayoutResolver,
         tx_seq: u64,
         events: &[Event],
@@ -264,17 +264,17 @@ impl SuiSniffer {
             .iter()
             .filter_map(|event| {
                 let Ok(event_struct_layout) = layout_resolver.get_annotated_layout(&event.type_)
-                else {
-                    warn!(%event.type_, "Can't fetch layout by type");
-                    return None;
-                };
+                    else {
+                        warn!(%event.type_, "Can't fetch layout by type");
+                        return None;
+                    };
 
                 let Ok(event_struct) =
                     Event::move_event_to_move_struct(&event.contents, event_struct_layout)
-                else {
-                    warn!(%event.type_, "Can't parse event contents");
-                    return None;
-                };
+                    else {
+                        warn!(%event.type_, "Can't parse event contents");
+                        return None;
+                    };
 
                 let Ok(contents) = into_value_data(MoveValue::Struct(event_struct)) else {
                     warn!(%event.type_, "Can't convert event contents to ValueData");
@@ -295,36 +295,33 @@ impl SuiSniffer {
         mamoru_events
     }
 
-    pub fn extract_calltraces(&self, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) -> Vec<SuiCalltrace> {
-        let call_trace_type_args_len = 0;
-        let call_trace_args_len = 0;
+    pub fn extract_calltraces(&mut self, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) -> Vec<SuiCalltrace> {
         move_call_traces
             .into_iter()
-            .zip(0..)
-            .map(|(trace, trace_seq)| {
-                let trace_seq = trace_seq as u64;
-
+            .map(|trace| {
+                let trace_seq = self.get_and_next_trace_seq();
 
                 let mut cta: Vec<SuiCalltraceTypeArg> = vec![];
                 let mut ca: Vec<SuiCalltraceArg> = vec![];
 
-                for (arg, seq) in trace
+                for arg in trace
                     .ty_args
                     .into_iter()
-                    .zip(call_trace_type_args_len as u64..)
                 {
+                    let arg_type_seq = self.get_and_next_trace_type_arg_seq();
                     cta.push(SuiCalltraceTypeArg {
-                        seq,
+                        seq: arg_type_seq,
                         calltrace_seq: trace_seq,
                         arg: SuiValueData { data: None, value: mamoru_sui_types::ValueType::String(arg.to_canonical_string(true)) },
                     });
                 }
 
-                for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
+                for arg in trace.args.into_iter() {
+                    let arg_seq = self.get_and_next_trace_arg_seq();
                     match into_value_data(arg.as_ref().clone()) {
                         Ok(arg) => {
                             ca.push(SuiCalltraceArg {
-                                seq,
+                                seq: arg_seq,
                                 calltrace_seq: trace_seq,
                                 arg,
                             });
@@ -348,8 +345,8 @@ impl SuiSniffer {
                 }
             }).collect()
     }
-    fn extract_objects(
-        &self,
+    fn build_objects(
+        &mut self,
         layout_resolver: &mut dyn LayoutResolver,
         effects: &TransactionEffects,
         inner_temporary_store: &InnerTemporaryStore,
@@ -392,7 +389,7 @@ impl SuiSniffer {
         };
 
         let mut objects: Vec<SuiObject> = Vec::new();
-        for (seq, (created, owner)) in effects.created().iter().enumerate() {
+        for (created, owner) in effects.created().iter() {
             if let Some((object, move_value)) = fetch_move_value(created) {
                 let Ok(object_data) = into_value_data(move_value) else {
                     warn!("Can't make ValueData contents to ValueData");
@@ -405,7 +402,7 @@ impl SuiSniffer {
             }
         }
 
-        for (seq, (mutated, owner)) in effects.mutated().iter().enumerate() {
+        for (mutated, owner) in effects.mutated().iter() {
             if let Some((object, move_value)) = fetch_move_value(mutated) {
                 let Ok(object_data) = into_value_data(move_value) else {
                     warn!("Can't make ValueData contents to ValueData");
@@ -422,27 +419,27 @@ impl SuiSniffer {
             }
         }
 
-        for (seq, deleted) in effects.deleted().iter().enumerate() {
+        for deleted in effects.deleted().iter() {
             objects.push(SuiObject {
                 id: format_object_id(deleted.0),
                 typ: SuiObjectType::Deleted,
             });
         }
 
-        for (seq, wrapped) in effects.wrapped().iter().enumerate() {
+        for wrapped in effects.wrapped().iter() {
             objects.push(SuiObject {
                 id: format_object_id(wrapped.0),
                 typ: SuiObjectType::Wrapped,
             });
         }
 
-        for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
+        for (unwrapped, _) in effects.unwrapped().iter() {
             objects.push(SuiObject {
                 id: format_object_id(unwrapped.0),
                 typ: SuiObjectType::Unwrapped,
             });
         }
-        for (seq, unwrapped_then_deleted) in effects.unwrapped_then_deleted().iter().enumerate() {
+        for unwrapped_then_deleted in effects.unwrapped_then_deleted().iter() {
             objects.push(SuiObject {
                 id: format_object_id(unwrapped_then_deleted.0),
                 typ: SuiObjectType::Unwrappedandthendeleted,
@@ -450,9 +447,33 @@ impl SuiSniffer {
         }
         objects
     }
+    fn get_and_next_trace_seq(&mut self) -> u64 {
+        let seq = self.calltrace_identifier;
+        self.calltrace_identifier += 1;
+        seq
+    }
+    fn get_and_next_trace_arg_seq(&mut self) -> u64 {
+        let seq = self.calltrace_arg_identifier;
+        self.calltrace_arg_identifier += 1;
+        seq
+    }
+    fn get_and_next_trace_type_arg_seq(&mut self) -> u64 {
+        let seq = self.calltrace_type_arg_identifier;
+        self.calltrace_type_arg_identifier += 1;
+        seq
+    }
+}
+
+
+impl SuiSniffer {
+    pub async fn new() -> Result<Self, SuiSnifferError> {
+        let sniffer =
+            Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
+
+        Ok(Self { inner: sniffer })
+    }
 
     pub fn prepare_ctx(
-        &self,
         certificate: VerifiedExecutableTransaction,
         effects: TransactionEffects,
         inner_temporary_store: &InnerTemporaryStore,
@@ -469,7 +490,6 @@ impl SuiSniffer {
         // time in nanoseconds.
         let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
 
-        let tx_data = certificate.data().transaction_data();
         let tx_hash = format_tx_digest(effects.transaction_digest());
         let call_traces_len = call_traces.len();
         let events = &inner_temporary_store.events.data;
@@ -480,27 +500,21 @@ impl SuiSniffer {
 
         let mut ctx_builder = BlockchainDataBuilder::<SuiCtx>::new();
         ctx_builder.set_tx_data(format!("{}", seq), tx_hash.clone());
-
         //let gas_cost_summary = effects.gas_cost_summary();
-        ctx_builder.data_mut().transaction = self.new_transaction(&certificate, &effects, time, inner_temporary_store, layout_resolver);
-
+        let mut sui_builder_transaction = SuiTransactionBuilder::new();
+        ctx_builder.data_mut().transaction = sui_builder_transaction.new_transaction(&certificate, &effects, time, inner_temporary_store, layout_resolver);
         let events_timer = Instant::now();
-
-        ctx_builder.data_mut().events = self.extract_events(layout_resolver, seq, events);
+        ctx_builder.data_mut().events = sui_builder_transaction.extract_events(layout_resolver, seq, events);
         info!(
             duration_ms = events_timer.elapsed().as_millis(),
             "sniffer.register_events() executed",
         );
-
         let call_traces_timer = Instant::now();
-
-        ctx_builder.data_mut().calltraces = self.extract_calltraces(seq, call_traces.clone());
-
+        ctx_builder.data_mut().calltraces = sui_builder_transaction.extract_calltraces(seq, call_traces.clone());
         info!(
             duration_ms = call_traces_timer.elapsed().as_millis(),
             "sniffer.register_call_traces() executed",
         );
-
         ctx_builder.set_statistics(0, 1, events_len as u64, call_traces_len as u64);
 
         let ctx = ctx_builder.build()?;
@@ -529,32 +543,6 @@ fn format_object_id<T: AsRef<[u8]>>(data: T) -> String {
 
 fn format_tx_digest<T: AsRef<[u8]>>(data: T) -> String {
     Base58::encode(data.as_ref())
-}
-
-fn to_value(data: &MoveValue) -> Value {
-    match data {
-        MoveValue::Bool(value) => Value::Bool(*value),
-        MoveValue::U8(value) => Value::U64(*value as u64),
-        MoveValue::U16(value) => Value::U64(*value as u64),
-        MoveValue::U32(value) => Value::U64(*value as u64),
-        MoveValue::U64(value) => Value::U64(*value),
-        MoveValue::U128(value) => Value::String(format!("{:#x}", value)),
-        MoveValue::U256(value) => Value::String(format!("{:#x}", value)),
-        MoveValue::Address(addr) | MoveValue::Signer(addr) => Value::String(format_object_id(addr)),
-        MoveValue::Vector(value) => Value::List(value.iter().map(to_value).collect()),
-        MoveValue::Struct(value) => {
-            let MoveStruct { type_, fields } = value;
-            let struct_value = StructValue::new(
-                type_.to_canonical_string(true),
-                fields
-                    .iter()
-                    .map(|(field, value)| (field.clone().into_string(), to_value(value)))
-                    .collect(),
-            );
-
-            Value::Struct(struct_value)
-        }
-    }
 }
 
 fn emit_debug_stats(call_traces: &[MoveCallTrace]) {
