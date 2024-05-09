@@ -32,9 +32,10 @@ use sui_types::{
 };
 
 use mamoru_sui_types::{SuiCtx, SuiCalltrace, SuiCalltraceArg, SuiCalltraceTypeArg, SuiCommand, SuiObjectType, SuiMutatedObject, SuiCreatedObject, SuiOwner};
-use mamoru_sui_types::{SuiPublishCommand, SuiUpgradeCommand, SuiTransactionExpiration, SuiGasData};
+use mamoru_sui_types::{SuiPublishCommand, SuiUpgradeCommand, SuiTransactionExpiration, SuiGasData, SuiProgrammableMoveCall};
 use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
 pub use mamoru_sui_types::{SuiEvent, SuiTransaction, SuiObject};
+use move_core_types::trace::TypeTag;
 use sui_types::transaction::{TransactionData, TransactionExpiration};
 
 mod error;
@@ -161,7 +162,7 @@ impl SuiSniffer {
                 is_genesis_tx: info.is_genesis_tx(),
                 is_sponsored_tx: info.is_sponsored_tx(),
                 is_system_tx: info.is_system_tx(),
-                receiving_objects: receiving_objects.iter().map(|elem| format_object_ref(elem)).collect(),
+                receiving_objects: info.receiving_objects().iter().map(|elem| format_object_ref(elem)).collect(),
                 signers: info.signers().iter().map(|signer| signer.to_string()).collect::<Vec<String>>(),
             };
 
@@ -184,7 +185,6 @@ impl SuiSniffer {
         let mut commands: Vec<SuiCommand> = Vec::new();
         for (seq, command) in tx.commands.iter().enumerate() {
             //let kind: &'static str = command.into();
-
             let command = match command {
                 Command::Publish(modules, dependencies) => {
                     //modules_for_command.extend(modules.clone());
@@ -211,7 +211,40 @@ impl SuiSniffer {
                         package_id: format_object_id(package_id),
                         argument: arg.to_string()
                     })
-                }
+                },
+                Command::MakeMoveVec(typ, value) => {
+                    SuiCommand::Makemovevec((typ.as_ref().map(|t| t.to_string()),
+                                             value.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()))
+                },
+                //review how to convert in objectid
+                Command::MoveCall(boxed_progr_move_call) => {
+                    SuiCommand::Movecall(SuiProgrammableMoveCall {
+                        pack: boxed_progr_move_call.package.to_string(),
+                        module: boxed_progr_move_call.module.to_string(),
+                        function: boxed_progr_move_call.function.to_string(),
+                        //TODO parse to typetag
+                        type_arguments: boxed_progr_move_call.type_arguments.iter().map(|elem: &TypeTag| elem.to_string()).collect::<Vec<String>>(),
+                    })
+                },
+                Command::TransferObjects(objects, address) => {
+                    let values = (
+                        objects.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()
+                        , address.to_string());
+                    SuiCommand::Transferobjects(values)
+                },
+                Command::SplitCoins(orig_amount, new_coins) => {
+                    let values = (
+                        orig_amount.to_string()
+                        , new_coins.iter().map(|elem| elem.to_string()).collect::<Vec<String>>());
+                    SuiCommand::Splitcoins(values)
+                },
+                Command::MergeCoins(first_coin_to_merge, n_coins) => {
+                    let values = (
+                        first_coin_to_merge.to_string(),
+                        n_coins.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()
+                    );
+                    SuiCommand::Mergecoins(values)
+                },
                 _ => {
                     SuiCommand::Other
                 }
