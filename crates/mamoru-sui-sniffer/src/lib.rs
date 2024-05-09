@@ -33,10 +33,12 @@ use sui_types::{
 
 use mamoru_sui_types::{SuiCtx, SuiCalltrace, SuiCalltraceArg, SuiCalltraceTypeArg, SuiCommand, SuiObjectType, SuiMutatedObject, SuiCreatedObject, SuiOwner};
 use mamoru_sui_types::{SuiPublishCommand, SuiUpgradeCommand, SuiTransactionExpiration, SuiGasData, SuiProgrammableMoveCall};
+use mamoru_sui_types::{SuiChangeEpoch, SuiGenesisTransaction, SuiConsensusCommitPrologue, SuiAuhenticatorStateUpdate};
+use mamoru_sui_types::{SuiRandomnessStateUpdate, SuiConsensusCommitProloguev2, SuiEndOfEpochTransactionKind};
 use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
 pub use mamoru_sui_types::{SuiEvent, SuiTransaction, SuiObject};
 use move_core_types::trace::TypeTag;
-use sui_types::transaction::{TransactionData, TransactionExpiration};
+use sui_types::transaction::{AuthenticatorStateExpire, ChangeEpoch, TransactionData, TransactionExpiration};
 
 mod error;
 
@@ -179,6 +181,81 @@ impl SuiTransactionBuilder {
             sui_transaction.inputs = inputs;
             return Some(sui_transaction);
         }
+
+        if let TransactionKind::ChangeEpoch(change) = &tx_data.kind() {
+            SuiChangeEpoch {
+                epoch: change.epoch,
+                protocol_version: change.protocol_version,
+                storage_charge: change.storage_charge,
+                computation_charge: change.computation_charge,
+                storage_rebate: change.storage_rebate,
+                non_fundable_storage: change.non_refundable_storage_fee,
+                epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
+                system_packages: change.system_packages.iter().map(|&(seq_num, modules, object_ids)|
+                    (seq_num,
+                     modules.iter().map(|elem| elem.to_string()).collect::<Vec<String>>(),
+                     object_ids.iter().map(|elem| elem.to_string()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<String>, Vec<String>)>>(),
+            };
+        }
+
+        if let TransactionKind::Genesis(genesis) = &tx_data.kind() {
+            //SuiGenesisTransaction {}
+        }
+
+        if let TransactionKind::ConsensusCommitPrologue(consensus) = &tx_data.kind() {
+            SuiConsensusCommitPrologue {
+                epoch: consensus.epoch,
+                round: consensus.round,
+                commit_timestamp_ms: consensus.commit_timestamp_ms.into(),
+            };
+        }
+
+        if let TransactionKind::AuthenticatorStateUpdate(authenticator) = &tx_data.kind() {
+            SuiAuhenticatorStateUpdate {
+                epoch: authenticator.epoch,
+                round: authenticator.round,
+                authenticator_obj_initial_shared_version: authenticator.authenticator_obj_initial_shared_version.into(),
+            };
+        }
+
+        if let TransactionKind::RandomnessStateUpdate(randomness) = &tx_data.kind() {
+            SuiRandomnessStateUpdate {
+                epoch: randomness.epoch,
+                round: randomness.randomness_round.0,
+                randomness_obj_initial_shared_version: randomness.randomness_obj_initial_shared_version.into(),
+            };
+        }
+        if let TransactionKind::ConsensusCommitPrologueV2(consensus) = &tx_data.kind() {
+            SuiConsensusCommitProloguev2 {
+                epoch: consensus.epoch,
+                round: consensus.round,
+                commit_timestamp_ms: consensus.commit_timestamp_ms.into(),
+                //add consensus commit digest
+            };
+        }
+
+
+        /*
+        pub enum EndOfEpochTransactionKind {
+            ChangeEpoch(ChangeEpoch),
+            AuthenticatorStateCreate,
+            AuthenticatorStateExpire(AuthenticatorStateExpire),
+            RandomnessStateCreate,
+            DenyListStateCreate,
+        }
+        */
+        /*
+
+        if let TransactionKind::EndOfEpochTransaction(end_of_epoch) = &tx_data.kind() {
+            let transactions: Vec<SuiEndOfEpochTransactionKind> = end_of_epoch.iter().map(|elem| {
+                SuiEndOfEpochTransactionKind {
+                    epoch: elem.epoch().into(),
+                    round: elem.round().into(),
+                    authenticator_obj_initial_shared_version: elem.authenticator_obj_initial_shared_version.into()
+                }
+            };
+        }
+         */
 
         None
     }
