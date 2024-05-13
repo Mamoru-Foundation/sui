@@ -5,40 +5,50 @@ use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
 use itertools::Itertools;
-use mamoru_sniffer::core::BlockchainData;
 use mamoru_sniffer::{
-    core::{BlockchainDataBuilder},
+    core::BlockchainDataBuilder,
     Sniffer, SnifferConfig,
 };
-
-use tokio::time::Instant;
-use tracing::{info, span, warn, Level};
-
-pub use error::*;
+use mamoru_sniffer::core::BlockchainData;
+use mamoru_sui_types::{SuiGasData, SuiProgrammableMoveCall, SuiPublishCommand, SuiTransactionExpiration, SuiTransactionType, SuiUpgradeCommand};
+use mamoru_sui_types::{SuiConsensusCommitPrologueV2, SuiEndOfEpochTransactionKind, SuiRandomnessStateUpdate};
+use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
+pub use mamoru_sui_types::{SuiEvent, SuiObject, SuiTransaction};
+use mamoru_sui_types::SuiAuthenticatorStateUpdate;
+use mamoru_sui_types::SuiCalltrace;
+use mamoru_sui_types::SuiCalltraceArg;
+use mamoru_sui_types::SuiCalltraceTypeArg;
+use mamoru_sui_types::SuiChangeEpoch;
+use mamoru_sui_types::SuiCommand;
+use mamoru_sui_types::SuiConsensusCommitPrologue;
+use mamoru_sui_types::SuiCreatedObject;
+use mamoru_sui_types::SuiCtx;
+use mamoru_sui_types::SuiMutatedObject;
+use mamoru_sui_types::SuiObjectType;
+use mamoru_sui_types::SuiOwner;
+use mamoru_sui_types::SuiActiveJwk;
+use mamoru_sui_types::SuiAuthenticatorStateExpire;
 use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use sui_types::base_types::{ObjectRef};
-use sui_types::inner_temporary_store::InnerTemporaryStore;
-use sui_types::object::{Data, Owner};
-use sui_types::storage::ObjectStore;
-use sui_types::type_resolver::LayoutResolver;
+use move_core_types::trace::TypeTag;
+use tokio::time::Instant;
+use tracing::{info, Level, span, warn};
+
+pub use error::*;
 use sui_types::{
     effects::{TransactionEffects, TransactionEffectsAPI},
     event::Event,
     executable_transaction::VerifiedExecutableTransaction,
     transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
 };
-
-use mamoru_sui_types::{SuiCtx, SuiCalltrace, SuiCalltraceArg, SuiCalltraceTypeArg, SuiCommand, SuiObjectType, SuiMutatedObject, SuiCreatedObject, SuiOwner};
-use mamoru_sui_types::{SuiPublishCommand, SuiUpgradeCommand, SuiTransactionExpiration, SuiGasData, SuiProgrammableMoveCall};
-use mamoru_sui_types::{SuiChangeEpoch, SuiGenesisTransaction, SuiConsensusCommitPrologue, SuiAuhenticatorStateUpdate};
-use mamoru_sui_types::{SuiRandomnessStateUpdate, SuiConsensusCommitProloguev2, SuiEndOfEpochTransactionKind};
-use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
-pub use mamoru_sui_types::{SuiEvent, SuiTransaction, SuiObject};
-use move_core_types::trace::TypeTag;
-use sui_types::transaction::{AuthenticatorStateExpire, ChangeEpoch, TransactionData, TransactionExpiration};
+use sui_types::base_types::ObjectRef;
+use sui_types::inner_temporary_store::InnerTemporaryStore;
+use sui_types::object::{Data, Owner};
+use sui_types::storage::ObjectStore;
+use sui_types::transaction::{EndOfEpochTransactionKind, TransactionData, TransactionExpiration};
+use sui_types::type_resolver::LayoutResolver;
 
 mod error;
 
@@ -185,21 +195,21 @@ impl SuiTransactionBuilder {
         if let TransactionKind::ChangeEpoch(change) = &tx_data.kind() {
             SuiChangeEpoch {
                 epoch: change.epoch,
-                protocol_version: change.protocol_version,
+                protocol_version: change.protocol_version.as_u64(),
                 storage_charge: change.storage_charge,
                 computation_charge: change.computation_charge,
                 storage_rebate: change.storage_rebate,
-                non_fundable_storage: change.non_refundable_storage_fee,
+                non_refundable_storage: change.non_refundable_storage_fee,
                 epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
-                system_packages: change.system_packages.iter().map(|&(seq_num, modules, object_ids)|
-                    (seq_num,
-                     modules.iter().map(|elem| elem.to_string()).collect::<Vec<String>>(),
-                     object_ids.iter().map(|elem| elem.to_string()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<String>, Vec<String>)>>(),
+                system_packages: change.system_packages.iter().map(|(seq_num, modules, object_ids)|
+                    (seq_num.to_string().parse().expect("Ups, I can not convert the seq number"), // TODO it is necessary to grant the  permissions
+                     modules.clone(),
+                     object_ids.iter().map(|elem| elem.to_string().clone()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
             };
         }
 
-        if let TransactionKind::Genesis(genesis) = &tx_data.kind() {
-            //SuiGenesisTransaction {}
+        if let TransactionKind::Genesis(_genesis) = &tx_data.kind() {
+            //TODO pending to configure
         }
 
         if let TransactionKind::ConsensusCommitPrologue(consensus) = &tx_data.kind() {
@@ -211,9 +221,19 @@ impl SuiTransactionBuilder {
         }
 
         if let TransactionKind::AuthenticatorStateUpdate(authenticator) = &tx_data.kind() {
-            SuiAuhenticatorStateUpdate {
+            SuiAuthenticatorStateUpdate {
                 epoch: authenticator.epoch,
                 round: authenticator.round,
+                new_active_jwks: authenticator.new_active_jwks.iter().map(
+                    |elem| SuiActiveJwk {
+                        iss: elem.jwk_id.iss.clone(),
+                        kid: elem.jwk_id.kid.clone(),
+                        jwk_kty: elem.jwk.kty.clone(),
+                        jwk_n: elem.jwk.n.clone(),
+                        jwk_alg: elem.jwk.alg.clone(),
+                        epoch: elem.epoch,
+                    }
+                ).collect::<Vec<SuiActiveJwk>>(),
                 authenticator_obj_initial_shared_version: authenticator.authenticator_obj_initial_shared_version.into(),
             };
         }
@@ -221,47 +241,63 @@ impl SuiTransactionBuilder {
         if let TransactionKind::RandomnessStateUpdate(randomness) = &tx_data.kind() {
             SuiRandomnessStateUpdate {
                 epoch: randomness.epoch,
-                round: randomness.randomness_round.0,
+                randomness_round: randomness.randomness_round.0,
+                random_bytes: randomness.random_bytes.clone(),
                 randomness_obj_initial_shared_version: randomness.randomness_obj_initial_shared_version.into(),
             };
         }
         if let TransactionKind::ConsensusCommitPrologueV2(consensus) = &tx_data.kind() {
-            SuiConsensusCommitProloguev2 {
+            SuiConsensusCommitPrologueV2 {
                 epoch: consensus.epoch,
                 round: consensus.round,
                 commit_timestamp_ms: consensus.commit_timestamp_ms.into(),
-                //add consensus commit digest
+                consesus_commit_digest: consensus.consensus_commit_digest.inner().to_vec()
             };
         }
-
-
-        /*
-        pub enum EndOfEpochTransactionKind {
-            ChangeEpoch(ChangeEpoch),
-            AuthenticatorStateCreate,
-            AuthenticatorStateExpire(AuthenticatorStateExpire),
-            RandomnessStateCreate,
-            DenyListStateCreate,
-        }
-        */
-        /*
 
         if let TransactionKind::EndOfEpochTransaction(end_of_epoch) = &tx_data.kind() {
-            let transactions: Vec<SuiEndOfEpochTransactionKind> = end_of_epoch.iter().map(|elem| {
-                SuiEndOfEpochTransactionKind {
-                    epoch: elem.epoch().into(),
-                    round: elem.round().into(),
-                    authenticator_obj_initial_shared_version: elem.authenticator_obj_initial_shared_version.into()
+            let transactions = end_of_epoch.iter().map(|elem| {
+                match elem {
+                    EndOfEpochTransactionKind::ChangeEpoch(change) => {
+                        let changed_epoch = SuiChangeEpoch {
+                            epoch: change.epoch,
+                            protocol_version: change.protocol_version.as_u64(),
+                            storage_charge: change.storage_charge,
+                            computation_charge: change.computation_charge,
+                            storage_rebate: change.storage_rebate,
+                            non_refundable_storage: change.non_refundable_storage_fee,
+                            epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
+                            system_packages: change.system_packages.iter().map(|(seq_num, modules, object_ids)|
+                                (seq_num.to_string().parse().expect("Ups, I can not convert the seq number"), // TODO it is necessary to grant the  permissions
+                                 modules.clone(),
+                                 object_ids.iter().map(|elem| elem.to_string().clone()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
+                        };
+                        SuiEndOfEpochTransactionKind::ChangeEpoch(changed_epoch)
+                    },
+                    EndOfEpochTransactionKind::AuthenticatorStateCreate => {
+                        SuiEndOfEpochTransactionKind::AuthenticatorStateCreate
+                    },
+                    EndOfEpochTransactionKind::AuthenticatorStateExpire(expire_state) => {
+                        SuiEndOfEpochTransactionKind::AuthenticatorStateExpire(SuiAuthenticatorStateExpire {
+                            min_epoch: expire_state.min_epoch,
+                            authenticator_obj_initial_shared_version: expire_state.authenticator_obj_initial_shared_version.into(),
+                        })
+                    },
+                    EndOfEpochTransactionKind::RandomnessStateCreate => {
+                        SuiEndOfEpochTransactionKind::RandomnessStateCreate
+                    },
+                    EndOfEpochTransactionKind::DenyListStateCreate => {
+                        SuiEndOfEpochTransactionKind::DenyListStateCreate
+                    }
                 }
-            };
-        }
-         */
+            }).collect::<Vec<SuiEndOfEpochTransactionKind>>();
+            SuiTransactionType::EndOfEpochTransactionKind(transactions);
 
+        }
         None
     }
 
     fn build_programmable_transactions(&mut self, tx: &ProgrammableTransaction) -> Vec<SuiCommand> {
-
         let mut commands: Vec<SuiCommand> = Vec::new();
         for (seq, command) in tx.commands.iter().enumerate() {
             //let kind: &'static str = command.into();
