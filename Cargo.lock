@@ -7587,7 +7587,6 @@ dependencies = [
  "rusqlite",
  "semver",
  "serde",
- "serde_json",
  "serde_with 3.8.1",
  "thiserror",
  "tokio",
@@ -7617,6 +7616,7 @@ name = "mamoru-sui-sniffer"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "derive_builder",
  "fastcrypto",
  "itertools 0.10.5",
  "mamoru-sniffer",
@@ -7633,10 +7633,8 @@ name = "mamoru-sui-types"
 version = "0.1.0"
 dependencies = [
  "blockchain-data-macro",
- "datafusion",
  "mamoru-core",
  "maplit",
- "serde",
  "tracing",
 ]
 

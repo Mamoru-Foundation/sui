@@ -561,10 +561,10 @@ move-stackless-bytecode = { path = "external-crates/move/crates/move-stackless-b
 move-abstract-stack = { path = "external-crates/move/crates/move-abstract-stack" }
 
 # The mamoru
-mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "324075d3083559e020a261d61574c1ef8dbbe2ae" }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "324075d3083559e020a261d61574c1ef8dbbe2ae" }
-#mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
-#mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
+#mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "324075d3083559e020a261d61574c1ef8dbbe2ae" }
+#mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "324075d3083559e020a261d61574c1ef8dbbe2ae" }
+mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
+mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
 
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "878492bd2541dce1491791bcadf3cc855ddcdc05" }
 fastcrypto-tbls = { git = "https://github.com/MystenLabs/fastcrypto", rev = "878492bd2541dce1491791bcadf3cc855ddcdc05" }
