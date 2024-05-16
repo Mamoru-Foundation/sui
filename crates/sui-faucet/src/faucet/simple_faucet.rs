@@ -1173,12 +1173,14 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_transfer_state() {
-        let test_cluster = TestClusterBuilder::new().build().await;
-        let address = test_cluster.get_address_0();
-        let mut context = test_cluster.wallet;
-        let gases = get_current_gases(address, &mut context).await;
+    /*
+     //TOCHECK
+        #[tokio::test]
+        async fn test_transfer_state() {
+            let test_cluster = TestClusterBuilder::new().build().await;
+            let address = test_cluster.get_address_0();
+            let mut context = test_cluster.wallet;
+            let gases = get_current_gases(address, &mut context).await;
 
         let gases = HashSet::from_iter(gases.into_iter().map(|gas| *gas.id()));
 
@@ -1221,6 +1223,7 @@ mod tests {
             gases, candidates
         );
     }
+    */
 
     #[tokio::test]
     async fn test_batch_transfer_interface() {

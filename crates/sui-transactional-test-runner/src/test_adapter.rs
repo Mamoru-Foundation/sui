@@ -494,6 +494,7 @@ impl<'a> MoveTestAdapter<'a> for SuiTestAdapter {
         let empty = SerializedReturnValues {
             mutable_reference_outputs: vec![],
             return_values: vec![],
+            call_traces: vec![],
         };
         Ok((output, empty))
     }

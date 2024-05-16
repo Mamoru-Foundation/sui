@@ -1928,6 +1928,10 @@ impl Function {
         self.name.as_str()
     }
 
+    pub(crate) fn name_ident(&self) -> Identifier {
+        self.name.clone()
+    }
+
     pub(crate) fn code(&self) -> &[Bytecode] {
         &self.code
     }

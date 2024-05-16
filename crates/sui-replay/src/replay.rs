@@ -24,7 +24,7 @@ use prometheus::Registry;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::PathBuf,
     sync::Arc,
     sync::Mutex,
@@ -662,6 +662,14 @@ impl LocalExec {
         assert_eq!(
             &input_objects.filter_shared_objects().len(),
             &tx_info.shared_object_refs.len()
+        );
+        assert_eq!(
+            input_objects.transaction_dependencies(),
+            tx_info
+                .dependencies
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
         );
         // At this point we have all the objects needed for replay
 

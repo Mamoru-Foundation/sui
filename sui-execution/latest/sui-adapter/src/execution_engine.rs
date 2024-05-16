@@ -220,6 +220,7 @@ mod checked {
             status,
             &mut gas_charger,
             *epoch_id,
+            tx_ctx.call_traces(),
         );
 
         (
