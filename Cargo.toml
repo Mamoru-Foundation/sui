@@ -569,7 +569,6 @@ mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", r
 #mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
 #mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
 
-
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "4988a4744fcaf8bc7f60bf660d9a223ed0f54cc6" }
 fastcrypto-tbls = { git = "https://github.com/MystenLabs/fastcrypto", rev = "4988a4744fcaf8bc7f60bf660d9a223ed0f54cc6" }
 fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "4988a4744fcaf8bc7f60bf660d9a223ed0f54cc6", package = "fastcrypto-zkp" }

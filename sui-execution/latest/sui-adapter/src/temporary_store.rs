@@ -220,6 +220,18 @@ impl<'backing> TemporaryStore<'backing> {
             }
         }
 
+        assert!(self.protocol_config.enable_effects_v2());
+        self.into_effects_v2(
+            shared_object_refs,
+            transaction_digest,
+            transaction_dependencies,
+            gas_cost_summary,
+            status,
+            gas_charger,
+            epoch,
+            call_traces,
+        )
+        /*
         if self.protocol_config.enable_effects_v2() {
             self.into_effects_v2(
                 shared_object_refs,
@@ -252,6 +264,8 @@ impl<'backing> TemporaryStore<'backing> {
                 call_traces,
             )
         }
+
+         */
     }
 
     fn into_effects_v1(
