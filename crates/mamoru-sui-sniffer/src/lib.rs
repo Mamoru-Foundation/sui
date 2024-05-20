@@ -256,7 +256,7 @@ impl SuiTransactionBuilder {
         }
 
         if let TransactionKind::EndOfEpochTransaction(end_of_epoch) = &tx_data.kind() {
-            let transactions = end_of_epoch.iter().map(|elem| {
+            let transactions = end_of_epoch.iter().filter_map(|elem| {
                 match elem {
                     EndOfEpochTransactionKind::ChangeEpoch(change) => {
                         let changed_epoch = SuiChangeEpoch {
@@ -272,22 +272,26 @@ impl SuiTransactionBuilder {
                                  modules.clone(),
                                  object_ids.iter().map(|elem| elem.to_string().clone()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
                         };
-                        SuiEndOfEpochTransactionKind::ChangeEpoch(changed_epoch)
+                        Some(SuiEndOfEpochTransactionKind::ChangeEpoch(changed_epoch))
                     },
                     EndOfEpochTransactionKind::AuthenticatorStateCreate => {
-                        SuiEndOfEpochTransactionKind::AuthenticatorStateCreate
+                        Some(SuiEndOfEpochTransactionKind::AuthenticatorStateCreate)
                     },
                     EndOfEpochTransactionKind::AuthenticatorStateExpire(expire_state) => {
-                        SuiEndOfEpochTransactionKind::AuthenticatorStateExpire(SuiAuthenticatorStateExpire {
+                        Some(SuiEndOfEpochTransactionKind::AuthenticatorStateExpire(SuiAuthenticatorStateExpire {
                             min_epoch: expire_state.min_epoch,
                             authenticator_obj_initial_shared_version: expire_state.authenticator_obj_initial_shared_version.into(),
-                        })
+                        }))
                     },
                     EndOfEpochTransactionKind::RandomnessStateCreate => {
-                        SuiEndOfEpochTransactionKind::RandomnessStateCreate
+                        Some(SuiEndOfEpochTransactionKind::RandomnessStateCreate)
                     },
                     EndOfEpochTransactionKind::DenyListStateCreate => {
-                        SuiEndOfEpochTransactionKind::DenyListStateCreate
+                        Some(SuiEndOfEpochTransactionKind::DenyListStateCreate)
+                    },
+                    EndOfEpochTransactionKind::BridgeStateCreate(_) | EndOfEpochTransactionKind::BridgeCommitteeInit(_) => {
+                        info!("Detected bridgeStateCreate and BridgeCommitteeInit");
+                        None
                     }
                 }
             }).collect::<Vec<SuiEndOfEpochTransactionKind>>();
@@ -587,6 +591,7 @@ impl SuiSniffer {
     }
 
     pub fn prepare_ctx(
+        &self,
         certificate: VerifiedExecutableTransaction,
         effects: TransactionEffects,
         inner_temporary_store: &InnerTemporaryStore,
