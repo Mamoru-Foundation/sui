@@ -564,8 +564,11 @@ move-abstract-interpreter = { path = "external-crates/move/crates/move-abstract-
 move-abstract-stack = { path = "external-crates/move/crates/move-abstract-stack" }
 
 # The mamoru
-mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3bc990ac0d437ba48402aba2a70d4eecfb9dd1a0" }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3bc990ac0d437ba48402aba2a70d4eecfb9dd1a0" }
+# 0baf85c04fd8a0c9a66ac4bd0345c78c8a5df227
+mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "0baf85c04fd8a0c9a66ac4bd0345c78c8a5df227" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "0baf85c04fd8a0c9a66ac4bd0345c78c8a5df227" }
+#mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3bc990ac0d437ba48402aba2a70d4eecfb9dd1a0" }
+#mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3bc990ac0d437ba48402aba2a70d4eecfb9dd1a0" }
 #mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
 #mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
 
