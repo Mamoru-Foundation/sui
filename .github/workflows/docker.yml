@@ -7,6 +7,12 @@ on:
       - testnet
       - testnet4
       - testnet4-wit
+  workflow_dispatch:
+    inputs:
+      run-validator-step:
+        description: 'Run the validator step'
+        required: true
+        default: 'false'
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer
@@ -64,5 +70,22 @@ jobs:
           tags: |
             ${{ env.REPOSITORY }}:latest
             ${{ env.REPOSITORY }}:${{ github.sha }}
+          ssh: |
+            default=${{ env.SSH_AUTH_SOCK }}
+
+      - name: Validator build and push
+        if: ${{ github.event.inputs.run-validator-step == 'true' }}
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./docker/sui-validator/Dockerfile
+          build-args: |
+            GIT_REVISION=${{ github.sha }}
+            BUILD_DATE=${{ steps.date.outputs.date }}
+            PROFILE=release
+          push: true
+          tags: |
+            ${{ env.REPOSITORY }}-validator:latest
+            ${{ env.REPOSITORY }}-validator:${{ github.sha }}
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
