@@ -75,7 +75,7 @@ jobs:
             default=${{ env.SSH_AUTH_SOCK }}
 
       - name: Validator build and push
-        if: ${{ github.event.inputs.run-validator-step == 'true' }}
+        #if: ${{ github.event.inputs.run-validator-step == 'true' }}
         uses: docker/build-push-action@v3
         with:
           context: .
