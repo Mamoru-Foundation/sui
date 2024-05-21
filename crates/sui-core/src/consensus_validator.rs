@@ -13,11 +13,13 @@ use sui_protocol_config::ProtocolConfig;
 use sui_types::messages_consensus::{ConsensusTransaction, ConsensusTransactionKind};
 use tap::TapFallible;
 use tracing::{info, warn};
+use sui_types::transaction::{TransactionDataAPI, TransactionDataV1};
 
 use crate::{
     authority::authority_per_epoch_store::AuthorityPerEpochStore,
     checkpoints::CheckpointServiceNotify, transaction_manager::TransactionManager,
 };
+use crate::authority_aggregator::ProcessTransactionResult::Certified;
 
 /// Allows verifying the validity of transactions
 #[derive(Clone)]
@@ -58,7 +60,14 @@ impl SuiTxValidator {
             match tx {
                 ConsensusTransactionKind::UserTransaction(certificate) => {
                     cert_batch.push(*certificate);
+                    let trans_data = certificate.transaction_data();
+                    let sui_types::transaction::TransactionData::V1(data_v1) = trans_data.clone();
 
+                    info!("CARLOS - MY REPORT");
+                    info!(data_v1.kind);
+                    info!("{:?}",data_v1.gas());
+                    info!("{:?}",data_v1.gas_owner());
+                    info!("--------------------------------");
                     // if !certificate.contains_shared_object() {
                     //     // new_unchecked safety: we do not use the certs in this list until all
                     //     // have had their signatures verified.

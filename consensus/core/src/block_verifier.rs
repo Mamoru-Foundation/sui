@@ -2,16 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{collections::BTreeSet, sync::Arc};
+use tracing::info;
 
-use crate::{
-    block::{
-        genesis_blocks, BlockAPI, BlockRef, BlockTimestampMs, SignedBlock, VerifiedBlock,
-        GENESIS_ROUND,
-    },
-    context::Context,
-    error::{ConsensusError, ConsensusResult},
-    transaction::TransactionVerifier,
-};
+use crate::{block::{
+    genesis_blocks, BlockAPI, BlockRef, BlockTimestampMs, SignedBlock, VerifiedBlock,
+    GENESIS_ROUND,
+}, context::Context, error::{ConsensusError, ConsensusResult}, transaction::TransactionVerifier, ValidationError};
 
 pub(crate) trait BlockVerifier: Send + Sync + 'static {
     /// Verifies a block's metadata and transactions.
@@ -56,6 +52,13 @@ impl SignedBlockVerifier {
             transaction_verifier,
         }
     }
+}
+
+use sui_types::messages_consensus::{ConsensusTransaction, ConsensusTransactionKind};
+
+fn my_tx_from_bytes(tx: &[u8]) -> Result<ConsensusTransaction, String> {
+    bcs::from_bytes::<ConsensusTransaction>(tx)
+        .map_err(|e| format!("Malformed transaction (failed to deserialize): {}", e))
 }
 
 // All block verification logic are implemented below.
@@ -142,12 +145,29 @@ impl BlockVerifier for SignedBlockVerifier {
             });
         }
 
+        info!("HELLO, HERE MY BATCH");
         // TODO: check transaction size, total size and count.
-        let batch: Vec<_> = block.transactions().iter().map(|t| t.data()).collect();
+        let batch: Vec<&[u8]> = block.transactions().iter().map(|t| t.data()).collect();
+
+        /* deserialize transactions*/
+
+
+        let my_txs = batch
+            .iter()
+            .map(|tx| {
+                my_tx_from_bytes(tx)
+                    .map(|tx| tx.kind)
+                    .map_err(|e| ValidationError::InvalidTransaction(e.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>().expect("Parsing batch");
+
+        // my_txs.iter().map()
+
         self.transaction_verifier
             .verify_batch(&self.context.protocol_config, &batch)
             .map_err(|e| ConsensusError::InvalidTransaction(format!("{e:?}")))
     }
+
 
     fn check_ancestors(
         &self,
