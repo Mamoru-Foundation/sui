@@ -59,8 +59,8 @@ impl SuiTxValidator {
         for tx in txs.into_iter() {
             match tx {
                 ConsensusTransactionKind::UserTransaction(certificate) => {
+                    let trans_data = certificate.transaction_data().clone();
                     cert_batch.push(*certificate);
-                    let trans_data = certificate.transaction_data();
                     let sui_types::transaction::TransactionData::V1(data_v1) = trans_data.clone();
 
                     info!("CARLOS - MY REPORT");
