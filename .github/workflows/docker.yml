@@ -7,6 +7,7 @@ on:
       - testnet
       - testnet4
       - testnet4-wit
+      - setup-validator-ci-step
   workflow_dispatch:
     inputs:
       run-validator-step:
