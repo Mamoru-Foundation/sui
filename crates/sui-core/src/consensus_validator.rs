@@ -64,7 +64,7 @@ impl SuiTxValidator {
                     let sui_types::transaction::TransactionData::V1(data_v1) = trans_data.clone();
 
                     info!("CARLOS - MY REPORT");
-                    info!(data_v1.kind);
+                    info!("{:?}", data_v1.kind);
                     info!("{:?}",data_v1.gas());
                     info!("{:?}",data_v1.gas_owner());
                     info!("--------------------------------");
