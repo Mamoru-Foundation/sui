@@ -1,12 +1,11 @@
-name: "Build docker image"
+name: "Build docker validator image"
 on:
-  push:
-    branches:
-      - main
-      - devnet
-      - testnet
-      - testnet4
-      - testnet4-wit
+  workflow_dispatch:
+    inputs:
+      run-validator-step:
+        description: 'Run the validator step'
+        required: true
+        default: 'false'
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer
@@ -17,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  validator:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
@@ -36,7 +35,7 @@ jobs:
       - name: Prepare git and ssh config for build context
         run: |
           mkdir root-config
-          cp -r ~/.gitconfig  ~/.ssh root-config/
+          cp -r ~/.gitconfig ~/.ssh root-config/
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -51,18 +50,18 @@ jobs:
         id: date
         run: echo "::set-output name=date::$(date -u +'%Y-%m-%d')"
 
-      - name: Build and push
+      - name: Validator build and push
         uses: docker/build-push-action@v3
         with:
           context: .
-          file: ./docker/sui-node/Dockerfile
+          file: ./docker/sui-validator/Dockerfile
           build-args: |
             GIT_REVISION=${{ github.sha }}
             BUILD_DATE=${{ steps.date.outputs.date }}
             PROFILE=release
           push: true
           tags: |
-            ${{ env.REPOSITORY }}:latest
-            ${{ env.REPOSITORY }}:${{ github.sha }}
+            ${{ env.REPOSITORY }}-validator:latest
+            ${{ env.REPOSITORY }}-validator:${{ github.sha }}
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
