@@ -2,23 +2,23 @@ name: "Build docker validator image"
 on:
   workflow_dispatch:
     inputs:
-      run-validator-step:
+      run_validator_step:
         description: 'Run the validator step'
         required: true
-        default: false
         type: boolean
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer-validator
 
-concurrency:
-  # cancel redundant builds on PRs (only on PR, not on branches)
-  group: ${{ github.workflow }}-${{ github.ref_name }}
-  cancel-in-progress: true
+#concurrency:
+#  # cancel redundant builds on PRs (only on PR, not on branches)
+#  group: ${{ github.workflow }}-${{ github.ref_name }}
+#  cancel-in-progress: true
 
 jobs:
   validator:
     runs-on: ubuntu-latest
+    if:  ${{ inputs.run_validator_step }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -52,7 +52,6 @@ jobs:
         run: echo "::set-output name=date::$(date -u +'%Y-%m-%d')"
 
       - name: Validator build and push
-        if: ${{ inputs.run-validator-step == 'true' }}
         uses: docker/build-push-action@v3
         with:
           context: .
