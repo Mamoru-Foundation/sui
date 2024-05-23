@@ -15,7 +15,6 @@ env:
 jobs:
   validator:
     runs-on: ubuntu-latest
-    if:  ${{ inputs.run_validator_step }}
     steps:
       - uses: actions/checkout@v3
         with:
