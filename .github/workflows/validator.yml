@@ -1,11 +1,8 @@
 name: "Build docker validator image"
 on:
-  workflow_dispatch:
-    inputs:
-      run_validator_step:
-        description: 'Run the validator step'
-        required: true
-        type: boolean
+  push:
+    branches:
+      - testnet4-wit
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer-validator
