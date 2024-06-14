@@ -38,8 +38,10 @@ use move_vm_types::{
 use smallvec::SmallVec;
 
 use crate::native_extensions::NativeContextExtensions;
-use move_core_types::annotated_value::MoveValue;
-use move_vm_types::values::{ContainerId, ValueImpl};
+//use move_core_types::annotated_value::MoveValue;
+//use move_vm_types::values::{ContainerId, ValueImpl};
+use move_vm_types::values::values_impl::ValueImpl;
+use move_core_types::runtime_value::MoveValue;
 use std::collections::HashMap;
 use std::{cmp::min, collections::VecDeque, fmt::Write, mem, sync::Arc};
 use tracing::error;
@@ -925,7 +927,7 @@ fn new_call_trace(
                     let move_value = if let Some(value) = values_cache.get(&key) {
                         Arc::clone(value)
                     } else {
-                        let move_value = Arc::new(value.try_as_move_value(&ty_layout)?);
+                        let move_value = Arc::new(value.as_move_value(&ty_layout));
                         values_cache.insert(key, Arc::clone(&move_value));
 
                         move_value
@@ -939,7 +941,7 @@ fn new_call_trace(
 
                     move_value
                 }
-                _ => Arc::new(value.try_as_move_value(&ty_layout)?),
+                _ => Arc::new(value.as_move_value(&ty_layout)),
             };
 
             PartialVMResult::Ok(move_value)

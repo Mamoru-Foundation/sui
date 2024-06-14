@@ -26,11 +26,12 @@ use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
+use move_core_types::annotated_value::MoveDatatypeLayout;
 use sui_types::base_types::ObjectRef;
 use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
-use sui_types::type_resolver::LayoutResolver;
+use sui_types::type_resolver::{into_struct_layout, LayoutResolver};
 use sui_types::{
     effects::{TransactionEffects, TransactionEffectsAPI},
     event::Event,
@@ -305,19 +306,19 @@ fn register_events(
     let mamoru_events: Vec<_> = events
         .iter()
         .filter_map(|event| {
-            let Ok(event_struct_layout) = layout_resolver.get_annotated_layout(&event.type_) else {
+            let Ok(move_datatype_layout) = layout_resolver.get_annotated_layout(&event.type_) else {
                 warn!(%event.type_, "Can't fetch layout by type");
                 return None;
             };
 
             let Ok(event_struct) =
-                Event::move_event_to_move_struct(&event.contents, event_struct_layout)
+                Event::move_event_to_move_value(&event.contents, move_datatype_layout)
             else {
                 warn!(%event.type_, "Can't parse event contents");
                 return None;
             };
 
-            let Some(contents) = ValueData::new(to_value(&MoveValue::Struct(event_struct))) else {
+            let Some(contents) = ValueData::new(to_value(&event_struct)) else {
                 warn!(%event.type_, "Can't convert event contents to ValueData");
                 return None;
             };
@@ -351,7 +352,12 @@ fn register_object_changes(
             Ok(Some(object)) => {
                 if let Data::Move(move_object) = &object.as_inner().data {
                     let struct_tag = move_object.type_().clone().into();
-                    let Ok(layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                    let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                        warn!(%object_id, "Can't fetch move data type layout");
+                        return None;
+                    };
+
+                    let MoveDatatypeLayout::Struct(layout) = datatype_layout else {
                         warn!(%object_id, "Can't fetch layout by struct tag");
                         return None;
                     };
@@ -502,6 +508,7 @@ fn to_value(data: &MoveValue) -> Value {
         MoveValue::U64(value) => Value::U64(*value),
         MoveValue::U128(value) => Value::String(format!("{:#x}", value)),
         MoveValue::U256(value) => Value::String(format!("{:#x}", value)),
+        MoveValue::Variant(_) => Value::String("Variant not supported".to_string()), //TODO pending to add variant
         MoveValue::Address(addr) | MoveValue::Signer(addr) => Value::String(format_object_id(addr)),
         MoveValue::Vector(value) => Value::List(value.iter().map(to_value).collect()),
         MoveValue::Struct(value) => {
@@ -598,6 +605,7 @@ fn move_value_size(value: &MoveValue) -> usize {
         MoveValue::U16(value) => size_of_val(value),
         MoveValue::U32(value) => size_of_val(value),
         MoveValue::U256(value) => size_of_val(value),
+        MoveValue::Variant(_) => todo!(),
     };
 
     internal_value_size + std::mem::size_of::<MoveValue>()

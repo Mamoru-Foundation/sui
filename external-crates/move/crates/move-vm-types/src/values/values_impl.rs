@@ -39,7 +39,7 @@ use std::{
 
 /// Runtime representation of a Move value.
 #[derive(Debug)]
-enum ValueImpl {
+pub enum ValueImpl {
     Invalid,
 
     U8(u8),
@@ -136,7 +136,7 @@ enum ReferenceImpl {
 /// A Move value -- a wrapper around `ValueImpl` which can be created only through valid
 /// means.
 #[derive(Debug)]
-pub struct Value(ValueImpl);
+pub struct Value(pub ValueImpl);
 
 /// An integer value in Move.
 #[derive(Debug)]
@@ -285,9 +285,20 @@ fn take_unique_ownership<T: Debug>(r: Rc<RefCell<T>>) -> PartialVMResult<T> {
 }
 
 impl ContainerRef {
-    fn container(&self) -> &Container {
+    pub fn container(&self) -> &Container {
         match self {
             Self::Local(container) | Self::Global { container, .. } => container,
+        }
+    }
+
+    pub fn is_dirty(&self) -> Option<bool> {
+        if let Self::Global { status, .. } = self {
+            Some(match *status.borrow() {
+                GlobalDataStatus::Dirty => true,
+                GlobalDataStatus::Clean => false,
+            })
+        } else {
+            None
         }
     }
 
