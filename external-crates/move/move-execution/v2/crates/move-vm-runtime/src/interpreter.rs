@@ -26,7 +26,7 @@ use move_vm_profiler::GasProfiler;
 use move_vm_profiler::{
     profile_close_frame, profile_close_instr, profile_open_frame, profile_open_instr,
 };
-//use move_vm_types::values::{ContainerId, ValueImpl};
+use move_vm_types::values::{ContainerId, ValueImpl};
 use move_vm_types::{
     data_store::DataStore,
     gas::{GasMeter, SimpleInstruction},
@@ -90,6 +90,7 @@ pub(crate) struct Interpreter {
     runtime_limits_config: VMRuntimeLimitsConfig,
     /// List of captured call traces
     call_traces: Vec<CallTrace>,
+    values_cache: MoveValueCache,
 }
 
 pub(crate) struct InterpreterEntrypointResult {
@@ -129,6 +130,7 @@ impl Interpreter {
             call_stack: CallStack::new(),
             runtime_limits_config: loader.vm_config().runtime_limits_config.clone(),
             call_traces: Vec::new(),
+            values_cache: HashMap::new(),
         };
         profile_open_frame!(gas_meter, function.pretty_string());
 
@@ -917,7 +919,7 @@ fn new_call_trace(
                     let move_value = if let Some(value) = values_cache.get(&key) {
                         Arc::clone(value)
                     } else {
-                        let move_value = Arc::new(value.as_move_value(&ty_layout));
+                        let move_value = Arc::new(value.try_as_move_value(&ty_layout)?);
                         values_cache.insert(key, Arc::clone(&move_value));
 
                         move_value
@@ -931,7 +933,7 @@ fn new_call_trace(
 
                     move_value
                 }
-                _ => Arc::new(value.as_move_value(&ty_layout)),
+                _ => Arc::new(value.try_as_move_value(&ty_layout)?),
             };
 
             PartialVMResult::Ok(move_value)
