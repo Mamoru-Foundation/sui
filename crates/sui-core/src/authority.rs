@@ -445,6 +445,13 @@ impl AuthorityMetrics {
                 registry,
             )
             .unwrap(),
+            execution_load_input_objects_latency: register_histogram_with_registry!(
+                "authority_state_execution_load_input_objects_latency",
+                "Latency of loading input objects for execution",
+                LOW_LATENCY_SEC_BUCKETS.to_vec(),
+                registry,
+            )
+            .unwrap(),
             prepare_certificate_latency: register_histogram_with_registry!(
                 "authority_state_prepare_certificate_latency",
                 "Latency of executing certificates, before committing the results",
@@ -452,12 +459,6 @@ impl AuthorityMetrics {
                 registry,
             )
             .unwrap(),
-            execution_load_input_objects_latency: register_histogram_with_registry!(
-                "authority_state_execution_load_input_objects_latency",
-                "Latency of loading input objects for execution",
-                LOW_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            ).unwrap(),
             commit_certificate_latency: register_histogram_with_registry!(
                 "authority_state_commit_certificate_latency",
                 "Latency of committing certificate execution results",
@@ -1429,10 +1430,7 @@ impl AuthorityState {
 
             let ctx = {
                 let mut layout_resolver = epoch_store.executor().type_layout_resolver(Box::new(
-                    TemporaryPackageStore::new(
-                        &inner_temporary_store,
                         self.get_backing_package_store().clone(),
-                    ),
                 ));
 
                 // We can't pass `layout_resolver` to a future, so using a plain function to prepare the context.
