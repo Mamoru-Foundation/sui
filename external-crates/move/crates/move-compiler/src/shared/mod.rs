@@ -10,7 +10,7 @@ use crate::{
     command_line as cli,
     diagnostics::{
         codes::{Category, Declarations, DiagnosticsID, Severity, WarningFilter},
-        Diagnostic, Diagnostics, DiagnosticsFormat, FileName, MappedFiles, WarningFilters,
+        Diagnostic, Diagnostics, DiagnosticsFormat, WarningFilters,
     },
     editions::{
         check_feature_or_error as edition_check_feature, feature_edition_error_msg, Edition,
@@ -20,7 +20,10 @@ use crate::{
     hlir::ast as H,
     naming::ast as N,
     parser::ast as P,
-    shared::ide::{IDEAnnotation, IDEInfo},
+    shared::{
+        files::{FileName, MappedFiles},
+        ide::{IDEAnnotation, IDEInfo},
+    },
     sui_mode,
     typing::{
         ast as T,
@@ -46,8 +49,10 @@ use std::{
 use vfs::{VfsError, VfsPath};
 
 pub mod ast_debug;
+pub mod files;
 pub mod ide;
 pub mod known_attributes;
+pub mod matching;
 pub mod program_info;
 pub mod remembering_unique_map;
 pub mod string_utils;
@@ -387,7 +392,7 @@ impl CompilationEnv {
         self.mapped_files.add(file_hash, file_name, source_text)
     }
 
-    pub fn file_mapping(&self) -> &MappedFiles {
+    pub fn mapped_files(&self) -> &MappedFiles {
         &self.mapped_files
     }
 
@@ -453,10 +458,7 @@ impl CompilationEnv {
     }
 
     pub fn has_diags_at_or_above_severity(&self, threshold: Severity) -> bool {
-        match self.diags.max_severity() {
-            Some(max) if max >= threshold => true,
-            Some(_) | None => false,
-        }
+        self.diags.max_severity_at_or_above_severity(threshold)
     }
 
     pub fn check_diags_at_or_above_severity(
@@ -478,10 +480,7 @@ impl CompilationEnv {
     /// Should only be called after compilation is finished
     pub fn take_final_warning_diags(&mut self) -> Diagnostics {
         let final_diags = self.take_final_diags();
-        debug_assert!(final_diags
-            .max_severity()
-            .map(|s| s == Severity::Warning)
-            .unwrap_or(true));
+        debug_assert!(final_diags.max_severity_at_or_under_severity(Severity::Warning));
         final_diags
     }
 

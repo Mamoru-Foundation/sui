@@ -285,3 +285,57 @@ impl From<CheckpointDigest> for crate::messages_checkpoint::CheckpointDigest {
         Self::new(value.into_inner())
     }
 }
+
+impl From<crate::digests::TransactionDigest> for TransactionDigest {
+    fn from(value: crate::digests::TransactionDigest) -> Self {
+        Self::new(value.into_inner())
+    }
+}
+
+impl From<TransactionDigest> for crate::digests::TransactionDigest {
+    fn from(value: TransactionDigest) -> Self {
+        Self::new(value.into_inner())
+    }
+}
+
+impl From<crate::committee::Committee> for ValidatorCommittee {
+    fn from(value: crate::committee::Committee) -> Self {
+        Self {
+            epoch: value.epoch(),
+            members: value
+                .voting_rights
+                .into_iter()
+                .map(|(name, stake)| ValidatorCommitteeMember {
+                    public_key: name.into(),
+                    stake,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<ValidatorCommittee> for crate::committee::Committee {
+    fn from(value: ValidatorCommittee) -> Self {
+        let ValidatorCommittee { epoch, members } = value;
+
+        Self::new(
+            epoch,
+            members
+                .into_iter()
+                .map(|member| (member.public_key.into(), member.stake))
+                .collect(),
+        )
+    }
+}
+
+impl From<crate::crypto::AuthorityPublicKeyBytes> for Bls12381PublicKey {
+    fn from(value: crate::crypto::AuthorityPublicKeyBytes) -> Self {
+        Self::new(value.0)
+    }
+}
+
+impl From<Bls12381PublicKey> for crate::crypto::AuthorityPublicKeyBytes {
+    fn from(value: Bls12381PublicKey) -> Self {
+        Self::new(value.into_inner())
+    }
+}

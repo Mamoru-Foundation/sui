@@ -4165,7 +4165,7 @@ async fn publish_object_basics(state: Arc<AuthorityState>) -> (Arc<AuthorityStat
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src/unit_tests/data/object_basics");
     let modules: Vec<_> = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_modules()
         .cloned()
@@ -4201,7 +4201,7 @@ pub async fn init_state_with_ids_and_object_basics_with_fullnode<
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src/unit_tests/data/object_basics");
     let modules: Vec<_> = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_modules()
         .cloned()
@@ -5319,7 +5319,7 @@ async fn test_for_inc_201_dev_inspect() {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src/unit_tests/data/publish_with_event");
     let modules = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_package_bytes(false);
 
@@ -5364,7 +5364,7 @@ async fn test_for_inc_201_dry_run() {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src/unit_tests/data/publish_with_event");
     let modules = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_package_bytes(false);
 
@@ -5434,7 +5434,7 @@ async fn test_publish_transitive_dependencies_ok() {
         .insert("c".to_string(), AccountAddress::ZERO);
 
     let modules = build_config
-        .build(package_c_path)
+        .build(&package_c_path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5468,7 +5468,7 @@ async fn test_publish_transitive_dependencies_ok() {
     ]);
 
     let modules = build_config
-        .build(package_b_path)
+        .build(&package_b_path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5505,7 +5505,7 @@ async fn test_publish_transitive_dependencies_ok() {
     ]);
 
     let modules = build_config
-        .build(package_a_path)
+        .build(&package_a_path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5549,7 +5549,7 @@ async fn test_publish_transitive_dependencies_ok() {
     ]);
 
     let modules = build_config
-        .build(package_root_path)
+        .build(&package_root_path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5596,7 +5596,7 @@ async fn test_publish_missing_dependency() {
     path.extend(["src", "unit_tests", "data", "object_basics"]);
 
     let modules = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5645,7 +5645,7 @@ async fn test_publish_missing_transitive_dependency() {
     path.extend(["src", "unit_tests", "data", "object_basics"]);
 
     let modules = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5694,7 +5694,7 @@ async fn test_publish_not_a_package_dependency() {
     path.extend(["src", "unit_tests", "data", "object_basics"]);
 
     let modules = BuildConfig::new_for_testing()
-        .build(path)
+        .build(&path)
         .unwrap()
         .get_package_bytes(/* with_unpublished_deps */ false);
 
@@ -5778,18 +5778,19 @@ async fn test_consensus_handler_per_object_congestion_control(
     // Create the cluster with controlled per object congestion control.
     let mut protocol_config =
         ProtocolConfig::get_for_version(ProtocolVersion::max(), Chain::Unknown);
-    protocol_config.set_per_object_congestion_control_mode(mode);
+    protocol_config.set_per_object_congestion_control_mode_for_testing(mode);
 
     match mode {
         PerObjectCongestionControlMode::None => unreachable!(),
         PerObjectCongestionControlMode::TotalGasBudget => {
-            protocol_config.set_max_accumulated_txn_cost_per_object_in_checkpoint(200_000_000);
+            protocol_config
+                .set_max_accumulated_txn_cost_per_object_in_checkpoint_for_testing(200_000_000);
         }
         PerObjectCongestionControlMode::TotalTxCount => {
-            protocol_config.set_max_accumulated_txn_cost_per_object_in_checkpoint(2);
+            protocol_config.set_max_accumulated_txn_cost_per_object_in_checkpoint_for_testing(2);
         }
     }
-    protocol_config.set_max_deferral_rounds_for_congestion_control(1000); // Set to a large number so that we don't hit this limit.
+    protocol_config.set_max_deferral_rounds_for_congestion_control_for_testing(1000); // Set to a large number so that we don't hit this limit.
     let authority = TestAuthorityBuilder::new()
         .with_reference_gas_price(1000)
         .with_protocol_config(protocol_config)
@@ -5998,10 +5999,11 @@ async fn test_consensus_handler_congestion_control_transaction_cancellation() {
     // Create the cluster with controlled per object congestion control and cancellation.
     let mut protocol_config =
         ProtocolConfig::get_for_version(ProtocolVersion::max(), Chain::Unknown);
-    protocol_config
-        .set_per_object_congestion_control_mode(PerObjectCongestionControlMode::TotalGasBudget);
-    protocol_config.set_max_accumulated_txn_cost_per_object_in_checkpoint(100_000_000);
-    protocol_config.set_max_deferral_rounds_for_congestion_control(2);
+    protocol_config.set_per_object_congestion_control_mode_for_testing(
+        PerObjectCongestionControlMode::TotalGasBudget,
+    );
+    protocol_config.set_max_accumulated_txn_cost_per_object_in_checkpoint_for_testing(100_000_000);
+    protocol_config.set_max_deferral_rounds_for_congestion_control_for_testing(2);
     let authority = TestAuthorityBuilder::new()
         .with_reference_gas_price(1000)
         .with_protocol_config(protocol_config)
@@ -6150,4 +6152,12 @@ async fn test_consensus_handler_congestion_control_transaction_cancellation() {
     } else {
         panic!("First scheduled transaction must be a ConsensusCommitPrologueV3 transaction.");
     }
+}
+
+#[tokio::test]
+async fn test_single_authority_reconfigure() {
+    let state = TestAuthorityBuilder::new().build().await;
+    assert_eq!(state.epoch_store_for_testing().epoch(), 0);
+    state.reconfigure_for_testing().await;
+    assert_eq!(state.epoch_store_for_testing().epoch(), 1);
 }
