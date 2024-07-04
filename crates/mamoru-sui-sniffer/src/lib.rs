@@ -22,11 +22,11 @@ use tokio::time::Instant;
 use tracing::{info, span, warn, Level};
 
 pub use error::*;
+use move_core_types::annotated_value::MoveDatatypeLayout;
 use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use move_core_types::annotated_value::MoveDatatypeLayout;
 use sui_types::base_types::ObjectRef;
 use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
@@ -306,7 +306,8 @@ fn register_events(
     let mamoru_events: Vec<_> = events
         .iter()
         .filter_map(|event| {
-            let Ok(move_datatype_layout) = layout_resolver.get_annotated_layout(&event.type_) else {
+            let Ok(move_datatype_layout) = layout_resolver.get_annotated_layout(&event.type_)
+            else {
                 warn!(%event.type_, "Can't fetch layout by type");
                 return None;
             };
@@ -352,7 +353,8 @@ fn register_object_changes(
             Ok(Some(object)) => {
                 if let Data::Move(move_object) = &object.as_inner().data {
                     let struct_tag = move_object.type_().clone().into();
-                    let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                    let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag)
+                    else {
                         warn!(%object_id, "Can't fetch move data type layout");
                         return None;
                     };
