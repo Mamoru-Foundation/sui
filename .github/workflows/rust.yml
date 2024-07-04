@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ main, devnet, testnet, testnet4-v1.28]
+    branches: [ main, devnet, testnet]
   pull_request:
 
 concurrency:
