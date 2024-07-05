@@ -9,7 +9,7 @@ use mamoru_sniffer::{
     core::BlockchainDataBuilder,
     Sniffer, SnifferConfig,
 };
-use mamoru_sniffer::core::BlockchainData;
+use mamoru_sniffer::core::{BlockchainData, ValueData};
 use mamoru_sui_types::{SuiGasData, SuiProgrammableMoveCall, SuiPublishCommand, SuiTransactionExpiration, SuiTransactionType, SuiUpgradeCommand};
 use mamoru_sui_types::{SuiConsensusCommitPrologueV2, SuiEndOfEpochTransactionKind, SuiRandomnessStateUpdate};
 use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
@@ -32,6 +32,7 @@ use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
+use move_core_types::annotated_value::MoveDatatypeLayout;
 use move_core_types::trace::TypeTag;
 use tokio::time::Instant;
 use tracing::{info, Level, span, warn};
@@ -72,6 +73,7 @@ fn inner_into_value_data(data: &MoveValue, stack: &mut Vec<ValueType>) -> Result
         MoveValue::U64(value) => ValueType::U64(value as u64),
         MoveValue::U128(value) => ValueType::String(format!("{:#x}", value)),
         MoveValue::U256(value) => ValueType::String(format!("{:#x}", value)),
+        MoveValue::Variant(_) => ValueType::String("Variant not supported".to_string()), //TODO pending to add variant
         MoveValue::Address(addr) | MoveValue::Signer(addr) => {
             ValueType::String(format_object_id(addr))
         }
@@ -380,20 +382,20 @@ impl SuiTransactionBuilder {
         let mamoru_events: Vec<_> = events
             .iter()
             .filter_map(|event| {
-                let Ok(event_struct_layout) = layout_resolver.get_annotated_layout(&event.type_)
+                let Ok(event_datatype_layout) = layout_resolver.get_annotated_layout(&event.type_)
                     else {
                         warn!(%event.type_, "Can't fetch layout by type");
                         return None;
                     };
 
                 let Ok(event_struct) =
-                    Event::move_event_to_move_struct(&event.contents, event_struct_layout)
+                    Event::move_event_to_move_value(&event.contents, event_datatype_layout)
                     else {
                         warn!(%event.type_, "Can't parse event contents");
                         return None;
                     };
 
-                let Ok(contents) = into_value_data(MoveValue::Struct(event_struct)) else {
+                let Ok(contents) = into_value_data(event_struct) else {
                     warn!(%event.type_, "Can't convert event contents to ValueData");
                     return None;
                 };
@@ -406,6 +408,7 @@ impl SuiTransactionBuilder {
                     typ: event.type_.to_canonical_string(true),
                     contents,
                 })
+
             })
             .collect();
 
@@ -477,7 +480,12 @@ impl SuiTransactionBuilder {
                 Ok(Some(object)) => {
                     if let Data::Move(move_object) = &object.as_inner().data {
                         let struct_tag = move_object.type_().clone().into();
-                        let Ok(layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                        let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                            warn!(%object_id, "Can't fetch layout by struct tag");
+                            return None;
+                        };
+
+                        let MoveDatatypeLayout::Struct(layout) = datatype_layout else {
                             warn!(%object_id, "Can't fetch layout by struct tag");
                             return None;
                         };
@@ -742,6 +750,7 @@ fn move_value_size(value: &MoveValue) -> usize {
         MoveValue::U16(value) => size_of_val(value),
         MoveValue::U32(value) => size_of_val(value),
         MoveValue::U256(value) => size_of_val(value),
+        MoveValue::Variant(value) => size_of_val(value),
     };
 
     internal_value_size + std::mem::size_of::<MoveValue>()
