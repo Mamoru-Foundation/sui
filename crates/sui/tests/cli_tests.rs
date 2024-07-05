@@ -14,6 +14,8 @@ use move_package::{lock_file::schema::ManagedPackage, BuildConfig as MoveBuildCo
 use serde_json::json;
 use sui::client_ptb::ptb::PTB;
 use sui::key_identity::{get_identity_address, KeyIdentity};
+#[cfg(feature = "indexer")]
+use sui::sui_commands::IndexerFeatureArgs;
 use sui_sdk::SuiClient;
 use sui_test_transaction_builder::batch_make_transfer_transactions;
 use sui_types::object::Owner;
@@ -66,8 +68,14 @@ async fn test_genesis() -> Result<(), anyhow::Error> {
 
     // Start network without authorities
     let start = SuiCommand::Start {
-        config: Some(config),
+        config_dir: Some(config),
+        force_regenesis: false,
+        with_faucet: None,
+        fullnode_rpc_port: 9000,
+        epoch_duration_ms: None,
         no_full_node: false,
+        #[cfg(feature = "indexer")]
+        indexer_feature_args: IndexerFeatureArgs::for_testing(),
     }
     .execute()
     .await;
@@ -3667,5 +3675,140 @@ async fn test_gas_estimation() -> Result<(), anyhow::Error> {
     } else {
         panic!("TransferSui test failed");
     }
+    Ok(())
+}
+
+#[sim_test]
+async fn test_clever_errors() -> Result<(), anyhow::Error> {
+    // Publish the package
+    move_package::package_hooks::register_package_hooks(Box::new(SuiPackageHooks));
+    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let rgp = test_cluster.get_reference_gas_price().await;
+    let address = test_cluster.get_address_0();
+    let context = &mut test_cluster.wallet;
+    let client = context.get_client().await?;
+    let object_refs = client
+        .read_api()
+        .get_owned_objects(
+            address,
+            Some(SuiObjectResponseQuery::new_with_options(
+                SuiObjectDataOptions::new()
+                    .with_type()
+                    .with_owner()
+                    .with_previous_transaction(),
+            )),
+            None,
+            None,
+        )
+        .await?
+        .data;
+
+    // Check log output contains all object ids.
+    let gas_obj_id = object_refs.first().unwrap().object().unwrap().object_id;
+
+    // Provide path to well formed package sources
+    let mut package_path = PathBuf::from(TEST_DATA_DIR);
+    package_path.push("clever_errors");
+    let build_config = BuildConfig::new_for_testing().config;
+    let resp = SuiClientCommands::Publish {
+        package_path: package_path.clone(),
+        build_config,
+        skip_dependency_verification: false,
+        with_unpublished_dependencies: false,
+        opts: OptsWithGas::for_testing(Some(gas_obj_id), rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+    }
+    .execute(context)
+    .await?;
+
+    // Print it out to CLI/logs
+    resp.print(true);
+
+    let SuiClientCommandResult::TransactionBlock(response) = resp else {
+        unreachable!("Invalid response");
+    };
+
+    let SuiTransactionBlockEffects::V1(effects) = response.effects.unwrap();
+
+    assert!(effects.status.is_ok());
+    assert_eq!(effects.gas_object().object_id(), gas_obj_id);
+    let package = effects
+        .created()
+        .iter()
+        .find(|refe| matches!(refe.owner, Owner::Immutable))
+        .unwrap();
+
+    let elide_transaction_digest = |s: String| -> String {
+        let mut x = s.splitn(5, '\'').collect::<Vec<_>>();
+        x[1] = "ELIDED_TRANSACTION_DIGEST";
+        let tmp = format!("ELIDED_ADDRESS{}", &x[3][66..]);
+        x[3] = &tmp;
+        x.join("'")
+    };
+
+    // Normal abort
+    let non_clever_abort = SuiClientCommands::Call {
+        package: package.reference.object_id,
+        module: "clever_errors".to_string(),
+        function: "aborter".to_string(),
+        type_args: vec![],
+        opts: OptsWithGas::for_testing(None, rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+        gas_price: None,
+        args: vec![],
+    }
+    .execute(context)
+    .await
+    .unwrap_err();
+
+    // Line-only abort
+    let line_only_abort = SuiClientCommands::Call {
+        package: package.reference.object_id,
+        module: "clever_errors".to_string(),
+        function: "aborter_line_no".to_string(),
+        type_args: vec![],
+        opts: OptsWithGas::for_testing(None, rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+        gas_price: None,
+        args: vec![],
+    }
+    .execute(context)
+    .await
+    .unwrap_err();
+
+    // Full clever error with utf-8 string
+    let clever_error_utf8 = SuiClientCommands::Call {
+        package: package.reference.object_id,
+        module: "clever_errors".to_string(),
+        function: "clever_aborter".to_string(),
+        type_args: vec![],
+        opts: OptsWithGas::for_testing(None, rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+        gas_price: None,
+        args: vec![],
+    }
+    .execute(context)
+    .await
+    .unwrap_err();
+
+    // Full clever error with non-utf-8 string
+    let clever_error_non_utf8 = SuiClientCommands::Call {
+        package: package.reference.object_id,
+        module: "clever_errors".to_string(),
+        function: "clever_aborter_not_a_string".to_string(),
+        type_args: vec![],
+        opts: OptsWithGas::for_testing(None, rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH),
+        gas_price: None,
+        args: vec![],
+    }
+    .execute(context)
+    .await
+    .unwrap_err();
+
+    let error_string = format!(
+        "Non-clever-abort\n---\n{}\n---\nLine-only-abort\n---\n{}\n---\nClever-error-utf8\n---\n{}\n---\nClever-error-non-utf8\n---\n{}\n---\n",
+        elide_transaction_digest(non_clever_abort.to_string()),
+        elide_transaction_digest(line_only_abort.to_string()),
+        elide_transaction_digest(clever_error_utf8.to_string()),
+        elide_transaction_digest(clever_error_non_utf8.to_string())
+    );
+
+    insta::assert_snapshot!(error_string);
     Ok(())
 }
