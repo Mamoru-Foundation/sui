@@ -7,7 +7,6 @@ on:
       - testnet
       - testnet4
       - testnet4-wit
-      - testnet4-wit-v1.28
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer-wit
