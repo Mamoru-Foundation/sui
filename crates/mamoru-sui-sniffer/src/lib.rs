@@ -236,10 +236,16 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
 
+    use std::time::Instant;
+
+    let start_time = Instant::now();
+
     let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
         .into_iter()
         .zip(0..)
         .map(|(trace, trace_seq)| {
+            let loop_start_time = Instant::now();
+
             let trace_seq = trace_seq as u64;
 
             let call_trace = CallTrace {
@@ -258,6 +264,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
             let mut cta = vec![];
             let mut ca = vec![];
 
+            let ty_args_start_time = Instant::now();
             for (arg, seq) in trace
                 .ty_args
                 .into_iter()
@@ -269,9 +276,12 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     arg: arg.to_canonical_string(true),
                 });
             }
+            let ty_args_duration = ty_args_start_time.elapsed().as_millis();
+            info!(ty_args_duration = ty_args_duration, "Type args loop duration in  ms");
 
             call_trace_type_args_len += cta.len();
 
+            let args_start_time = Instant::now();
             for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
                 match ValueData::new(to_value(&arg)) {
                     Some(arg) => {
@@ -284,17 +294,31 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     None => continue,
                 }
             }
+            let args_duration = args_start_time.elapsed().as_millis();
+            info!(args_duration = args_duration, "Args loop duration ms");
 
             call_trace_args_len += ca.len();
+
+            let loop_duration = loop_start_time.elapsed().as_millis();
+            info!(loop_duration = loop_duration, "Loop duration in  ms");
 
             (call_trace, (ca, cta))
         })
         .unzip();
 
+    let total_duration = start_time.elapsed().as_millis();
+    let call_traces_len = call_traces.len();
+    let args_len = args.len();
+    let type_args_len = type_args.len();
+    info!(total_duration = total_duration,call_traces_len=call_traces_len,args_len=args_len, type_args_len= type_args_len
+        ,"Total duration, call traces size, args size and type args size");
+
+
     ctx.call_traces.extend(call_traces);
     ctx.call_trace_args.extend(args.into_iter().flatten());
     ctx.call_trace_type_args
         .extend(type_args.into_iter().flatten());
+
 }
 
 fn register_events(
