@@ -525,7 +525,44 @@ fn format_tx_digest<T: AsRef<[u8]>>(data: T) -> String {
     Base58::encode(data.as_ref())
 }
 
-fn to_value(data: &MoveValue) -> Value {
+
+
+use std::cell::Cell;
+use std::thread_local;
+
+// Define a thread-local counter for recursion depth
+thread_local! {
+    static RECURSION_DEPTH: Cell<u32> = Cell::new(0);
+}
+
+fn to_value(arg: &MoveValue) -> Value {
+    let mut result: Option<Value> = None;
+
+    RECURSION_DEPTH.with(|depth| {
+        let current_depth = depth.get();
+        depth.set(current_depth + 1);
+
+        // Print only if we are at the top level (non-recursive call)
+        if current_depth == 0 {
+            let start_time = Instant::now();
+
+            // Call the original function body
+            result = Some(inner_to_value(arg));
+
+            let duration = start_time.elapsed().as_millis();
+            info!(arg=arg.to_string(), duration=duration, "to_value duration in ms");
+        } else {
+            // Call the original function body without timing
+            result = Some(inner_to_value(arg));
+        }
+
+        depth.set(current_depth);
+    });
+
+    result.expect("Result should be set within the closure")
+}
+
+fn inner_to_value(data: &MoveValue) -> Value {
     match data {
         MoveValue::Bool(value) => Value::Bool(*value),
         MoveValue::U8(value) => Value::U64(*value as u64),
