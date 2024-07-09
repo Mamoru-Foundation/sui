@@ -233,6 +233,7 @@ fn register_programmable_transaction(ctx: &mut SuiCtx, tx: &ProgrammableTransact
 }
 
 fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
+    info!("Starting register calltraces");
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
 
@@ -327,6 +328,7 @@ fn register_events(
     tx_seq: u64,
     events: &[Event],
 ) {
+    info!("Starting register events");
     let mamoru_events: Vec<_> = events
         .iter()
         .filter_map(|event| {
@@ -359,6 +361,7 @@ fn register_events(
         })
         .collect();
 
+    info!(mamoru_events_len=mamoru_events.len(), "size for extended events");
     data.events.extend(mamoru_events);
 }
 
@@ -368,6 +371,8 @@ fn register_object_changes(
     effects: &TransactionEffects,
     inner_temporary_store: &InnerTemporaryStore,
 ) {
+    info!("Starting object changes");
+
     let written = &inner_temporary_store.written;
 
     let mut fetch_move_value = |object_ref: &ObjectRef| {
@@ -411,8 +416,8 @@ fn register_object_changes(
         }
     };
 
+    let created_count = effects.created().len();
     let mut object_owner_seq = 0u64;
-
     for (seq, (created, owner)) in effects.created().iter().enumerate() {
         if let Some((object, move_value)) = fetch_move_value(created) {
             let Some(object_data) = ValueData::new(to_value(&move_value)) else {
@@ -434,6 +439,7 @@ fn register_object_changes(
         }
     }
 
+    let mutated_count = effects.mutated().len();
     for (seq, (mutated, owner)) in effects.mutated().iter().enumerate() {
         if let Some((object, move_value)) = fetch_move_value(mutated) {
             let Some(object_data) = ValueData::new(to_value(&move_value)) else {
@@ -455,6 +461,7 @@ fn register_object_changes(
         }
     }
 
+    let deleted_count = effects.deleted().len();
     for (seq, deleted) in effects.deleted().iter().enumerate() {
         data.object_changes.deleted.push(DeletedObject {
             seq: seq as u64,
@@ -462,6 +469,7 @@ fn register_object_changes(
         });
     }
 
+    let wrapped_count = effects.wrapped().len();
     for (seq, wrapped) in effects.wrapped().iter().enumerate() {
         data.object_changes.wrapped.push(WrappedObject {
             seq: seq as u64,
@@ -469,6 +477,8 @@ fn register_object_changes(
         });
     }
 
+
+    let unwrapped_count = effects.unwrapped().len();
     for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
         data.object_changes.unwrapped.push(UnwrappedObject {
             seq: seq as u64,
@@ -476,6 +486,7 @@ fn register_object_changes(
         });
     }
 
+    let unwrapped_then_deleted_count = effects.unwrapped_then_deleted().len();
     for (seq, unwrapped_then_deleted) in effects.unwrapped_then_deleted().iter().enumerate() {
         data.object_changes
             .unwrapped_then_deleted
@@ -484,6 +495,13 @@ fn register_object_changes(
                 id: format_object_id(unwrapped_then_deleted.0),
             });
     }
+
+    info!(created_count=created_count,
+        mutated_count=mutated_count,
+        deleted_count=deleted_count,
+        wrapped_count=wrapped_count,
+        unwrapped_count=unwrapped_count,
+        unwrapped_then_deleted_count=unwrapped_then_deleted_count, "register object sizes");
 }
 
 fn sui_owner_to_mamoru(seq: u64, owner: Owner) -> ObjectOwner {
