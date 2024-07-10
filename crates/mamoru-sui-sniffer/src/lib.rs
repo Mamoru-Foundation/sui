@@ -1,6 +1,7 @@
 // Not a license :)
 
 use std::{collections::HashMap, mem::size_of_val, sync::Arc};
+use std::any::Any;
 
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
@@ -324,15 +325,22 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
             .join(", ")
     }
 
+
+
     let total_duration = start_time.elapsed().as_nanos();
     let call_traces_len = call_traces.len();
     let args_len = args.len();
     let type_args_len = type_args.len();
+    let cta_ns_sum: u128 = cta_ns.iter().sum();
+    let ca_ns_sum: u128 = ca_ns.iter().sum();
+
     let str_cta_ns = convert_instants_to_string(&cta_ns);
     let str_ca_ns = convert_instants_to_string(&ca_ns);
+    let vec_type_args =  type_args.iter().map(|elem| elem.to_vec().iter().map(|elem| elem.arg.clone()).collect::<Vec<String>>()).collect::<Vec<Vec<String>>>();
+    let str_type_args = format!("{:?}", vec_type_args);
 
     info!(duration_ns = total_duration,call_traces_len=call_traces_len,args_len=args_len, type_args_len= type_args_len,
-        cta_ns = str_cta_ns, ca_ns = str_ca_ns
+        cta_ns = str_cta_ns, cta_ns_sum=cta_ns_sum,  ca_ns = str_ca_ns, ca_ns_sum=ca_ns_sum, cta = str_type_args
         ,"Total duration (ns), call traces size, args size and type args size, time for cta and ca loops");
 
 
