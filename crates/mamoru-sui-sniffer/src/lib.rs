@@ -237,6 +237,9 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
 
+    let mut cta_ns = vec![];
+    let mut ca_ns = vec![];
+
 
     let start_time = Instant::now();
 
@@ -264,17 +267,21 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
             let mut cta = vec![];
             let mut ca = vec![];
 
+
             let ty_args_start_time = Instant::now();
             for (arg, seq) in trace
                 .ty_args
                 .into_iter()
                 .zip(call_trace_type_args_len as u64..)
             {
+
+                let cta_instant = Instant::now();
                 cta.push(CallTraceTypeArg {
                     seq,
                     call_trace_seq: trace_seq,
                     arg: arg.to_canonical_string(true),
                 });
+                cta_ns.push(cta_instant.elapsed().as_nanos());
             }
             let duration_ns = ty_args_start_time.elapsed().as_nanos();
             info!(duration_ns = duration_ns, "Type args loop duration in  ns");
@@ -283,6 +290,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
             let args_start_time = Instant::now();
             for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
+                let ca_instant = Instant::now();
                 match ValueData::new(to_value(&arg)) {
                     Some(arg) => {
                         ca.push(CallTraceArg {
@@ -293,6 +301,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     }
                     None => continue,
                 }
+                ca_ns.push(ca_instant.elapsed().as_nanos());
             }
             let duration_ns = args_start_time.elapsed().as_nanos();
             info!(duration_ns = duration_ns, "Args loop duration ns");
@@ -306,12 +315,25 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
         })
         .unzip();
 
+    fn convert_instants_to_string(instants: &Vec<u128>) -> String {
+        instants.iter()
+            .map(|&instant| {
+                format!("{:.3?}", instant)
+            })
+            .collect::<Vec<String>>()
+            .join(", ")
+    }
+
     let total_duration = start_time.elapsed().as_nanos();
     let call_traces_len = call_traces.len();
     let args_len = args.len();
     let type_args_len = type_args.len();
-    info!(duration_ns = total_duration,call_traces_len=call_traces_len,args_len=args_len, type_args_len= type_args_len
-        ,"Total duration (ns), call traces size, args size and type args size");
+    let str_cta_ns = convert_instants_to_string(&cta_ns);
+    let str_ca_ns = convert_instants_to_string(&ca_ns);
+
+    info!(duration_ns = total_duration,call_traces_len=call_traces_len,args_len=args_len, type_args_len= type_args_len,
+        cta_ns = str_cta_ns, ca_ns = str_ca_ns
+        ,"Total duration (ns), call traces size, args size and type args size, time for cta and ca loops");
 
 
     ctx.call_traces.extend(call_traces);
