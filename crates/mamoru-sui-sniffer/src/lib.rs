@@ -102,7 +102,7 @@ impl SuiSniffer {
         register_events(ctx_builder.data_mut(), layout_resolver, seq, events);
 
         info!(
-            duration_ms = events_timer.elapsed().as_millis(),
+            duration_ns = events_timer.elapsed().as_nanos(),
             "sniffer.register_events() executed",
         );
 
@@ -110,7 +110,7 @@ impl SuiSniffer {
         register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
 
         info!(
-            duration_ms = call_traces_timer.elapsed().as_millis(),
+            duration_ns = call_traces_timer.elapsed().as_nanos(),
             "sniffer.register_call_traces() executed",
         );
 
@@ -123,7 +123,7 @@ impl SuiSniffer {
         );
 
         info!(
-            duration_ms = object_changes_timer.elapsed().as_millis(),
+            duration_ns = object_changes_timer.elapsed().as_nanos(),
             "sniffer.register_object_changes() executed",
         );
 
@@ -277,8 +277,8 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     arg: arg.to_canonical_string(true),
                 });
             }
-            let ty_args_duration = ty_args_start_time.elapsed().as_millis();
-            info!(ty_args_duration = ty_args_duration, "Type args loop duration in  ms");
+            let duration_ns = ty_args_start_time.elapsed().as_nanos();
+            info!(duration_ns = duration_ns, "Type args loop duration in  ns");
 
             call_trace_type_args_len += cta.len();
 
@@ -295,24 +295,24 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     None => continue,
                 }
             }
-            let args_duration = args_start_time.elapsed().as_millis();
-            info!(args_duration = args_duration, "Args loop duration ms");
+            let duration_ns = args_start_time.elapsed().as_nanos();
+            info!(duration_ns = duration_ns, "Args loop duration ns");
 
             call_trace_args_len += ca.len();
 
-            let loop_duration = loop_start_time.elapsed().as_millis();
-            info!(loop_duration = loop_duration, "Loop duration in  ms");
+            let duration_ns = loop_start_time.elapsed().as_nanos();
+            info!(duration_ns = duration_ns, "Loop duration in  ns");
 
             (call_trace, (ca, cta))
         })
         .unzip();
 
-    let total_duration = start_time.elapsed().as_millis();
+    let total_duration = start_time.elapsed().as_nanos();
     let call_traces_len = call_traces.len();
     let args_len = args.len();
     let type_args_len = type_args.len();
-    info!(total_duration = total_duration,call_traces_len=call_traces_len,args_len=args_len, type_args_len= type_args_len
-        ,"Total duration, call traces size, args size and type args size");
+    info!(duration_ns = total_duration,call_traces_len=call_traces_len,args_len=args_len, type_args_len= type_args_len
+        ,"Total duration (ns), call traces size, args size and type args size");
 
 
     ctx.call_traces.extend(call_traces);
@@ -543,41 +543,12 @@ fn format_tx_digest<T: AsRef<[u8]>>(data: T) -> String {
     Base58::encode(data.as_ref())
 }
 
-
-
-use std::cell::Cell;
-use std::thread_local;
-
-// Define a thread-local counter for recursion depth
-thread_local! {
-    static RECURSION_DEPTH: Cell<u32> = Cell::new(0);
-}
-
-fn to_value(arg: &MoveValue) -> Value {
-    let mut result: Option<Value> = None;
-
-    RECURSION_DEPTH.with(|depth| {
-        let current_depth = depth.get();
-        depth.set(current_depth + 1);
-
-        // Print only if we are at the top level (non-recursive call)
-        if current_depth == 0 {
-            let start_time = Instant::now();
-
-            // Call the original function body
-            result = Some(inner_to_value(arg));
-
-            let duration = start_time.elapsed().as_millis();
-            info!(arg=arg.to_string(), duration=duration, "to_value duration in ms");
-        } else {
-            // Call the original function body without timing
-            result = Some(inner_to_value(arg));
-        }
-
-        depth.set(current_depth);
-    });
-
-    result.expect("Result should be set within the closure")
+fn to_value(data: &MoveValue) -> Value {
+    let start_time = Instant::now();
+    let result = inner_to_value(data);
+    let duration_ns = start_time.elapsed().as_nanos();
+    info!(data=data.to_string(), duration_ns=duration_ns, "to_value duration in ns");
+    return result;
 }
 
 fn inner_to_value(data: &MoveValue) -> Value {
@@ -591,14 +562,14 @@ fn inner_to_value(data: &MoveValue) -> Value {
         MoveValue::U256(value) => Value::String(format!("{:#x}", value)),
         MoveValue::Variant(_) => Value::String("Variant not supported".to_string()), //TODO pending to add variant
         MoveValue::Address(addr) | MoveValue::Signer(addr) => Value::String(format_object_id(addr)),
-        MoveValue::Vector(value) => Value::List(value.iter().map(to_value).collect()),
+        MoveValue::Vector(value) => Value::List(value.iter().map(inner_to_value).collect()),
         MoveValue::Struct(value) => {
             let MoveStruct { type_, fields } = value;
             let struct_value = StructValue::new(
                 type_.to_canonical_string(true),
                 fields
                     .iter()
-                    .map(|(field, value)| (field.clone().into_string(), to_value(value)))
+                    .map(|(field, value)| (field.clone().into_string(), inner_to_value(value)))
                     .collect(),
             );
 
