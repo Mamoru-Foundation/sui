@@ -237,7 +237,6 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
 
-    use std::time::Instant;
 
     let start_time = Instant::now();
 
