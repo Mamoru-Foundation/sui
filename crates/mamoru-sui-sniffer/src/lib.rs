@@ -42,16 +42,24 @@ use sui_types::{
 
 mod error;
 
+
 pub struct SuiSniffer {
-    inner: Sniffer,
+    inner: Sniffer
 }
 
+const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
+    ("0xb::bridge", "create_token_bridge_message"),
+    ("0x2::coin", "create_currency"),
+    ("0x2::coin", "create_regulated_currency"),
+    ("0x2::coin", "update_name"),
+    ("0x2::coin", "update_symbol"),
+];
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
 
-        Ok(Self { inner: sniffer })
+        Ok(Self { inner: sniffer})
     }
 
     pub fn prepare_ctx(
@@ -273,7 +281,17 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 function: function.clone(),
             };
 
-            call_trace_info.push((transaction_module, function.clone()));
+            // applying filter
+            if let Some(trans_module) = transaction_module.clone() {
+                let tuple_to_filter = (trans_module.as_str(), function.as_str());
+                if trans_module.as_str() != "0x9::bridge" &&
+                    !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter) {
+                    return (call_trace, (vec![], vec![]));
+                }
+            }
+
+
+            call_trace_info.push((transaction_module.clone(), function.clone()));
 
             let mut cta = vec![];
             let mut ca = vec![];
