@@ -5,15 +5,10 @@ use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
 use itertools::Itertools;
-use mamoru_sniffer::{
-    core::BlockchainDataBuilder,
-    Sniffer, SnifferConfig,
-};
 use mamoru_sniffer::core::{BlockchainData, ValueData};
-use mamoru_sui_types::{SuiGasData, SuiProgrammableMoveCall, SuiPublishCommand, SuiTransactionExpiration, SuiTransactionType, SuiUpgradeCommand};
-use mamoru_sui_types::{SuiConsensusCommitPrologueV2, SuiEndOfEpochTransactionKind, SuiRandomnessStateUpdate};
-use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
-pub use mamoru_sui_types::{SuiEvent, SuiObject, SuiTransaction};
+use mamoru_sniffer::{core::BlockchainDataBuilder, Sniffer, SnifferConfig};
+use mamoru_sui_types::SuiActiveJwk;
+use mamoru_sui_types::SuiAuthenticatorStateExpire;
 use mamoru_sui_types::SuiAuthenticatorStateUpdate;
 use mamoru_sui_types::SuiCalltrace;
 use mamoru_sui_types::SuiCalltraceArg;
@@ -26,30 +21,37 @@ use mamoru_sui_types::SuiCtx;
 use mamoru_sui_types::SuiMutatedObject;
 use mamoru_sui_types::SuiObjectType;
 use mamoru_sui_types::SuiOwner;
-use mamoru_sui_types::SuiActiveJwk;
-use mamoru_sui_types::SuiAuthenticatorStateExpire;
+use mamoru_sui_types::{
+    SuiConsensusCommitPrologueV2, SuiEndOfEpochTransactionKind, SuiRandomnessStateUpdate,
+};
+pub use mamoru_sui_types::{SuiEvent, SuiObject, SuiTransaction};
+use mamoru_sui_types::{
+    SuiGasData, SuiProgrammableMoveCall, SuiPublishCommand, SuiTransactionExpiration,
+    SuiTransactionType, SuiUpgradeCommand,
+};
+use mamoru_sui_types::{ValueData as SuiValueData, ValueType};
+use move_core_types::annotated_value::MoveDatatypeLayout;
+use move_core_types::trace::TypeTag;
 use move_core_types::{
     annotated_value::{MoveStruct, MoveValue},
     trace::{CallTrace as MoveCallTrace, CallType as MoveCallType},
 };
-use move_core_types::annotated_value::MoveDatatypeLayout;
-use move_core_types::trace::TypeTag;
 use tokio::time::Instant;
-use tracing::{info, Level, span, warn};
+use tracing::{info, span, warn, Level};
 
 pub use error::*;
-use sui_types::{
-    effects::{TransactionEffects, TransactionEffectsAPI},
-    event::Event,
-    executable_transaction::VerifiedExecutableTransaction,
-    transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
-};
 use sui_types::base_types::ObjectRef;
 use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
 use sui_types::transaction::{EndOfEpochTransactionKind, TransactionData, TransactionExpiration};
 use sui_types::type_resolver::LayoutResolver;
+use sui_types::{
+    effects::{TransactionEffects, TransactionEffectsAPI},
+    event::Event,
+    executable_transaction::VerifiedExecutableTransaction,
+    transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
+};
 
 mod error;
 
@@ -58,7 +60,6 @@ pub struct SuiSniffer {
 }
 
 const THRESHOLD_OVERFLOW: usize = 50000;
-
 
 fn inner_into_value_data(data: &MoveValue, stack: &mut Vec<ValueType>) -> Result<ValueType, ()> {
     if stack.len() > THRESHOLD_OVERFLOW {
@@ -119,11 +120,25 @@ fn format_object_ref(object_ref: &ObjectRef) -> String {
     let object_id = object_ref.0;
     let seq = object_ref.1;
     let digest = object_ref.2;
-    format!("0x{}-{}-{}", Hex::encode(object_id), seq.to_string(), digest.to_string())
+    format!(
+        "0x{}-{}-{}",
+        Hex::encode(object_id),
+        seq.to_string(),
+        digest.to_string()
+    )
 }
 
 fn into_sui_gas_data(gas_data: &sui_types::transaction::GasData) -> SuiGasData {
-    SuiGasData { payment: gas_data.payment.iter().map(|elem| format_object_ref(elem)).collect(), owner: gas_data.owner.to_string(), price: gas_data.price, budget: gas_data.budget }
+    SuiGasData {
+        payment: gas_data
+            .payment
+            .iter()
+            .map(|elem| format_object_ref(elem))
+            .collect(),
+        owner: gas_data.owner.to_string(),
+        price: gas_data.price,
+        budget: gas_data.budget,
+    }
 }
 
 pub struct SuiTransactionBuilder {
@@ -134,7 +149,11 @@ pub struct SuiTransactionBuilder {
 
 impl SuiTransactionBuilder {
     pub fn new() -> Self {
-        Self { calltrace_identifier: 0, calltrace_arg_identifier: 0, calltrace_type_arg_identifier: 0 }
+        Self {
+            calltrace_identifier: 0,
+            calltrace_arg_identifier: 0,
+            calltrace_type_arg_identifier: 0,
+        }
     }
 
     pub fn new_transaction(
@@ -143,7 +162,7 @@ impl SuiTransactionBuilder {
         effects: &TransactionEffects,
         time: DateTime<Utc>,
         inner_temporary_store: &InnerTemporaryStore,
-        layout_resolver: &mut dyn LayoutResolver
+        layout_resolver: &mut dyn LayoutResolver,
     ) -> Option<SuiTransaction> {
         //TODO move this in the builder?
         let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
@@ -179,10 +198,17 @@ impl SuiTransactionBuilder {
             is_genesis_tx: info.is_genesis_tx(),
             is_sponsored_tx: info.is_sponsored_tx(),
             is_system_tx: info.is_system_tx(),
-            receiving_objects: info.receiving_objects().iter().map(|elem| format_object_ref(elem)).collect(),
-            signers: info.signers().iter().map(|signer| signer.to_string()).collect::<Vec<String>>(),
+            receiving_objects: info
+                .receiving_objects()
+                .iter()
+                .map(|elem| format_object_ref(elem))
+                .collect(),
+            signers: info
+                .signers()
+                .iter()
+                .map(|signer| signer.to_string())
+                .collect::<Vec<String>>(),
         };
-
 
         if let TransactionKind::ProgrammableTransaction(programmable_tx) = &tx_data.kind() {
             let commands = self.build_programmable_transactions(programmable_tx);
@@ -203,10 +229,20 @@ impl SuiTransactionBuilder {
                 storage_rebate: change.storage_rebate,
                 non_refundable_storage: change.non_refundable_storage_fee,
                 epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
-                system_packages: change.system_packages.iter().map(|(seq_num, modules, object_ids)|
-                    (seq_num.value(), // TODO it is necessary to grant the  permissions
-                     modules.clone(),
-                     object_ids.iter().map(|elem| elem.to_string().clone()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
+                system_packages: change
+                    .system_packages
+                    .iter()
+                    .map(|(seq_num, modules, object_ids)| {
+                        (
+                            seq_num.value(), // TODO it is necessary to grant the  permissions
+                            modules.clone(),
+                            object_ids
+                                .iter()
+                                .map(|elem| elem.to_string().clone())
+                                .collect::<Vec<String>>(),
+                        )
+                    })
+                    .collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
             };
         }
 
@@ -226,17 +262,21 @@ impl SuiTransactionBuilder {
             SuiAuthenticatorStateUpdate {
                 epoch: authenticator.epoch,
                 round: authenticator.round,
-                new_active_jwks: authenticator.new_active_jwks.iter().map(
-                    |elem| SuiActiveJwk {
+                new_active_jwks: authenticator
+                    .new_active_jwks
+                    .iter()
+                    .map(|elem| SuiActiveJwk {
                         iss: elem.jwk_id.iss.clone(),
                         kid: elem.jwk_id.kid.clone(),
                         jwk_kty: elem.jwk.kty.clone(),
                         jwk_n: elem.jwk.n.clone(),
                         jwk_alg: elem.jwk.alg.clone(),
                         epoch: elem.epoch,
-                    }
-                ).collect::<Vec<SuiActiveJwk>>(),
-                authenticator_obj_initial_shared_version: authenticator.authenticator_obj_initial_shared_version.into(),
+                    })
+                    .collect::<Vec<SuiActiveJwk>>(),
+                authenticator_obj_initial_shared_version: authenticator
+                    .authenticator_obj_initial_shared_version
+                    .into(),
             };
         }
 
@@ -245,7 +285,9 @@ impl SuiTransactionBuilder {
                 epoch: randomness.epoch,
                 randomness_round: randomness.randomness_round.0,
                 random_bytes: randomness.random_bytes.clone(),
-                randomness_obj_initial_shared_version: randomness.randomness_obj_initial_shared_version.into(),
+                randomness_obj_initial_shared_version: randomness
+                    .randomness_obj_initial_shared_version
+                    .into(),
             };
         }
         if let TransactionKind::ConsensusCommitPrologueV2(consensus) = &tx_data.kind() {
@@ -253,52 +295,72 @@ impl SuiTransactionBuilder {
                 epoch: consensus.epoch,
                 round: consensus.round,
                 commit_timestamp_ms: consensus.commit_timestamp_ms.into(),
-                consesus_commit_digest: consensus.consensus_commit_digest.inner().to_vec()
+                consesus_commit_digest: consensus.consensus_commit_digest.inner().to_vec(),
             };
         }
 
         if let TransactionKind::EndOfEpochTransaction(end_of_epoch) = &tx_data.kind() {
-            let transactions = end_of_epoch.iter().filter_map(|elem| {
-                match elem {
-                    EndOfEpochTransactionKind::ChangeEpoch(change) => {
-                        let changed_epoch = SuiChangeEpoch {
-                            epoch: change.epoch,
-                            protocol_version: change.protocol_version.as_u64(),
-                            storage_charge: change.storage_charge,
-                            computation_charge: change.computation_charge,
-                            storage_rebate: change.storage_rebate,
-                            non_refundable_storage: change.non_refundable_storage_fee,
-                            epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
-                            system_packages: change.system_packages.iter().map(|(seq_num, modules, object_ids)|
-                                (seq_num.to_string().parse().expect("Ups, I can not convert the seq number"), // TODO it is necessary to grant the  permissions
-                                 modules.clone(),
-                                 object_ids.iter().map(|elem| elem.to_string().clone()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
-                        };
-                        Some(SuiEndOfEpochTransactionKind::ChangeEpoch(changed_epoch))
-                    },
-                    EndOfEpochTransactionKind::AuthenticatorStateCreate => {
-                        Some(SuiEndOfEpochTransactionKind::AuthenticatorStateCreate)
-                    },
-                    EndOfEpochTransactionKind::AuthenticatorStateExpire(expire_state) => {
-                        Some(SuiEndOfEpochTransactionKind::AuthenticatorStateExpire(SuiAuthenticatorStateExpire {
-                            min_epoch: expire_state.min_epoch,
-                            authenticator_obj_initial_shared_version: expire_state.authenticator_obj_initial_shared_version.into(),
-                        }))
-                    },
-                    EndOfEpochTransactionKind::RandomnessStateCreate => {
-                        Some(SuiEndOfEpochTransactionKind::RandomnessStateCreate)
-                    },
-                    EndOfEpochTransactionKind::DenyListStateCreate => {
-                        Some(SuiEndOfEpochTransactionKind::DenyListStateCreate)
-                    },
-                    EndOfEpochTransactionKind::BridgeStateCreate(_) | EndOfEpochTransactionKind::BridgeCommitteeInit(_) => {
-                        info!("Detected bridgeStateCreate and BridgeCommitteeInit");
-                        None
+            let transactions = end_of_epoch
+                .iter()
+                .filter_map(|elem| {
+                    match elem {
+                        EndOfEpochTransactionKind::ChangeEpoch(change) => {
+                            let changed_epoch = SuiChangeEpoch {
+                                epoch: change.epoch,
+                                protocol_version: change.protocol_version.as_u64(),
+                                storage_charge: change.storage_charge,
+                                computation_charge: change.computation_charge,
+                                storage_rebate: change.storage_rebate,
+                                non_refundable_storage: change.non_refundable_storage_fee,
+                                epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
+                                system_packages: change
+                                    .system_packages
+                                    .iter()
+                                    .map(|(seq_num, modules, object_ids)| {
+                                        (
+                                            seq_num
+                                                .to_string()
+                                                .parse()
+                                                .expect("Ups, I can not convert the seq number"), // TODO it is necessary to grant the  permissions
+                                            modules.clone(),
+                                            object_ids
+                                                .iter()
+                                                .map(|elem| elem.to_string().clone())
+                                                .collect::<Vec<String>>(),
+                                        )
+                                    })
+                                    .collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
+                            };
+                            Some(SuiEndOfEpochTransactionKind::ChangeEpoch(changed_epoch))
+                        }
+                        EndOfEpochTransactionKind::AuthenticatorStateCreate => {
+                            Some(SuiEndOfEpochTransactionKind::AuthenticatorStateCreate)
+                        }
+                        EndOfEpochTransactionKind::AuthenticatorStateExpire(expire_state) => {
+                            Some(SuiEndOfEpochTransactionKind::AuthenticatorStateExpire(
+                                SuiAuthenticatorStateExpire {
+                                    min_epoch: expire_state.min_epoch,
+                                    authenticator_obj_initial_shared_version: expire_state
+                                        .authenticator_obj_initial_shared_version
+                                        .into(),
+                                },
+                            ))
+                        }
+                        EndOfEpochTransactionKind::RandomnessStateCreate => {
+                            Some(SuiEndOfEpochTransactionKind::RandomnessStateCreate)
+                        }
+                        EndOfEpochTransactionKind::DenyListStateCreate => {
+                            Some(SuiEndOfEpochTransactionKind::DenyListStateCreate)
+                        }
+                        EndOfEpochTransactionKind::BridgeStateCreate(_)
+                        | EndOfEpochTransactionKind::BridgeCommitteeInit(_) => {
+                            info!("Detected bridgeStateCreate and BridgeCommitteeInit");
+                            None
+                        }
                     }
-                }
-            }).collect::<Vec<SuiEndOfEpochTransactionKind>>();
+                })
+                .collect::<Vec<SuiEndOfEpochTransactionKind>>();
             SuiTransactionType::EndOfEpochTransactionKind(transactions);
-
         }
         None
     }
@@ -333,11 +395,14 @@ impl SuiTransactionBuilder {
                         package_id: format_object_id(package_id),
                         argument: arg.to_string(),
                     })
-                },
-                Command::MakeMoveVec(typ, value) => {
-                    SuiCommand::Makemovevec((typ.as_ref().map(|t| t.to_string()),
-                                             value.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()))
-                },
+                }
+                Command::MakeMoveVec(typ, value) => SuiCommand::Makemovevec((
+                    typ.as_ref().map(|t| t.to_string()),
+                    value
+                        .iter()
+                        .map(|elem| elem.to_string())
+                        .collect::<Vec<String>>(),
+                )),
                 //review how to convert in objectid
                 Command::MoveCall(boxed_progr_move_call) => {
                     SuiCommand::Movecall(SuiProgrammableMoveCall {
@@ -345,25 +410,40 @@ impl SuiTransactionBuilder {
                         module: boxed_progr_move_call.module.to_string(),
                         function: boxed_progr_move_call.function.to_string(),
                         //TODO parse to typetag
-                        type_arguments: boxed_progr_move_call.type_arguments.iter().map(|elem: &TypeTag| elem.to_string()).collect::<Vec<String>>(),
+                        type_arguments: boxed_progr_move_call
+                            .type_arguments
+                            .iter()
+                            .map(|elem: &TypeTag| elem.to_string())
+                            .collect::<Vec<String>>(),
                     })
-                },
+                }
                 Command::TransferObjects(objects, address) => {
                     let values = (
-                        objects.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()
-                        , address.to_string());
+                        objects
+                            .iter()
+                            .map(|elem| elem.to_string())
+                            .collect::<Vec<String>>(),
+                        address.to_string(),
+                    );
                     SuiCommand::Transferobjects(values)
-                },
+                }
                 Command::SplitCoins(orig_amount, new_coins) => {
                     let values = (
-                        orig_amount.to_string()
-                        , new_coins.iter().map(|elem| elem.to_string()).collect::<Vec<String>>());
+                        orig_amount.to_string(),
+                        new_coins
+                            .iter()
+                            .map(|elem| elem.to_string())
+                            .collect::<Vec<String>>(),
+                    );
                     SuiCommand::Splitcoins(values)
-                },
+                }
                 Command::MergeCoins(first_coin_to_merge, n_coins) => {
                     let values = (
                         first_coin_to_merge.to_string(),
-                        n_coins.iter().map(|elem| elem.to_string()).collect::<Vec<String>>()
+                        n_coins
+                            .iter()
+                            .map(|elem| elem.to_string())
+                            .collect::<Vec<String>>(),
                     );
                     SuiCommand::Mergecoins(values)
                 }
@@ -383,17 +463,17 @@ impl SuiTransactionBuilder {
             .iter()
             .filter_map(|event| {
                 let Ok(event_datatype_layout) = layout_resolver.get_annotated_layout(&event.type_)
-                    else {
-                        warn!(%event.type_, "Can't fetch layout by type");
-                        return None;
-                    };
+                else {
+                    warn!(%event.type_, "Can't fetch layout by type");
+                    return None;
+                };
 
                 let Ok(event_struct) =
                     Event::move_event_to_move_value(&event.contents, event_datatype_layout)
-                    else {
-                        warn!(%event.type_, "Can't parse event contents");
-                        return None;
-                    };
+                else {
+                    warn!(%event.type_, "Can't parse event contents");
+                    return None;
+                };
 
                 let Ok(contents) = into_value_data(event_struct) else {
                     warn!(%event.type_, "Can't convert event contents to ValueData");
@@ -408,14 +488,17 @@ impl SuiTransactionBuilder {
                     typ: event.type_.to_canonical_string(true),
                     contents,
                 })
-
             })
             .collect();
 
         mamoru_events
     }
 
-    pub fn extract_calltraces(&mut self, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) -> Vec<SuiCalltrace> {
+    pub fn extract_calltraces(
+        &mut self,
+        tx_seq: u64,
+        move_call_traces: Vec<MoveCallTrace>,
+    ) -> Vec<SuiCalltrace> {
         move_call_traces
             .into_iter()
             .map(|trace| {
@@ -424,15 +507,17 @@ impl SuiTransactionBuilder {
                 let mut cta: Vec<SuiCalltraceTypeArg> = vec![];
                 let mut ca: Vec<SuiCalltraceArg> = vec![];
 
-                for arg in trace
-                    .ty_args
-                    .into_iter()
-                {
+                for arg in trace.ty_args.into_iter() {
                     let arg_type_seq = self.get_and_next_trace_type_arg_seq();
                     cta.push(SuiCalltraceTypeArg {
                         seq: arg_type_seq,
                         calltrace_seq: trace_seq,
-                        arg: SuiValueData { data: None, value: mamoru_sui_types::ValueType::String(arg.to_canonical_string(true)) },
+                        arg: SuiValueData {
+                            data: None,
+                            value: mamoru_sui_types::ValueType::String(
+                                arg.to_canonical_string(true),
+                            ),
+                        },
                     });
                 }
 
@@ -463,7 +548,8 @@ impl SuiTransactionBuilder {
                     calltrace_type_arg: cta.clone(),
                     calltrace_arg: ca.clone(),
                 }
-            }).collect()
+            })
+            .collect()
     }
     fn build_objects(
         &mut self,
@@ -480,7 +566,8 @@ impl SuiTransactionBuilder {
                 Ok(Some(object)) => {
                     if let Data::Move(move_object) = &object.as_inner().data {
                         let struct_tag = move_object.type_().clone().into();
-                        let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag) else {
+                        let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag)
+                        else {
                             warn!(%object_id, "Can't fetch layout by struct tag");
                             return None;
                         };
@@ -522,7 +609,10 @@ impl SuiTransactionBuilder {
                 };
                 objects.push(SuiObject {
                     id: format_object_id(object.id()),
-                    typ: SuiObjectType::Created(SuiCreatedObject { data: object_data, owner: sui_owner_to_wit_mamoru(*owner) }),
+                    typ: SuiObjectType::Created(SuiCreatedObject {
+                        data: object_data,
+                        owner: sui_owner_to_wit_mamoru(*owner),
+                    }),
                 });
             }
         }
@@ -589,7 +679,6 @@ impl SuiTransactionBuilder {
     }
 }
 
-
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
@@ -606,7 +695,7 @@ impl SuiSniffer {
         call_traces: Vec<MoveCallTrace>,
         time: DateTime<Utc>,
         emit_debug_info: bool,
-        layout_resolver: &mut dyn LayoutResolver
+        layout_resolver: &mut dyn LayoutResolver,
     ) -> Result<BlockchainData<SuiCtx>, SuiSnifferError> {
         if emit_debug_info {
             emit_debug_stats(&call_traces);
@@ -628,15 +717,23 @@ impl SuiSniffer {
         ctx_builder.set_tx_data(format!("{}", seq), tx_hash.clone());
         //let gas_cost_summary = effects.gas_cost_summary();
         let mut sui_builder_transaction = SuiTransactionBuilder::new();
-        ctx_builder.data_mut().transaction = sui_builder_transaction.new_transaction(&certificate, &effects, time, inner_temporary_store, layout_resolver);
+        ctx_builder.data_mut().transaction = sui_builder_transaction.new_transaction(
+            &certificate,
+            &effects,
+            time,
+            inner_temporary_store,
+            layout_resolver,
+        );
         let events_timer = Instant::now();
-        ctx_builder.data_mut().events = sui_builder_transaction.extract_events(layout_resolver, seq, events);
+        ctx_builder.data_mut().events =
+            sui_builder_transaction.extract_events(layout_resolver, seq, events);
         info!(
             duration_ms = events_timer.elapsed().as_millis(),
             "sniffer.register_events() executed",
         );
         let call_traces_timer = Instant::now();
-        ctx_builder.data_mut().calltraces = sui_builder_transaction.extract_calltraces(seq, call_traces.clone());
+        ctx_builder.data_mut().calltraces =
+            sui_builder_transaction.extract_calltraces(seq, call_traces.clone());
         info!(
             duration_ms = call_traces_timer.elapsed().as_millis(),
             "sniffer.register_call_traces() executed",
@@ -653,13 +750,14 @@ impl SuiSniffer {
     }
 }
 
-
 fn sui_owner_to_wit_mamoru(owner: Owner) -> SuiOwner {
     match owner {
         Owner::AddressOwner(address) => SuiOwner::Address(format_object_id(address)),
         Owner::ObjectOwner(address) => SuiOwner::Object(format_object_id(address)),
         Owner::Immutable => SuiOwner::Inmutable,
-        Owner::Shared { initial_shared_version } => SuiOwner::Shared(initial_shared_version.to_string()),
+        Owner::Shared {
+            initial_shared_version,
+        } => SuiOwner::Shared(initial_shared_version.to_string()),
     }
 }
 
