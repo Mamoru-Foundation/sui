@@ -204,7 +204,7 @@ impl SuiTransactionBuilder {
                 non_refundable_storage: change.non_refundable_storage_fee,
                 epoch_start_timestamp_ms: change.epoch_start_timestamp_ms,
                 system_packages: change.system_packages.iter().map(|(seq_num, modules, object_ids)|
-                    (seq_num.to_string().parse().expect("Ups, I can not convert the seq number"), // TODO it is necessary to grant the  permissions
+                    (seq_num.value(), // TODO it is necessary to grant the  permissions
                      modules.clone(),
                      object_ids.iter().map(|elem| elem.to_string().clone()).collect::<Vec<String>>())).collect::<Vec<(u64, Vec<Vec<u8>>, Vec<String>)>>(),
             };
