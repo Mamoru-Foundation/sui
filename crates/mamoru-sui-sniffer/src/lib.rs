@@ -241,6 +241,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut cta_total_ns = vec![];
     let mut ca_total_ns = vec![];
     let mut typs_total = vec![];
+    let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
 
 
     let start_time = Instant::now();
@@ -256,6 +257,9 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
             let loop_start_time = Instant::now();
             let trace_seq = trace_seq as u64;
 
+            let transaction_module: Option<String> = trace.module_id.map(|module| module.short_str_lossless());
+            let function = trace.function.to_string();
+
             let call_trace = CallTrace {
                 seq: trace_seq,
                 tx_seq,
@@ -265,9 +269,11 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     MoveCallType::CallGeneric => 1,
                 },
                 gas_used: trace.gas_used,
-                transaction_module: trace.module_id.map(|module| module.short_str_lossless()),
-                function: trace.function.to_string(),
+                transaction_module: transaction_module.clone(),
+                function: function.clone(),
             };
+
+            call_trace_info.push((transaction_module, function.clone()));
 
             let mut cta = vec![];
             let mut ca = vec![];
@@ -352,12 +358,14 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let str_type_args = format!("{:?}", typs_total);
     let str_args_len = format!("{:?}", args_len);
     let str_type_args_len = format!("{:?}", type_args_len);
+    let str_call_trace_info = format!("{:?}", call_trace_info);
 
     info!(duration_ns = total_duration, total_call_traces_len=call_traces_len,
         args_len=str_args_len,
         type_args_len=str_type_args_len,
         total_args_len=total_args_len, total_type_args_len=total_type_args_len,
-        cta_ns = str_cta_ns, ca_ns = str_ca_ns, total_cta_ns=cta_ns_sum, total_ca_ns=ca_ns_sum, all_types = str_type_args
+        cta_ns = str_cta_ns, ca_ns = str_ca_ns, total_cta_ns=cta_ns_sum, total_ca_ns=ca_ns_sum, all_types = str_type_args,
+        call_trace_names = str_call_trace_info
         ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
 
 
