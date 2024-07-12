@@ -246,8 +246,6 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
 
-    let mut cta_total_ns = vec![];
-    let mut ca_total_ns = vec![];
     let mut typs_total = vec![];
     let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
 
@@ -280,10 +278,6 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
             // applying filter
             if let Some(trans_module) = transaction_module.clone() {
-                let cloned_trans_module = trans_module.clone();
-                let cloned_function = function.clone();
-                let str_typ = format!("{cloned_trans_module}.{cloned_function}");
-                typs_total.push(str_typ);
                 let tuple_to_filter = (trans_module.as_str(), function.as_str());
                 if trans_module.as_str() != "0x9::bridge" &&
                     !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter) {
@@ -291,15 +285,17 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
                 }
             }
-
+            if let Some(trans_module) = transaction_module.clone() {
+                let cloned_trans_module = trans_module.clone();
+                let cloned_function = function.clone();
+                let str_typ = format!("{cloned_trans_module}.{cloned_function}");
+                typs_total.push(str_typ);
+            }
 
             call_trace_info.push((transaction_module.clone(), function.clone()));
 
             let mut cta = vec![];
             let mut ca = vec![];
-
-            let mut cta_ns = vec![];
-            let mut ca_ns = vec![];
 
 
             let ty_args_start_time = Instant::now();
@@ -308,14 +304,11 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 .into_iter()
                 .zip(call_trace_type_args_len as u64..)
             {
-
-                let cta_instant = Instant::now();
                 cta.push(CallTraceTypeArg {
                     seq,
                     call_trace_seq: trace_seq,
                     arg: arg.to_canonical_string(true),
                 });
-                cta_ns.push(cta_instant.elapsed().as_nanos());
             }
             let duration_ns = ty_args_start_time.elapsed().as_nanos();
             info!(duration_ns = duration_ns, "Type args loop duration in  ns");
@@ -324,7 +317,6 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
             let args_start_time = Instant::now();
             for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
-                let ca_instant = Instant::now();
                 match ValueData::new(to_value(&arg)) {
                     Some(arg) => {
                         ca.push(CallTraceArg {
@@ -335,16 +327,11 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     }
                     None => continue,
                 }
-                ca_ns.push(ca_instant.elapsed().as_nanos());
             }
             let duration_ns = args_start_time.elapsed().as_nanos();
             info!(duration_ns = duration_ns, "Args loop duration ns");
 
             call_trace_args_len += ca.len();
-
-            cta_total_ns.push(cta_ns);
-            ca_total_ns.push(ca_ns);
-
 
             let duration_ns = loop_start_time.elapsed().as_nanos();
             info!(duration_ns = duration_ns, "Loop duration in  ns");
@@ -370,11 +357,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let type_args_len = type_args.iter().map(|typ_arg:&Vec<_>| typ_arg.len()).collect::<Vec<usize>>();
     let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
     let total_type_args_len = type_args.iter().map(|typ_arg| (*typ_arg).len()).sum::<usize>();
-    let cta_ns_sum: u128 = cta_total_ns.iter().map(|e|e.clone().iter().sum::<u128>()).sum();
-    let ca_ns_sum: u128 = ca_total_ns.iter().map(|e|e.clone().iter().sum::<u128>()).sum();
 
-    let str_cta_ns = convert_instants_to_string(&cta_total_ns);
-    let str_ca_ns = convert_instants_to_string(&ca_total_ns);
     let str_type_args = format!("{:?}", typs_total);
     let str_args_len = format!("{:?}", args_len);
     let str_type_args_len = format!("{:?}", type_args_len);
@@ -384,7 +367,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
         args_len=str_args_len,
         type_args_len=str_type_args_len,
         total_args_len=total_args_len, total_type_args_len=total_type_args_len,
-        cta_ns = str_cta_ns, ca_ns = str_ca_ns, total_cta_ns=cta_ns_sum, total_ca_ns=ca_ns_sum, all_types = str_type_args,
+        all_types = str_type_args,
         call_trace_names = str_call_trace_info
         ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
 
