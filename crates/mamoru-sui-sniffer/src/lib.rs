@@ -246,7 +246,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
 
-    let mut typs_total = vec![];
+    let mut name_functions = vec![];
     let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
 
 
@@ -295,7 +295,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 let cloned_trans_module = trans_module.clone();
                 let cloned_function = function.clone();
                 let str_typ = format!("{cloned_trans_module}.{cloned_function}");
-                typs_total.push(str_typ);
+                name_functions.push(str_typ);
             }
 
             call_trace_info.push((transaction_module.clone(), function.clone()));
@@ -353,12 +353,12 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
     let total_type_args_len = type_args.iter().map(|typ_arg| (*typ_arg).len()).sum::<usize>();
 
-    let str_type_args = format!("{:?}", typs_total);
+    let str_name_functions = format!("{:?}", name_functions);
     let str_call_trace_info = format!("{:?}", call_trace_info);
 
     info!(duration_ns = total_duration, total_call_traces_len=call_traces_len,
         total_args_len=total_args_len, total_type_args_len=total_type_args_len,
-        all_types = str_type_args,
+        name_functions = str_name_functions,
         call_trace_names = str_call_trace_info
         ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
 
