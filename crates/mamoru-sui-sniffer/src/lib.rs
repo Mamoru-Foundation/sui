@@ -254,13 +254,10 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
     let start_time = Instant::now();
 
-
     let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
         .into_iter()
         .zip(0..)
         .map(|(trace, trace_seq)| {
-            let typs = trace.clone().ty_args.into_iter().map(|typ| typ.to_canonical_string(true)).collect::<Vec<String>>();
-            typs_total.push(typs);
 
             let loop_start_time = Instant::now();
             let trace_seq = trace_seq as u64;
@@ -281,12 +278,22 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 function: function.clone(),
             };
 
+            //get typ names
+            if let Some(trans_module) = transaction_module.clone() {
+                let str_typ = format!("{trans_module}.{function}");
+                typs_total.push(str_typ);
+            } else {
+                let str_typ = format!(".{function}");
+                typs_total.push(str_typ);
+            }
+
             // applying filter
             if let Some(trans_module) = transaction_module.clone() {
                 let tuple_to_filter = (trans_module.as_str(), function.as_str());
                 if trans_module.as_str() != "0x9::bridge" &&
                     !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter) {
                     return (call_trace, (vec![], vec![]));
+
                 }
             }
 
