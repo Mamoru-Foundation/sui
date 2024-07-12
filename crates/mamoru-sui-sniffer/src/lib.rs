@@ -276,6 +276,11 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 function: function.clone(),
             };
 
+            // applying filter, not module, we don t need args
+            if transaction_module.is_none()  {
+                return (call_trace, (vec![], vec![]));
+            }
+
             // applying filter
             if let Some(trans_module) = transaction_module.clone() {
                 let tuple_to_filter = (trans_module.as_str(), function.as_str());
@@ -285,6 +290,7 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
                 }
             }
+
             if let Some(trans_module) = transaction_module.clone() {
                 let cloned_trans_module = trans_module.clone();
                 let cloned_function = function.clone();
@@ -340,32 +346,17 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
         })
         .unzip();
 
-    fn convert_instants_to_string(instants: &Vec<Vec<u128>>) -> String {
-        instants.iter()
-            .map(|instant| {
-                format!("{:?}", instant.iter().map(|e| (*e).to_string()).join(","))
-            })
-            .collect::<Vec<String>>()
-            .join(", ")
-    }
-
 
 
     let total_duration = start_time.elapsed().as_nanos();
     let call_traces_len = call_traces.len();
-    let args_len = args.iter().map(|arg:&Vec<_>| arg.len()).collect::<Vec<usize>>();
-    let type_args_len = type_args.iter().map(|typ_arg:&Vec<_>| typ_arg.len()).collect::<Vec<usize>>();
     let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
     let total_type_args_len = type_args.iter().map(|typ_arg| (*typ_arg).len()).sum::<usize>();
 
     let str_type_args = format!("{:?}", typs_total);
-    let str_args_len = format!("{:?}", args_len);
-    let str_type_args_len = format!("{:?}", type_args_len);
     let str_call_trace_info = format!("{:?}", call_trace_info);
 
     info!(duration_ns = total_duration, total_call_traces_len=call_traces_len,
-        args_len=str_args_len,
-        type_args_len=str_type_args_len,
         total_args_len=total_args_len, total_type_args_len=total_type_args_len,
         all_types = str_type_args,
         call_trace_names = str_call_trace_info
