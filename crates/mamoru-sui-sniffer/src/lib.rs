@@ -278,17 +278,12 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 function: function.clone(),
             };
 
-            //get typ names
-            if let Some(trans_module) = transaction_module.clone() {
-                let str_typ = format!("{trans_module}.{function}");
-                typs_total.push(str_typ);
-            } else {
-                let str_typ = format!(".{function}");
-                typs_total.push(str_typ);
-            }
-
             // applying filter
             if let Some(trans_module) = transaction_module.clone() {
+                let cloned_trans_module = trans_module.clone();
+                let cloned_function = function.clone();
+                let str_typ = format!("{cloned_trans_module}.{cloned_function}");
+                typs_total.push(str_typ);
                 let tuple_to_filter = (trans_module.as_str(), function.as_str());
                 if trans_module.as_str() != "0x9::bridge" &&
                     !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter) {
