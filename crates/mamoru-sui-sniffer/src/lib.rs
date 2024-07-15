@@ -11,9 +11,6 @@ use mamoru_sniffer::{core::BlockchainDataBuilder, Sniffer, SnifferConfig};
 use mamoru_sui_types::SuiActiveJwk;
 use mamoru_sui_types::SuiAuthenticatorStateExpire;
 use mamoru_sui_types::SuiAuthenticatorStateUpdate;
-use mamoru_sui_types::SuiCalltrace;
-use mamoru_sui_types::SuiCalltraceArg;
-use mamoru_sui_types::SuiCalltraceTypeArg;
 use mamoru_sui_types::SuiChangeEpoch;
 use mamoru_sui_types::SuiCommand;
 use mamoru_sui_types::SuiConsensusCommitPrologue;
@@ -22,6 +19,7 @@ use mamoru_sui_types::SuiCtx;
 use mamoru_sui_types::SuiMutatedObject;
 use mamoru_sui_types::SuiObjectType;
 use mamoru_sui_types::SuiOwner;
+use mamoru_sui_types::{CalltraceTypeArg, CalltraceArg, Calltrace};
 use mamoru_sui_types::{
     SuiConsensusCommitPrologueV2, SuiEndOfEpochTransactionKind, SuiRandomnessStateUpdate,
 };
@@ -627,7 +625,7 @@ impl SuiCalltraceHandler {
 
 impl SuiCalltraceHandler {
     fn extract_calltraces(&self
-    ) -> Vec<SuiCalltrace> {
+    ) -> Vec<Calltrace> {
         let mut calltrace_identifier: u64 = 0;
         let mut calltrace_arg_identifier: u64 = 0;
         let mut calltrace_type_arg_identifier: u64 = 0;
@@ -640,14 +638,14 @@ impl SuiCalltraceHandler {
 
                 calltrace_identifier += 1;
 
-                let mut cta: Vec<SuiCalltraceTypeArg> = vec![];
-                let mut ca: Vec<SuiCalltraceArg> = vec![];
+                let mut cta: Vec<CalltraceTypeArg> = vec![];
+                let mut ca: Vec<CalltraceArg> = vec![];
 
 
                 let ty_args_start_time = Instant::now();
                 for arg in trace.ty_args.into_iter() {
                     calltrace_type_arg_identifier += 1;
-                    cta.push(SuiCalltraceTypeArg {
+                    cta.push(CalltraceTypeArg {
                         seq: calltrace_type_arg_identifier,
                         calltrace_seq: calltrace_identifier,
                         arg: SuiValueData {
@@ -666,7 +664,7 @@ impl SuiCalltraceHandler {
                     calltrace_arg_identifier += 1;
                     match into_value_data(arg.as_ref().clone()) {
                         Ok(arg) => {
-                            ca.push(SuiCalltraceArg {
+                            ca.push(CalltraceArg {
                                 seq: calltrace_arg_identifier,
                                 calltrace_seq: calltrace_identifier,
                                 arg,
@@ -679,7 +677,7 @@ impl SuiCalltraceHandler {
                 let duration_ns = args_start_time.elapsed().as_nanos();
                 info!(duration_ns = duration_ns, "Args loop duration ns");
 
-                let call_trace = SuiCalltrace {
+                let call_trace = Calltrace {
                     seq: calltrace_identifier,
                     tx_seq: self.tx_seq,
                     depth: trace.depth,
@@ -704,7 +702,7 @@ impl SuiCalltraceHandler {
 }
 
 impl CallTraceHandler for SuiCalltraceHandler{
-    fn get_calltraces(&self) -> Vec<SuiCalltrace> {
+    fn get_calltraces(&self) -> Vec<Calltrace> {
         let call_traces_timer = Instant::now();
         let parsed_call_traces = self.extract_calltraces();
         info!(
