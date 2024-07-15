@@ -1,11 +1,12 @@
 // Not a license :)
 
 use std::{collections::HashMap, mem::size_of_val, sync::Arc};
+use std::fmt::{Debug, Formatter};
 
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
 use itertools::Itertools;
-use mamoru_sniffer::core::{BlockchainData, ValueData};
+use mamoru_sniffer::core::{BlockchainData, CallTraceHandler, ValueData};
 use mamoru_sniffer::{core::BlockchainDataBuilder, Sniffer, SnifferConfig};
 use mamoru_sui_types::SuiActiveJwk;
 use mamoru_sui_types::SuiAuthenticatorStateExpire;
@@ -108,8 +109,11 @@ fn inner_into_value_data(data: &MoveValue, stack: &mut Vec<ValueType>) -> Result
 }
 
 fn into_value_data(item: MoveValue) -> Result<SuiValueData, ()> {
+    let start_time = Instant::now();
     let mut stack: Vec<ValueType> = Vec::new();
     let value_data: ValueType = inner_into_value_data(&item, &mut stack)?;
+    let duration_ns = start_time.elapsed().as_nanos();
+    info!(data=format!("{:?}", value_data), duration_ns=duration_ns, "into_value_data duration in ns");
     Ok(SuiValueData {
         value: value_data,
         data: if stack.is_empty() { None } else { Some(stack) },
@@ -142,17 +146,11 @@ fn into_sui_gas_data(gas_data: &sui_types::transaction::GasData) -> SuiGasData {
 }
 
 pub struct SuiTransactionBuilder {
-    calltrace_identifier: u64,
-    calltrace_arg_identifier: u64,
-    calltrace_type_arg_identifier: u64,
 }
 
 impl SuiTransactionBuilder {
     pub fn new() -> Self {
         Self {
-            calltrace_identifier: 0,
-            calltrace_arg_identifier: 0,
-            calltrace_type_arg_identifier: 0,
         }
     }
 
@@ -494,63 +492,7 @@ impl SuiTransactionBuilder {
         mamoru_events
     }
 
-    pub fn extract_calltraces(
-        &mut self,
-        tx_seq: u64,
-        move_call_traces: Vec<MoveCallTrace>,
-    ) -> Vec<SuiCalltrace> {
-        move_call_traces
-            .into_iter()
-            .map(|trace| {
-                let trace_seq = self.get_and_next_trace_seq();
 
-                let mut cta: Vec<SuiCalltraceTypeArg> = vec![];
-                let mut ca: Vec<SuiCalltraceArg> = vec![];
-
-                for arg in trace.ty_args.into_iter() {
-                    let arg_type_seq = self.get_and_next_trace_type_arg_seq();
-                    cta.push(SuiCalltraceTypeArg {
-                        seq: arg_type_seq,
-                        calltrace_seq: trace_seq,
-                        arg: SuiValueData {
-                            data: None,
-                            value: mamoru_sui_types::ValueType::String(
-                                arg.to_canonical_string(true),
-                            ),
-                        },
-                    });
-                }
-
-                for arg in trace.args.into_iter() {
-                    let arg_seq = self.get_and_next_trace_arg_seq();
-                    match into_value_data(arg.as_ref().clone()) {
-                        Ok(arg) => {
-                            ca.push(SuiCalltraceArg {
-                                seq: arg_seq,
-                                calltrace_seq: trace_seq,
-                                arg,
-                            });
-                        }
-                        Err(_) => continue,
-                    }
-                }
-                SuiCalltrace {
-                    seq: trace_seq,
-                    tx_seq,
-                    depth: trace.depth,
-                    call_type: match trace.call_type {
-                        MoveCallType::Call => 0,
-                        MoveCallType::CallGeneric => 1,
-                    },
-                    gas_used: trace.gas_used,
-                    transaction_module: trace.module_id.map(|module| module.short_str_lossless()),
-                    function: trace.function.to_string(),
-                    calltrace_type_arg: cta.clone(),
-                    calltrace_arg: ca.clone(),
-                }
-            })
-            .collect()
-    }
     fn build_objects(
         &mut self,
         layout_resolver: &mut dyn LayoutResolver,
@@ -662,27 +604,123 @@ impl SuiTransactionBuilder {
         }
         objects
     }
-    fn get_and_next_trace_seq(&mut self) -> u64 {
-        let seq = self.calltrace_identifier;
-        self.calltrace_identifier += 1;
-        seq
+
+
+}
+
+#[derive(Debug)]
+struct SuiCalltraceHandler {
+    pub call_traces: Vec<MoveCallTrace>,
+    pub tx_seq: u64,
+
+}
+
+//TODO improve how to handle the calltraces
+impl SuiCalltraceHandler {
+    pub fn new(call_traces: Vec<MoveCallTrace>, tx_seq: u64) -> Self {
+        Self {
+            call_traces,
+            tx_seq,
+        }
     }
-    fn get_and_next_trace_arg_seq(&mut self) -> u64 {
-        let seq = self.calltrace_arg_identifier;
-        self.calltrace_arg_identifier += 1;
-        seq
+}
+
+impl SuiCalltraceHandler {
+    fn extract_calltraces(&self
+    ) -> Vec<SuiCalltrace> {
+        let mut calltrace_identifier: u64 = 0;
+        let mut calltrace_arg_identifier: u64 = 0;
+        let mut calltrace_type_arg_identifier: u64 = 0;
+
+        self.call_traces.clone()
+            .into_iter()
+            .map(|trace| {
+                info!("Starting register calltraces");
+                let start_time = Instant::now();
+
+                calltrace_identifier += 1;
+
+                let mut cta: Vec<SuiCalltraceTypeArg> = vec![];
+                let mut ca: Vec<SuiCalltraceArg> = vec![];
+
+
+                let ty_args_start_time = Instant::now();
+                for arg in trace.ty_args.into_iter() {
+                    calltrace_type_arg_identifier += 1;
+                    cta.push(SuiCalltraceTypeArg {
+                        seq: calltrace_type_arg_identifier,
+                        calltrace_seq: calltrace_identifier,
+                        arg: SuiValueData {
+                            data: None,
+                            value: mamoru_sui_types::ValueType::String(
+                                arg.to_canonical_string(true),
+                            ),
+                        },
+                    });
+                }
+                let duration_ns = ty_args_start_time.elapsed().as_nanos();
+                info!(duration_ns = duration_ns, "Type args loop duration in  ns");
+
+                let args_start_time = Instant::now();
+                for arg in trace.args.into_iter() {
+                    calltrace_arg_identifier += 1;
+                    match into_value_data(arg.as_ref().clone()) {
+                        Ok(arg) => {
+                            ca.push(SuiCalltraceArg {
+                                seq: calltrace_arg_identifier,
+                                calltrace_seq: calltrace_identifier,
+                                arg,
+                            });
+                        }
+                        Err(_) => continue,
+                    }
+                }
+
+                let duration_ns = args_start_time.elapsed().as_nanos();
+                info!(duration_ns = duration_ns, "Args loop duration ns");
+
+                let call_trace = SuiCalltrace {
+                    seq: calltrace_identifier,
+                    tx_seq: self.tx_seq,
+                    depth: trace.depth,
+                    call_type: match trace.call_type {
+                        MoveCallType::Call => 0,
+                        MoveCallType::CallGeneric => 1,
+                    },
+                    gas_used: trace.gas_used,
+                    transaction_module: trace.module_id.map(|module| module.short_str_lossless()),
+                    function: trace.function.to_string(),
+                    calltrace_type_arg: cta.clone(),
+                    calltrace_arg: ca.clone(),
+                };
+
+                let total_duration = start_time.elapsed().as_nanos();
+                info!(duration_ns = total_duration ,"Total duration (ns)");
+
+                call_trace
+            })
+            .collect()
     }
-    fn get_and_next_trace_type_arg_seq(&mut self) -> u64 {
-        let seq = self.calltrace_type_arg_identifier;
-        self.calltrace_type_arg_identifier += 1;
-        seq
+}
+
+impl CallTraceHandler for SuiCalltraceHandler{
+    fn get_calltraces(&self) -> Vec<SuiCalltrace> {
+        let call_traces_timer = Instant::now();
+        let parsed_call_traces = self.extract_calltraces();
+        info!(
+            duration_ms = call_traces_timer.elapsed().as_millis(),
+            "sniffer.register_call_traces() executed",
+        );
+        parsed_call_traces
     }
+
 }
 
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
+
 
         Ok(Self { inner: sniffer })
     }
@@ -714,6 +752,7 @@ impl SuiSniffer {
         let _guard = span.enter();
 
         let mut ctx_builder = BlockchainDataBuilder::<SuiCtx>::new();
+
         ctx_builder.set_tx_data(format!("{}", seq), tx_hash.clone());
         //let gas_cost_summary = effects.gas_cost_summary();
         let mut sui_builder_transaction = SuiTransactionBuilder::new();
@@ -731,13 +770,11 @@ impl SuiSniffer {
             duration_ms = events_timer.elapsed().as_millis(),
             "sniffer.register_events() executed",
         );
-        let call_traces_timer = Instant::now();
-        ctx_builder.data_mut().calltraces =
-            sui_builder_transaction.extract_calltraces(seq, call_traces.clone());
-        info!(
-            duration_ms = call_traces_timer.elapsed().as_millis(),
-            "sniffer.register_call_traces() executed",
-        );
+
+        //TODO check, if it is necessary to add the calltraces
+        let call_trace_handler = SuiCalltraceHandler::new(call_traces.clone(), seq);
+        let call_trace_handler: Box<SuiCalltraceHandler> = Box::new(call_trace_handler);
+        ctx_builder.data_mut().move_calltrace_handler = Some(call_trace_handler);
         ctx_builder.set_statistics(0, 1, events_len as u64, call_traces_len as u64);
 
         let ctx = ctx_builder.build()?;
