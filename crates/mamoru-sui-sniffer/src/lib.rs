@@ -1,5 +1,6 @@
 // Not a license :)
 
+use std::any::Any;
 use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 
 use chrono::{DateTime, Utc};
@@ -45,6 +46,14 @@ pub struct SuiSniffer {
     inner: Sniffer,
 }
 
+const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
+    ("0xb::bridge", "create_token_bridge_message"),
+    ("0x2::coin", "create_currency"),
+    ("0x2::coin", "create_regulated_currency"),
+    ("0x2::coin", "update_name"),
+    ("0x2::coin", "update_symbol"),
+    ("0xb::message", "create_token_bridge_message"),
+];
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
@@ -102,7 +111,7 @@ impl SuiSniffer {
         register_events(ctx_builder.data_mut(), layout_resolver, seq, events);
 
         info!(
-            duration_ms = events_timer.elapsed().as_millis(),
+            duration_ns = events_timer.elapsed().as_nanos(),
             "sniffer.register_events() executed",
         );
 
@@ -110,7 +119,7 @@ impl SuiSniffer {
         register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
 
         info!(
-            duration_ms = call_traces_timer.elapsed().as_millis(),
+            duration_ns = call_traces_timer.elapsed().as_nanos(),
             "sniffer.register_call_traces() executed",
         );
 
@@ -123,7 +132,7 @@ impl SuiSniffer {
         );
 
         info!(
-            duration_ms = object_changes_timer.elapsed().as_millis(),
+            duration_ns = object_changes_timer.elapsed().as_nanos(),
             "sniffer.register_object_changes() executed",
         );
 
@@ -233,14 +242,25 @@ fn register_programmable_transaction(ctx: &mut SuiCtx, tx: &ProgrammableTransact
 }
 
 fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
+    info!("Starting register calltraces");
     let mut call_trace_args_len = ctx.call_trace_args.len();
     let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
+
+    let mut name_functions = vec![];
+    let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
+
+    let start_time = Instant::now();
 
     let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
         .into_iter()
         .zip(0..)
         .map(|(trace, trace_seq)| {
+            let loop_start_time = Instant::now();
             let trace_seq = trace_seq as u64;
+
+            let transaction_module: Option<String> =
+                trace.module_id.map(|module| module.short_str_lossless());
+            let function = trace.function.to_string();
 
             let call_trace = CallTrace {
                 seq: trace_seq,
@@ -251,13 +271,38 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     MoveCallType::CallGeneric => 1,
                 },
                 gas_used: trace.gas_used,
-                transaction_module: trace.module_id.map(|module| module.short_str_lossless()),
-                function: trace.function.to_string(),
+                transaction_module: transaction_module.clone(),
+                function: function.clone(),
             };
+
+            // applying filter, not module, we don t need args
+            if transaction_module.is_none() {
+                return (call_trace, (vec![], vec![]));
+            }
+
+            // applying filter
+            if let Some(trans_module) = transaction_module.clone() {
+                let tuple_to_filter = (trans_module.as_str(), function.as_str());
+                if trans_module.as_str() != "0x9::bridge"
+                    && !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter)
+                {
+                    return (call_trace, (vec![], vec![]));
+                }
+            }
+
+            if let Some(trans_module) = transaction_module.clone() {
+                let cloned_trans_module = trans_module.clone();
+                let cloned_function = function.clone();
+                let str_typ = format!("{cloned_trans_module}.{cloned_function}");
+                name_functions.push(str_typ);
+            }
+
+            call_trace_info.push((transaction_module.clone(), function.clone()));
 
             let mut cta = vec![];
             let mut ca = vec![];
 
+            let ty_args_start_time = Instant::now();
             for (arg, seq) in trace
                 .ty_args
                 .into_iter()
@@ -269,9 +314,12 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     arg: arg.to_canonical_string(true),
                 });
             }
+            let duration_ns = ty_args_start_time.elapsed().as_nanos();
+            info!(duration_ns = duration_ns, "Type args loop duration in  ns");
 
             call_trace_type_args_len += cta.len();
 
+            let args_start_time = Instant::now();
             for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
                 match ValueData::new(to_value(&arg)) {
                     Some(arg) => {
@@ -284,12 +332,34 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                     None => continue,
                 }
             }
+            let duration_ns = args_start_time.elapsed().as_nanos();
+            info!(duration_ns = duration_ns, "Args loop duration ns");
 
             call_trace_args_len += ca.len();
+
+            let duration_ns = loop_start_time.elapsed().as_nanos();
+            info!(duration_ns = duration_ns, "Loop duration in  ns");
 
             (call_trace, (ca, cta))
         })
         .unzip();
+
+    let total_duration = start_time.elapsed().as_nanos();
+    let call_traces_len = call_traces.len();
+    let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
+    let total_type_args_len = type_args
+        .iter()
+        .map(|typ_arg| (*typ_arg).len())
+        .sum::<usize>();
+
+    let str_name_functions = format!("{:?}", name_functions);
+    let str_call_trace_info = format!("{:?}", call_trace_info);
+
+    info!(duration_ns = total_duration, total_call_traces_len=call_traces_len,
+        total_args_len=total_args_len, total_type_args_len=total_type_args_len,
+        name_functions = str_name_functions,
+        call_trace_names = str_call_trace_info
+        ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
 
     ctx.call_traces.extend(call_traces);
     ctx.call_trace_args.extend(args.into_iter().flatten());
@@ -303,6 +373,7 @@ fn register_events(
     tx_seq: u64,
     events: &[Event],
 ) {
+    info!("Starting register events");
     let mamoru_events: Vec<_> = events
         .iter()
         .filter_map(|event| {
@@ -335,6 +406,10 @@ fn register_events(
         })
         .collect();
 
+    info!(
+        mamoru_events_len = mamoru_events.len(),
+        "size for extended events"
+    );
     data.events.extend(mamoru_events);
 }
 
@@ -344,6 +419,8 @@ fn register_object_changes(
     effects: &TransactionEffects,
     inner_temporary_store: &InnerTemporaryStore,
 ) {
+    info!("Starting object changes");
+
     let written = &inner_temporary_store.written;
 
     let mut fetch_move_value = |object_ref: &ObjectRef| {
@@ -387,8 +464,8 @@ fn register_object_changes(
         }
     };
 
+    let created_count = effects.created().len();
     let mut object_owner_seq = 0u64;
-
     for (seq, (created, owner)) in effects.created().iter().enumerate() {
         if let Some((object, move_value)) = fetch_move_value(created) {
             let Some(object_data) = ValueData::new(to_value(&move_value)) else {
@@ -410,6 +487,7 @@ fn register_object_changes(
         }
     }
 
+    let mutated_count = effects.mutated().len();
     for (seq, (mutated, owner)) in effects.mutated().iter().enumerate() {
         if let Some((object, move_value)) = fetch_move_value(mutated) {
             let Some(object_data) = ValueData::new(to_value(&move_value)) else {
@@ -431,6 +509,7 @@ fn register_object_changes(
         }
     }
 
+    let deleted_count = effects.deleted().len();
     for (seq, deleted) in effects.deleted().iter().enumerate() {
         data.object_changes.deleted.push(DeletedObject {
             seq: seq as u64,
@@ -438,6 +517,7 @@ fn register_object_changes(
         });
     }
 
+    let wrapped_count = effects.wrapped().len();
     for (seq, wrapped) in effects.wrapped().iter().enumerate() {
         data.object_changes.wrapped.push(WrappedObject {
             seq: seq as u64,
@@ -445,6 +525,7 @@ fn register_object_changes(
         });
     }
 
+    let unwrapped_count = effects.unwrapped().len();
     for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
         data.object_changes.unwrapped.push(UnwrappedObject {
             seq: seq as u64,
@@ -452,6 +533,7 @@ fn register_object_changes(
         });
     }
 
+    let unwrapped_then_deleted_count = effects.unwrapped_then_deleted().len();
     for (seq, unwrapped_then_deleted) in effects.unwrapped_then_deleted().iter().enumerate() {
         data.object_changes
             .unwrapped_then_deleted
@@ -460,6 +542,16 @@ fn register_object_changes(
                 id: format_object_id(unwrapped_then_deleted.0),
             });
     }
+
+    info!(
+        created_count = created_count,
+        mutated_count = mutated_count,
+        deleted_count = deleted_count,
+        wrapped_count = wrapped_count,
+        unwrapped_count = unwrapped_count,
+        unwrapped_then_deleted_count = unwrapped_then_deleted_count,
+        "register object sizes"
+    );
 }
 
 fn sui_owner_to_mamoru(seq: u64, owner: Owner) -> ObjectOwner {
@@ -502,6 +594,18 @@ fn format_tx_digest<T: AsRef<[u8]>>(data: T) -> String {
 }
 
 fn to_value(data: &MoveValue) -> Value {
+    let start_time = Instant::now();
+    let result = inner_to_value(data);
+    let duration_ns = start_time.elapsed().as_nanos();
+    info!(
+        data = data.to_string(),
+        duration_ns = duration_ns,
+        "to_value duration in ns"
+    );
+    return result;
+}
+
+fn inner_to_value(data: &MoveValue) -> Value {
     match data {
         MoveValue::Bool(value) => Value::Bool(*value),
         MoveValue::U8(value) => Value::U64(*value as u64),
@@ -512,14 +616,14 @@ fn to_value(data: &MoveValue) -> Value {
         MoveValue::U256(value) => Value::String(format!("{:#x}", value)),
         MoveValue::Variant(_) => Value::String("Variant not supported".to_string()), //TODO pending to add variant
         MoveValue::Address(addr) | MoveValue::Signer(addr) => Value::String(format_object_id(addr)),
-        MoveValue::Vector(value) => Value::List(value.iter().map(to_value).collect()),
+        MoveValue::Vector(value) => Value::List(value.iter().map(inner_to_value).collect()),
         MoveValue::Struct(value) => {
             let MoveStruct { type_, fields } = value;
             let struct_value = StructValue::new(
                 type_.to_canonical_string(true),
                 fields
                     .iter()
-                    .map(|(field, value)| (field.clone().into_string(), to_value(value)))
+                    .map(|(field, value)| (field.clone().into_string(), inner_to_value(value)))
                     .collect(),
             );
 
