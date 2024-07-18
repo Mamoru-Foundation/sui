@@ -1,7 +1,7 @@
 // Not a license :)
 
-use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 use std::any::Any;
+use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
@@ -42,9 +42,8 @@ use sui_types::{
 
 mod error;
 
-
 pub struct SuiSniffer {
-    inner: Sniffer
+    inner: Sniffer,
 }
 
 const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
@@ -53,14 +52,14 @@ const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
     ("0x2::coin", "create_regulated_currency"),
     ("0x2::coin", "update_name"),
     ("0x2::coin", "update_symbol"),
-    ("0xb::message", "create_token_bridge_message")
+    ("0xb::message", "create_token_bridge_message"),
 ];
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
 
-        Ok(Self { inner: sniffer})
+        Ok(Self { inner: sniffer })
     }
 
     pub fn prepare_ctx(
@@ -250,18 +249,17 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
     let mut name_functions = vec![];
     let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
 
-
     let start_time = Instant::now();
 
     let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
         .into_iter()
         .zip(0..)
         .map(|(trace, trace_seq)| {
-
             let loop_start_time = Instant::now();
             let trace_seq = trace_seq as u64;
 
-            let transaction_module: Option<String> = trace.module_id.map(|module| module.short_str_lossless());
+            let transaction_module: Option<String> =
+                trace.module_id.map(|module| module.short_str_lossless());
             let function = trace.function.to_string();
 
             let call_trace = CallTrace {
@@ -278,17 +276,17 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
             };
 
             // applying filter, not module, we don t need args
-            if transaction_module.is_none()  {
+            if transaction_module.is_none() {
                 return (call_trace, (vec![], vec![]));
             }
 
             // applying filter
             if let Some(trans_module) = transaction_module.clone() {
                 let tuple_to_filter = (trans_module.as_str(), function.as_str());
-                if trans_module.as_str() != "0x9::bridge" &&
-                    !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter) {
+                if trans_module.as_str() != "0x9::bridge"
+                    && !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter)
+                {
                     return (call_trace, (vec![], vec![]));
-
                 }
             }
 
@@ -303,7 +301,6 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
 
             let mut cta = vec![];
             let mut ca = vec![];
-
 
             let ty_args_start_time = Instant::now();
             for (arg, seq) in trace
@@ -347,12 +344,13 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
         })
         .unzip();
 
-
-
     let total_duration = start_time.elapsed().as_nanos();
     let call_traces_len = call_traces.len();
     let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
-    let total_type_args_len = type_args.iter().map(|typ_arg| (*typ_arg).len()).sum::<usize>();
+    let total_type_args_len = type_args
+        .iter()
+        .map(|typ_arg| (*typ_arg).len())
+        .sum::<usize>();
 
     let str_name_functions = format!("{:?}", name_functions);
     let str_call_trace_info = format!("{:?}", call_trace_info);
@@ -363,12 +361,10 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
         call_trace_names = str_call_trace_info
         ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
 
-
     ctx.call_traces.extend(call_traces);
     ctx.call_trace_args.extend(args.into_iter().flatten());
     ctx.call_trace_type_args
         .extend(type_args.into_iter().flatten());
-
 }
 
 fn register_events(
@@ -410,7 +406,10 @@ fn register_events(
         })
         .collect();
 
-    info!(mamoru_events_len=mamoru_events.len(), "size for extended events");
+    info!(
+        mamoru_events_len = mamoru_events.len(),
+        "size for extended events"
+    );
     data.events.extend(mamoru_events);
 }
 
@@ -526,7 +525,6 @@ fn register_object_changes(
         });
     }
 
-
     let unwrapped_count = effects.unwrapped().len();
     for (seq, (unwrapped, _)) in effects.unwrapped().iter().enumerate() {
         data.object_changes.unwrapped.push(UnwrappedObject {
@@ -545,12 +543,15 @@ fn register_object_changes(
             });
     }
 
-    info!(created_count=created_count,
-        mutated_count=mutated_count,
-        deleted_count=deleted_count,
-        wrapped_count=wrapped_count,
-        unwrapped_count=unwrapped_count,
-        unwrapped_then_deleted_count=unwrapped_then_deleted_count, "register object sizes");
+    info!(
+        created_count = created_count,
+        mutated_count = mutated_count,
+        deleted_count = deleted_count,
+        wrapped_count = wrapped_count,
+        unwrapped_count = unwrapped_count,
+        unwrapped_then_deleted_count = unwrapped_then_deleted_count,
+        "register object sizes"
+    );
 }
 
 fn sui_owner_to_mamoru(seq: u64, owner: Owner) -> ObjectOwner {
@@ -596,7 +597,11 @@ fn to_value(data: &MoveValue) -> Value {
     let start_time = Instant::now();
     let result = inner_to_value(data);
     let duration_ns = start_time.elapsed().as_nanos();
-    info!(data=data.to_string(), duration_ns=duration_ns, "to_value duration in ns");
+    info!(
+        data = data.to_string(),
+        duration_ns = duration_ns,
+        "to_value duration in ns"
+    );
     return result;
 }
 
