@@ -1429,9 +1429,9 @@ impl AuthorityState {
             let observe_timer = tokio::time::Instant::now();
 
             let ctx = {
-                let mut layout_resolver = epoch_store.executor().type_layout_resolver(Box::new(
-                        self.get_backing_package_store().clone(),
-                ));
+                let mut layout_resolver = epoch_store
+                    .executor()
+                    .type_layout_resolver(Box::new(self.get_backing_package_store().clone()));
 
                 // We can't pass `layout_resolver` to a future, so using a plain function to prepare the context.
                 sniffer.prepare_ctx(
