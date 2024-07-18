@@ -566,8 +566,8 @@ move-vm-test-utils = {path = "external-crates/move/crates/move-vm-test-utils/", 
 move-vm-types = {path = "external-crates/move/crates/move-vm-types"}
 
 # The mamoru
-mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "52e5c373d98fdd2e050382daf5f92c10e0a8504f" }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "52e5c373d98fdd2e050382daf5f92c10e0a8504f" }
+mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "d0c8237f85ccedc286ffd12ec260abc384146383" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "d0c8237f85ccedc286ffd12ec260abc384146383" }
 #mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
 #mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
 
