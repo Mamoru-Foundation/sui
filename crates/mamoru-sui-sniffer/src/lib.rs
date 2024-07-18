@@ -1,7 +1,7 @@
 // Not a license :)
 
-use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 use std::fmt::{Debug, Formatter};
+use std::{collections::HashMap, mem::size_of_val, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
@@ -19,7 +19,7 @@ use mamoru_sui_types::SuiCtx;
 use mamoru_sui_types::SuiMutatedObject;
 use mamoru_sui_types::SuiObjectType;
 use mamoru_sui_types::SuiOwner;
-use mamoru_sui_types::{CalltraceTypeArg, CalltraceArg, Calltrace};
+use mamoru_sui_types::{Calltrace, CalltraceArg, CalltraceTypeArg};
 use mamoru_sui_types::{
     SuiConsensusCommitPrologueV2, SuiEndOfEpochTransactionKind, SuiRandomnessStateUpdate,
 };
@@ -111,7 +111,11 @@ fn into_value_data(item: MoveValue) -> Result<SuiValueData, ()> {
     let mut stack: Vec<ValueType> = Vec::new();
     let value_data: ValueType = inner_into_value_data(&item, &mut stack)?;
     let duration_ns = start_time.elapsed().as_nanos();
-    info!(data=format!("{:?}", value_data), duration_ns=duration_ns, "into_value_data duration in ns");
+    info!(
+        data = format!("{:?}", value_data),
+        duration_ns = duration_ns,
+        "into_value_data duration in ns"
+    );
     Ok(SuiValueData {
         value: value_data,
         data: if stack.is_empty() { None } else { Some(stack) },
@@ -143,13 +147,11 @@ fn into_sui_gas_data(gas_data: &sui_types::transaction::GasData) -> SuiGasData {
     }
 }
 
-pub struct SuiTransactionBuilder {
-}
+pub struct SuiTransactionBuilder {}
 
 impl SuiTransactionBuilder {
     pub fn new() -> Self {
-        Self {
-        }
+        Self {}
     }
 
     pub fn new_transaction(
@@ -490,7 +492,6 @@ impl SuiTransactionBuilder {
         mamoru_events
     }
 
-
     fn build_objects(
         &mut self,
         layout_resolver: &mut dyn LayoutResolver,
@@ -602,15 +603,12 @@ impl SuiTransactionBuilder {
         }
         objects
     }
-
-
 }
 
 #[derive(Debug)]
 struct SuiCalltraceHandler {
     pub call_traces: Vec<MoveCallTrace>,
     pub tx_seq: u64,
-
 }
 
 //TODO improve how to handle the calltraces
@@ -624,13 +622,13 @@ impl SuiCalltraceHandler {
 }
 
 impl SuiCalltraceHandler {
-    fn extract_calltraces(&self
-    ) -> Vec<Calltrace> {
+    fn extract_calltraces(&self) -> Vec<Calltrace> {
         let mut calltrace_identifier: u64 = 0;
         let mut calltrace_arg_identifier: u64 = 0;
         let mut calltrace_type_arg_identifier: u64 = 0;
 
-        self.call_traces.clone()
+        self.call_traces
+            .clone()
             .into_iter()
             .map(|trace| {
                 info!("Starting register calltraces");
@@ -640,7 +638,6 @@ impl SuiCalltraceHandler {
 
                 let mut cta: Vec<CalltraceTypeArg> = vec![];
                 let mut ca: Vec<CalltraceArg> = vec![];
-
 
                 let ty_args_start_time = Instant::now();
                 for arg in trace.ty_args.into_iter() {
@@ -693,7 +690,7 @@ impl SuiCalltraceHandler {
                 };
 
                 let total_duration = start_time.elapsed().as_nanos();
-                info!(duration_ns = total_duration ,"Total duration (ns)");
+                info!(duration_ns = total_duration, "Total duration (ns)");
 
                 call_trace
             })
@@ -701,7 +698,7 @@ impl SuiCalltraceHandler {
     }
 }
 
-impl CallTraceHandler for SuiCalltraceHandler{
+impl CallTraceHandler for SuiCalltraceHandler {
     fn get_calltraces(&self) -> Vec<Calltrace> {
         let call_traces_timer = Instant::now();
         let parsed_call_traces = self.extract_calltraces();
@@ -711,14 +708,12 @@ impl CallTraceHandler for SuiCalltraceHandler{
         );
         parsed_call_traces
     }
-
 }
 
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
-
 
         Ok(Self { inner: sniffer })
     }
