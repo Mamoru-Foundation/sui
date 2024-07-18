@@ -29,8 +29,6 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-
-
 /***************************************************************************************
  *
  * Internal Types
@@ -256,7 +254,6 @@ pub struct GlobalValue(GlobalValueImpl);
 /// reference from.
 #[derive(Debug)]
 pub struct Locals(RcId<RefCell<Vec<ValueImpl>>>);
-
 
 /// A Move enum value (aka a variant).
 #[derive(Debug)]
@@ -2581,9 +2578,9 @@ impl Vector {
             ),
 
             Type::Signer | Type::Vector(_) | Type::Datatype(_) | Type::DatatypeInstantiation(_) => {
-                Value(ValueImpl::Container(Container::Vec(RcId::new(RefCell::new(
-                    elements.into_iter().map(|v| v.0).collect(),
-                )))))
+                Value(ValueImpl::Container(Container::Vec(RcId::new(
+                    RefCell::new(elements.into_iter().map(|v| v.0).collect()),
+                ))))
             }
 
             Type::Reference(_) | Type::MutableReference(_) | Type::TyParam(_) => {
@@ -3093,7 +3090,7 @@ impl Container {
             VecU256(r) => r.id(),
             VecBool(r) => r.id(),
             VecAddress(r) => r.id(),
-            Variant(r) =>  r.id(),
+            Variant(r) => r.id(),
         }
     }
 }
@@ -4406,7 +4403,9 @@ impl ValueImpl {
                         .collect::<PartialVMResult<_>>()?,
                     Container::Struct(_) => self.err("got struct container when converting vec")?,
                     Container::Locals(_) => self.err("got locals container when converting vec")?,
-                    Container::Variant(_) => self.err("got variant container when converting vec")?,
+                    Container::Variant(_) => {
+                        self.err("got variant container when converting vec")?
+                    }
                 }))
             }
 
