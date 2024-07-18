@@ -7,6 +7,7 @@ on:
       - testnet
       - testnet4
       - testnet4-wit
+      - fix/synch-transactions
 
 env:
   REPOSITORY: mamorufoundation/sui-sniffer-wit
