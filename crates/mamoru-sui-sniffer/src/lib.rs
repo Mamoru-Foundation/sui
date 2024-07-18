@@ -53,6 +53,7 @@ const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
     ("0x2::coin", "create_regulated_currency"),
     ("0x2::coin", "update_name"),
     ("0x2::coin", "update_symbol"),
+    ("0xb::message", "create_token_bridge_message")
 ];
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
