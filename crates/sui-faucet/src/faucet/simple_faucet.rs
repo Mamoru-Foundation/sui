@@ -1441,7 +1441,6 @@ mod tests {
         .await
         .unwrap();
         faucet.shutdown_batch_send_task();
-
         let faucet: &mut SimpleFaucet = &mut Arc::try_unwrap(faucet).unwrap();
 
         // Now we transfer one gas out

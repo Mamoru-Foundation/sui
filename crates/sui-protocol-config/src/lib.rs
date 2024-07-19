@@ -16,7 +16,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 51;
+const MAX_PROTOCOL_VERSION: u64 = 52;
 
 // Record history of protocol version allocations here:
 //
@@ -129,7 +129,7 @@ const MAX_PROTOCOL_VERSION: u64 = 51;
 //             Enable transactions to be signed with zkLogin inside multisig signature.
 //             Add native bridge.
 //             Enable native bridge in devnet
-//             Enable Leader Scoring & Schedule Change for Mysticeti consensus.
+//             Enable Leader Scoring & Schedule Change for Mysticeti consensus on testnet.
 // Version 46: Enable native bridge in testnet
 //             Enable resharing at the same initial shared version.
 // Version 47: Deepbook changes (framework update)
@@ -147,6 +147,20 @@ const MAX_PROTOCOL_VERSION: u64 = 51;
 //             Prepose consensus commit prologue in checkpoints.
 //             Set number of leaders per round for Mysticeti commits.
 // Version 51: Switch to DKG V1.
+//             Enable deny list v2 on devnet.
+// Version 52: Emit `CommitteeMemberUrlUpdateEvent` when updating bridge node url.
+//             std::config native functions.
+//             Modified sui-system package to enable withdrawal of stake before it becomes active.
+//             Enable soft bundle in devnet and testnet.
+//             Core macro visibility in sui core framework.
+//             Enable checkpoint batching in mainnet.
+//             Enable Mysticeti on mainnet.
+//             Enable Leader Scoring & Schedule Change for Mysticeti consensus on mainnet.
+//             Turn on count based shared object congestion control in devnet.
+//             Enable consensus commit prologue V3 in testnet.
+//             Enable enums on testnet.
+//             Add support for passkey in devnet.
+//             Enable deny list v2 on testnet and mainnet.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -507,6 +521,14 @@ struct FeatureFlags {
     // Enable Soft Bundle (SIP-19).
     #[serde(skip_serializing_if = "is_false")]
     soft_bundle: bool,
+
+    // If true, enable the coin deny list V2.
+    #[serde(skip_serializing_if = "is_false")]
+    enable_coin_deny_list_v2: bool,
+
+    // Enable passkey auth (SIP-9)
+    #[serde(skip_serializing_if = "is_false")]
+    passkey_auth: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -904,6 +926,13 @@ pub struct ProtocolConfig {
     address_to_u256_cost_base: Option<u64>,
     // Cost params for the Move native function `address::from_u256(u256): address`
     address_from_u256_cost_base: Option<u64>,
+
+    // `config` module
+    // Cost params for the Move native function `read_setting_impl<Name: copy + drop + store,
+    // SettingValue: key + store, SettingDataValue: store, Value: copy + drop + store,
+    // >(config: address, name: address, current_epoch: u64): Option<Value>`
+    config_read_setting_impl_cost_base: Option<u64>,
+    config_read_setting_impl_cost_per_byte: Option<u64>,
 
     // `dynamic_field` module
     // Cost params for the Move native function `hash_type_and_key<K: copy + drop + store>(parent: address, k: K): address`
@@ -1398,6 +1427,10 @@ impl ProtocolConfig {
         self.feature_flags.enable_coin_deny_list
     }
 
+    pub fn enable_coin_deny_list_v2(&self) -> bool {
+        self.feature_flags.enable_coin_deny_list_v2
+    }
+
     pub fn enable_group_ops_native_functions(&self) -> bool {
         self.feature_flags.enable_group_ops_native_functions
     }
@@ -1452,6 +1485,10 @@ impl ProtocolConfig {
 
     pub fn soft_bundle(&self) -> bool {
         self.feature_flags.soft_bundle
+    }
+
+    pub fn passkey_auth(&self) -> bool {
+        self.feature_flags.passkey_auth
     }
 }
 
@@ -1675,6 +1712,11 @@ impl ProtocolConfig {
             address_to_u256_cost_base: Some(52),
             // Cost params for the Move native function `address::from_u256(u256): address`
             address_from_u256_cost_base: Some(52),
+
+            // `config` module
+            // Cost params for the Move native function `read_setting_impl``
+            config_read_setting_impl_cost_base: None,
+            config_read_setting_impl_cost_per_byte: None,
 
             // `dynamic_field` module
             // Cost params for the Move native function `hash_type_and_key<K: copy + drop + store>(parent: address, k: K): address`
@@ -2418,6 +2460,53 @@ impl ProtocolConfig {
                 }
                 51 => {
                     cfg.random_beacon_dkg_version = Some(1);
+
+                    if chain != Chain::Testnet && chain != Chain::Mainnet {
+                        cfg.feature_flags.enable_coin_deny_list_v2 = true;
+                    }
+                }
+                52 => {
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.soft_bundle = true;
+                        cfg.max_soft_bundle_size = Some(5);
+                    }
+
+                    cfg.config_read_setting_impl_cost_base = Some(100);
+                    cfg.config_read_setting_impl_cost_per_byte = Some(40);
+
+                    // Turn on shared object congestion control in devnet.
+                    if chain != Chain::Testnet && chain != Chain::Mainnet {
+                        cfg.max_accumulated_txn_cost_per_object_in_checkpoint = Some(100);
+                        cfg.feature_flags.per_object_congestion_control_mode =
+                            PerObjectCongestionControlMode::TotalTxCount;
+                    }
+
+                    // Enable Mysticeti on mainnet.
+                    cfg.feature_flags.consensus_choice = ConsensusChoice::Mysticeti;
+
+                    // Enable leader scoring & schedule change on mainnet for mysticeti.
+                    cfg.feature_flags.mysticeti_leader_scoring_and_schedule = true;
+
+                    // Enable checkpoint batching on mainnet.
+                    cfg.checkpoint_summary_version_specific_data = Some(1);
+                    cfg.min_checkpoint_interval_ms = Some(200);
+
+                    // Enable consensus commit prologue V3 in testnet.
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags
+                            .record_consensus_determined_version_assignments_in_prologue = true;
+                        cfg.feature_flags
+                            .prepend_prologue_tx_in_consensus_commit_in_checkpoints = true;
+                    }
+                    // Turn on enums in testnet and devnet
+                    if chain != Chain::Mainnet {
+                        cfg.move_binary_format_version = Some(7);
+                    }
+
+                    if chain != Chain::Testnet && chain != Chain::Mainnet {
+                        cfg.feature_flags.passkey_auth = true;
+                    }
+                    cfg.feature_flags.enable_coin_deny_list_v2 = true;
                 }
                 // Use this template when making changes:
                 //
@@ -2574,6 +2663,14 @@ impl ProtocolConfig {
 
     pub fn set_mysticeti_num_leaders_per_round_for_testing(&mut self, val: Option<usize>) {
         self.feature_flags.mysticeti_num_leaders_per_round = val;
+    }
+
+    pub fn set_enable_soft_bundle_for_testing(&mut self, val: bool) {
+        self.feature_flags.soft_bundle = val;
+    }
+
+    pub fn set_passkey_auth_for_testing(&mut self, val: bool) {
+        self.feature_flags.passkey_auth = val
     }
 }
 

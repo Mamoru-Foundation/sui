@@ -6,6 +6,15 @@ diesel::table! {
     progress_store (task_name) {
         task_name -> Text,
         checkpoint -> Int8,
+        target_checkpoint -> Int8,
+        timestamp -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
+    sui_progress_store (id) {
+        id -> Int4,
+        txn_digest -> Bytea,
     }
 }
 
@@ -38,4 +47,9 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(progress_store, token_transfer, token_transfer_data,);
+diesel::allow_tables_to_appear_in_same_query!(
+    progress_store,
+    sui_progress_store,
+    token_transfer,
+    token_transfer_data,
+);

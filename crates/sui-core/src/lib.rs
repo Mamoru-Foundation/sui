@@ -20,6 +20,8 @@ pub mod epoch;
 pub mod execution_cache;
 mod execution_driver;
 pub mod metrics;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod mock_consensus;
 pub mod module_cache_metrics;
 pub mod mysticeti_adapter;
 pub mod overload_monitor;
@@ -63,6 +65,7 @@ mod pay_sui_tests;
 #[cfg(test)]
 #[path = "unit_tests/shared_object_deletion_tests.rs"]
 mod shared_object_deletion_tests;
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_authority_clients;
 #[cfg(test)]
 #[path = "unit_tests/transfer_to_object_tests.rs"]

@@ -281,6 +281,9 @@ pub enum UserInputError {
         expected: u64,
         actual: u64,
     },
+
+    #[error("Coin type is globally paused for use: {coin_type}")]
+    CoinTypeGlobalPause { coin_type: String },
 }
 
 #[derive(
@@ -600,6 +603,7 @@ pub enum SuiError {
     #[error("Method not allowed")]
     InvalidRpcMethodError,
 
+    // TODO: We should fold this into UserInputError::Unsupported.
     #[error("Use of disabled feature: {:?}", error)]
     UnsupportedFeatureError { error: String },
 
@@ -746,6 +750,12 @@ impl From<&str> for SuiError {
         SuiError::GenericAuthorityError {
             error: error.to_string(),
         }
+    }
+}
+
+impl From<String> for SuiError {
+    fn from(error: String) -> Self {
+        SuiError::GenericAuthorityError { error }
     }
 }
 
