@@ -7,7 +7,6 @@ on:
       - testnet
       - testnet4
       - testnet4-wit
-      - add-duration-and-printers
 env:
   REPOSITORY: mamorufoundation/sui-sniffer
 
