@@ -29,7 +29,7 @@ use sui_types::base_types::{ConciseableName, ObjectRef};
 use sui_types::committee::Committee;
 use sui_types::committee::CommitteeTrait;
 use sui_types::crypto::{AuthoritySignInfo, AuthorityStrongQuorumSignInfo, RandomnessRound};
-use sui_types::digests::ChainIdentifier;
+use sui_types::digests::{ChainIdentifier, TransactionEffectsDigest};
 use sui_types::error::{SuiError, SuiResult};
 use sui_types::signature::GenericSignature;
 use sui_types::storage::{BackingPackageStore, InputKey, ObjectStore};
@@ -317,6 +317,8 @@ pub struct AuthorityPerEpochStore {
     pub(crate) metrics: Arc<EpochMetrics>,
     epoch_start_configuration: Arc<EpochStartConfiguration>,
 
+    executed_in_epoch_table_enabled: once_cell::sync::OnceCell<bool>,
+
     /// Execution state that has to restart at each epoch change
     execution_component: ExecutionComponents,
 
@@ -343,12 +345,25 @@ pub struct AuthorityEpochTables {
     #[default_options_override_fn = "owned_object_transaction_locks_table_default_config"]
     owned_object_locked_transactions: DBMap<ObjectRef, LockDetailsWrapper>,
 
-    /// Signatures over transaction effects that were executed in the current epoch.
-    /// Store this to avoid re-signing the same effects twice.
+    /// Signatures over transaction effects that we have signed and returned to users.
+    /// We store this to avoid re-signing the same effects twice.
+    /// Note that this may contain signatures for effects from previous epochs, in the case
+    /// that a user requests a signature for effects from a previous epoch. However, the
+    /// signature is still epoch-specific and so is stored in the epoch store.
     effects_signatures: DBMap<TransactionDigest, AuthoritySignInfo>,
 
+    /// When we sign a TransactionEffects, we must record the digest of the effects in order
+    /// to detect and prevent equivocation when re-executing a transaction that may not have been
+    /// committed to disk.
+    /// Entries are removed from this table after the transaction in question has been committed
+    /// to disk.
+    signed_effects_digests: DBMap<TransactionDigest, TransactionEffectsDigest>,
+
     /// Signatures of transaction certificates that are executed locally.
-    pub(crate) transaction_cert_signatures: DBMap<TransactionDigest, AuthorityStrongQuorumSignInfo>,
+    transaction_cert_signatures: DBMap<TransactionDigest, AuthorityStrongQuorumSignInfo>,
+
+    /// Transactions that were executed in the current epoch.
+    executed_in_epoch: DBMap<TransactionDigest, ()>,
 
     /// The tables below manage shared object locks / versions. There are three ways they can be
     /// updated:
@@ -818,6 +833,7 @@ impl AuthorityPerEpochStore {
             epoch_close_time: Default::default(),
             metrics,
             epoch_start_configuration,
+            executed_in_epoch_table_enabled: once_cell::sync::OnceCell::new(),
             execution_component,
             chain_identifier,
             jwk_aggregator,
@@ -872,12 +888,12 @@ impl AuthorityPerEpochStore {
         self.randomness_reporter.get().cloned()
     }
 
-    pub fn set_randomness_manager(
+    pub async fn set_randomness_manager(
         &self,
         mut randomness_manager: RandomnessManager,
     ) -> SuiResult<()> {
         let reporter = randomness_manager.reporter();
-        let result = randomness_manager.start_dkg();
+        let result = randomness_manager.start_dkg().await;
         if self
             .randomness_manager
             .set(tokio::sync::Mutex::new(randomness_manager))
@@ -922,6 +938,14 @@ impl AuthorityPerEpochStore {
         };
 
         self.epoch_start_configuration.flags().contains(&flag)
+    }
+
+    pub fn executed_in_epoch_table_enabled(&self) -> bool {
+        *self.executed_in_epoch_table_enabled.get_or_init(|| {
+            self.epoch_start_configuration
+                .flags()
+                .contains(&EpochFlag::ExecutedInEpochTable)
+        })
     }
 
     /// Returns `&Arc<EpochStartConfiguration>`
@@ -1138,31 +1162,43 @@ impl AuthorityPerEpochStore {
     }
 
     #[instrument(level = "trace", skip_all)]
-    pub fn insert_tx_cert_and_effects_signature(
+    pub fn insert_tx_cert_sig(
+        &self,
+        tx_digest: &TransactionDigest,
+        cert_sig: &AuthorityStrongQuorumSignInfo,
+    ) -> SuiResult {
+        let tables = self.tables()?;
+        Ok(tables
+            .transaction_cert_signatures
+            .insert(tx_digest, cert_sig)?)
+    }
+
+    #[instrument(level = "trace", skip_all)]
+    pub fn insert_tx_key_and_effects_signature(
         &self,
         tx_key: &TransactionKey,
         tx_digest: &TransactionDigest,
-        cert_sig: Option<&AuthorityStrongQuorumSignInfo>,
+        effects_digest: &TransactionEffectsDigest,
         effects_signature: Option<&AuthoritySignInfo>,
     ) -> SuiResult {
+        let tables = self.tables()?;
         let mut batch = self.tables()?.effects_signatures.batch();
-        if let Some(cert_sig) = cert_sig {
-            batch.insert_batch(
-                &self.tables()?.transaction_cert_signatures,
-                [(tx_digest, cert_sig)],
-            )?;
+
+        if self.executed_in_epoch_table_enabled() {
+            batch.insert_batch(&tables.executed_in_epoch, [(tx_digest, ())])?;
         }
+
         if let Some(effects_signature) = effects_signature {
+            batch.insert_batch(&tables.effects_signatures, [(tx_digest, effects_signature)])?;
+
             batch.insert_batch(
-                &self.tables()?.effects_signatures,
-                [(tx_digest, effects_signature)],
+                &tables.signed_effects_digests,
+                [(tx_digest, effects_digest)],
             )?;
         }
+
         if !matches!(tx_key, TransactionKey::Digest(_)) {
-            batch.insert_batch(
-                &self.tables()?.transaction_key_to_digest,
-                [(tx_key, tx_digest)],
-            )?;
+            batch.insert_batch(&tables.transaction_key_to_digest, [(tx_key, tx_digest)])?;
         }
         batch.write()?;
 
@@ -1172,21 +1208,49 @@ impl AuthorityPerEpochStore {
         Ok(())
     }
 
-    pub fn effects_signatures_exists<'a>(
+    pub fn insert_effects_digest_and_signature(
+        &self,
+        tx_digest: &TransactionDigest,
+        effects_digest: &TransactionEffectsDigest,
+        effects_signature: &AuthoritySignInfo,
+    ) -> SuiResult {
+        let tables = self.tables()?;
+        let mut batch = tables.effects_signatures.batch();
+        batch.insert_batch(&tables.effects_signatures, [(tx_digest, effects_signature)])?;
+        batch.insert_batch(
+            &tables.signed_effects_digests,
+            [(tx_digest, effects_digest)],
+        )?;
+        batch.write()?;
+        Ok(())
+    }
+
+    pub fn transactions_executed_in_cur_epoch<'a>(
         &self,
         digests: impl IntoIterator<Item = &'a TransactionDigest>,
     ) -> SuiResult<Vec<bool>> {
-        Ok(self
-            .tables()?
-            .effects_signatures
-            .multi_contains_keys(digests)?)
+        let tables = self.tables()?;
+        if self.executed_in_epoch_table_enabled() {
+            Ok(tables.executed_in_epoch.multi_contains_keys(digests)?)
+        } else {
+            Ok(tables.effects_signatures.multi_contains_keys(digests)?)
+        }
     }
 
     pub fn get_effects_signature(
         &self,
         tx_digest: &TransactionDigest,
     ) -> SuiResult<Option<AuthoritySignInfo>> {
-        Ok(self.tables()?.effects_signatures.get(tx_digest)?)
+        let tables = self.tables()?;
+        Ok(tables.effects_signatures.get(tx_digest)?)
+    }
+
+    pub fn get_signed_effects_digest(
+        &self,
+        tx_digest: &TransactionDigest,
+    ) -> SuiResult<Option<TransactionEffectsDigest>> {
+        let tables = self.tables()?;
+        Ok(tables.signed_effects_digests.get(tx_digest)?)
     }
 
     pub fn get_transaction_cert_sig(
@@ -1289,27 +1353,14 @@ impl AuthorityPerEpochStore {
         &self,
         checkpoints: Vec<CheckpointSequenceNumber>,
     ) -> SuiResult<Vec<Accumulator>> {
-        // We need to register waiters _before_ reading from the database to avoid
-        // race conditions
-        let registrations = self.checkpoint_state_notify_read.register_all(&checkpoints);
-        let accumulators = self
-            .tables()?
-            .state_hash_by_checkpoint
-            .multi_get(checkpoints)?;
-
-        // Zipping together registrations and accumulators ensures returned order is
-        // the same as order of digests
-        let results =
-            accumulators
-                .into_iter()
-                .zip(registrations.into_iter())
-                .map(|(a, r)| match a {
-                    // Note that Some() clause also drops registration that is already fulfilled
-                    Some(ready) => Either::Left(futures::future::ready(ready)),
-                    None => Either::Right(r),
-                });
-
-        Ok(join_all(results).await)
+        self.checkpoint_state_notify_read
+            .read(&checkpoints, |checkpoints| -> SuiResult<_> {
+                Ok(self
+                    .tables()?
+                    .state_hash_by_checkpoint
+                    .multi_get(checkpoints)?)
+            })
+            .await
     }
 
     pub async fn notify_read_running_root(
@@ -1340,9 +1391,9 @@ impl AuthorityPerEpochStore {
             .collect())
     }
 
-    /// Deletes many pending certificates.
+    /// Called when transaction outputs are committed to disk
     #[instrument(level = "trace", skip_all)]
-    pub fn multi_remove_pending_execution(&self, digests: &[TransactionDigest]) -> SuiResult<()> {
+    pub fn handle_committed_transactions(&self, digests: &[TransactionDigest]) -> SuiResult<()> {
         let tables = match self.tables() {
             Ok(tables) => tables,
             // After Epoch ends, it is no longer necessary to remove pending transactions
@@ -1351,7 +1402,16 @@ impl AuthorityPerEpochStore {
             Err(e) => return Err(e),
         };
         let mut batch = tables.pending_execution.batch();
+        // pending_execution stores transactions received from consensus which may not have
+        // been executed yet. At this point, they have been committed to the db durably and
+        // can be removed.
+        // After end-to-end quarantining, we will not need pending_execution since the consensus
+        // log itself will be used for recovery.
         batch.delete_batch(&tables.pending_execution, digests)?;
+
+        // Now that the transaction effects are committed, we will never re-execute, so we
+        // don't need to worry about equivocating.
+        batch.delete_batch(&tables.signed_effects_digests, digests)?;
         batch.write()?;
         Ok(())
     }
@@ -2912,13 +2972,36 @@ impl AuthorityPerEpochStore {
             checkpoint_service,
             cache_reader,
             &ConsensusCommitInfo::new_for_test(
-                self.get_highest_pending_checkpoint_height() + 1,
+                if self.randomness_state_enabled() {
+                    self.get_highest_pending_checkpoint_height() / 2 + 1
+                } else {
+                    self.get_highest_pending_checkpoint_height() + 1
+                },
                 0,
                 skip_consensus_commit_prologue_in_test,
             ),
             authority_metrics,
         )
         .await
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn assign_shared_object_versions_for_tests(
+        self: &Arc<Self>,
+        cache_reader: &dyn ObjectCacheRead,
+        transactions: &[VerifiedExecutableTransaction],
+    ) -> SuiResult {
+        let mut batch = self.db_batch()?;
+        self.process_consensus_transaction_shared_object_versions(
+            cache_reader,
+            transactions,
+            None,
+            &BTreeMap::new(),
+            &mut batch,
+        )
+        .await?;
+        batch.write()?;
+        Ok(())
     }
 
     fn process_notifications(

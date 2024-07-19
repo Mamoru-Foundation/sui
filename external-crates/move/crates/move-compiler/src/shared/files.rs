@@ -28,16 +28,26 @@ pub struct MappedFiles {
     file_name_mapping: BTreeMap<FileHash, PathBuf>,
 }
 
-/// A file, and the line:column start, and line:column end that corresponds to a `Loc`
+/// A file, the line:column start, and line:column end that corresponds to a `Loc`
 #[allow(dead_code)]
-pub struct FilePosition {
-    pub file_id: FileId,
+pub struct FilePositionSpan {
+    pub file_hash: FileHash,
     pub start: Position,
     pub end: Position,
 }
 
+/// A file and a line:column location in it
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Copy)]
+pub struct FilePosition {
+    /// File hash
+    pub file_hash: FileHash,
+    /// Location
+    pub position: Position,
+}
+
 /// A position holds the byte offset along with the line and column location in a file.
 /// Both are zero-indexed.
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Copy)]
 pub struct Position {
     // zero-indexed line offset
     line_offset: usize,
@@ -49,7 +59,7 @@ pub struct Position {
 
 /// A file, and the usize start and usize end that corresponds to a `Loc`
 pub struct FileByteSpan {
-    pub file_id: FileId,
+    pub file_hash: FileHash,
     pub byte_span: ByteSpan,
 }
 
@@ -60,34 +70,8 @@ pub struct ByteSpan {
 }
 
 //**************************************************************************************************
-// Traits and Impls
+// Mapped Files
 //**************************************************************************************************
-impl Position {
-    /// User-facing (1-indexed) line
-    pub fn user_line(&self) -> usize {
-        self.line_offset + 1
-    }
-
-    /// User-facing (1-indexed) coulmn
-    pub fn user_column(&self) -> usize {
-        self.column_offset + 1
-    }
-
-    /// Line offset (0-indexed)
-    pub fn line_offset(&self) -> usize {
-        self.line_offset
-    }
-
-    /// Column offset (0-indexed)
-    pub fn column_offset(&self) -> usize {
-        self.column_offset
-    }
-
-    /// Btye offset for position (0-indexed)
-    pub fn byte_offset(&self) -> usize {
-        self.byte_offset
-    }
-}
 
 impl MappedFiles {
     pub fn new(files: FilesSourceText) -> Self {
@@ -114,7 +98,7 @@ impl MappedFiles {
         }
     }
 
-    pub fn extend(&mut self, other: Self) {
+    fn extend_(&mut self, other: Self, allow_duplicates: bool) {
         for (file_hash, file_id) in other.file_mapping {
             let Ok(file) = other.files.get(file_id) else {
                 debug_assert!(false, "Found a file without a file entry");
@@ -125,12 +109,20 @@ impl MappedFiles {
                 continue;
             };
             debug_assert!(
-                !self.file_mapping.contains_key(&file_hash),
+                allow_duplicates || !self.file_mapping.contains_key(&file_hash),
                 "Found a repeat file hash"
             );
             let fname = format!("{}", path.to_string_lossy());
             self.add(file_hash, fname.into(), file.source().clone());
         }
+    }
+
+    pub fn extend(&mut self, other: Self) {
+        self.extend_(other, false)
+    }
+
+    pub fn extend_with_duplicates(&mut self, other: Self) {
+        self.extend_(other, true)
     }
 
     pub fn add(&mut self, fhash: FileHash, fname: FileName, source: Arc<str>) {
@@ -146,6 +138,16 @@ impl MappedFiles {
             .get(*file_id)
             .ok()
             .map(|file| (*file.name(), file.source().clone()))
+    }
+
+    /// Find a file hash for a path buffer. Note this is inefficient.
+    pub fn file_hash(&self, path: &PathBuf) -> Option<FileHash> {
+        for (file_hash, file_path) in &self.file_name_mapping {
+            if file_path == path {
+                return Some(*file_hash);
+            }
+        }
+        None
     }
 
     /// Returns the FileHashes for iteration
@@ -189,7 +191,7 @@ impl MappedFiles {
     }
 
     /// Like `position_opt`, but may panic
-    pub fn position(&self, loc: &Loc) -> FilePosition {
+    pub fn position(&self, loc: &Loc) -> FilePositionSpan {
         self.position_opt(loc).unwrap()
     }
 
@@ -206,14 +208,31 @@ impl MappedFiles {
         self.position_opt(loc).map(|posn| posn.end)
     }
 
-    pub fn position_opt(&self, loc: &Loc) -> Option<FilePosition> {
+    pub fn file_start_position_opt(&self, loc: &Loc) -> Option<FilePosition> {
+        self.position_opt(loc)
+            .map(|posn| FilePosition::new(posn.file_hash, posn.start))
+    }
+
+    pub fn file_end_position_opt(&self, loc: &Loc) -> Option<FilePosition> {
+        self.position_opt(loc)
+            .map(|posn| FilePosition::new(posn.file_hash, posn.end))
+    }
+
+    pub fn file_size(&self, fhash: &FileHash) -> usize {
+        let file_id = *self.file_mapping().get(fhash).unwrap();
+        let source = self.files().source(file_id).unwrap();
+        source.len()
+    }
+
+    pub fn position_opt(&self, loc: &Loc) -> Option<FilePositionSpan> {
+        let file_hash = loc.file_hash();
         let start_loc = loc.start() as usize;
         let end_loc = loc.end() as usize;
         let file_id = *self.file_mapping().get(&loc.file_hash())?;
         let start_file_loc = self.files().location(file_id, start_loc).ok()?;
         let end_file_loc = self.files().location(file_id, end_loc).ok()?;
-        let posn = FilePosition {
-            file_id,
+        let posn = FilePositionSpan {
+            file_hash,
             start: Position {
                 line_offset: start_file_loc.line_number - 1,
                 column_offset: start_file_loc.column_number - 1,
@@ -229,14 +248,22 @@ impl MappedFiles {
     }
 
     pub fn byte_span_opt(&self, loc: &Loc) -> Option<FileByteSpan> {
+        let file_hash = loc.file_hash();
         let start = loc.start() as usize;
         let end = loc.end() as usize;
-        let file_id = *self.file_mapping().get(&loc.file_hash())?;
         let posn = FileByteSpan {
             byte_span: ByteSpan { start, end },
-            file_id,
+            file_hash,
         };
         Some(posn)
+    }
+
+    pub fn lsp_range_opt(&self, loc: &Loc) -> Option<lsp_types::Range> {
+        let position = self.position_opt(loc)?;
+        Some(lsp_types::Range {
+            start: position.start.into(),
+            end: position.end.into(),
+        })
     }
 
     /// Given a line number and character number (both 0-indexed) in the file return the `Loc` for
@@ -342,5 +369,94 @@ impl<'a> IntoIterator for &'a MappedFiles {
 
     fn into_iter(self) -> Self::IntoIter {
         MappedFilesIter::new(self)
+    }
+}
+
+//**************************************************************************************************
+// Impls
+//**************************************************************************************************
+
+impl FilePosition {
+    pub fn new(file_hash: FileHash, position: Position) -> Self {
+        FilePosition {
+            file_hash,
+            position,
+        }
+    }
+
+    pub fn file_hash(&self) -> FileHash {
+        self.file_hash
+    }
+
+    pub fn position(&self) -> Position {
+        self.position
+    }
+}
+
+impl FilePositionSpan {
+    /// Return the start position from the span
+    pub fn file_start_position(self) -> FilePosition {
+        FilePosition::new(self.file_hash, self.start)
+    }
+
+    /// Return the end position from the span
+    pub fn file_end_position(self) -> FilePosition {
+        FilePosition::new(self.file_hash, self.start)
+    }
+}
+
+impl Position {
+    pub fn empty() -> Self {
+        Position {
+            line_offset: 0,
+            column_offset: 0,
+            byte_offset: 0,
+        }
+    }
+
+    /// User-facing (1-indexed) line
+    pub fn user_line(&self) -> usize {
+        self.line_offset + 1
+    }
+
+    /// User-facing (1-indexed) column
+    pub fn user_column(&self) -> usize {
+        self.column_offset + 1
+    }
+
+    /// Line offset (0-indexed)
+    pub fn line_offset(&self) -> usize {
+        self.line_offset
+    }
+
+    /// Column offset (0-indexed)
+    pub fn column_offset(&self) -> usize {
+        self.column_offset
+    }
+
+    /// Btye offset for position (0-indexed)
+    pub fn byte_offset(&self) -> usize {
+        self.byte_offset
+    }
+}
+
+//**************************************************************************************************
+// LSP Conversions
+//**************************************************************************************************
+
+#[allow(clippy::from_over_into)]
+impl Into<lsp_types::Position> for FilePosition {
+    fn into(self) -> lsp_types::Position {
+        lsp_types::Position::new(
+            self.position.line_offset() as u32,
+            self.position.column_offset() as u32,
+        )
+    }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<lsp_types::Position> for Position {
+    fn into(self) -> lsp_types::Position {
+        lsp_types::Position::new(self.line_offset() as u32, self.column_offset() as u32)
     }
 }

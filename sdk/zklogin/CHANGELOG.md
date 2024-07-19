@@ -1,5 +1,22 @@
 # @mysten/zklogin
 
+## 0.7.10
+
+### Patch Changes
+
+- 06a900c1ab: Fix nonce generation inconsistency
+- Updated dependencies [06a900c1ab]
+- Updated dependencies [45877014d1]
+- Updated dependencies [87d6f75403]
+  - @mysten/sui@1.2.1
+
+## 0.7.9
+
+### Patch Changes
+
+- Updated dependencies [fef99d377f]
+  - @mysten/sui@1.2.0
+
 ## 0.7.8
 
 ### Patch Changes

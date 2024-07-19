@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::postgres_manager::{get_connection_pool, write, PgPool};
+use crate::postgres_manager::{write, PgPool};
 use crate::{
     metrics::BridgeIndexerMetrics, BridgeDataSource, TokenTransfer, TokenTransferData,
     TokenTransferStatus,
@@ -21,6 +21,7 @@ use sui_types::{
     transaction::{TransactionDataAPI, TransactionKind},
     BRIDGE_ADDRESS, SUI_BRIDGE_OBJECT_ID,
 };
+use tap::tap::TapFallible;
 use tracing::info;
 
 pub struct SuiBridgeWorker {
@@ -32,12 +33,11 @@ pub struct SuiBridgeWorker {
 impl SuiBridgeWorker {
     pub fn new(
         bridge_object_ids: Vec<ObjectID>,
-        db_url: String,
+        pg_pool: PgPool,
         metrics: BridgeIndexerMetrics,
     ) -> Self {
         let mut bridge_object_ids = bridge_object_ids.into_iter().collect::<BTreeSet<_>>();
         bridge_object_ids.insert(SUI_BRIDGE_OBJECT_ID);
-        let pg_pool = get_connection_pool(db_url);
         Self {
             bridge_object_ids,
             pg_pool,
@@ -50,7 +50,7 @@ impl SuiBridgeWorker {
         // TODO: right now this returns true for programmable transactions that
         //       have the bridge object as input. We can extend later to cover other cases
         let txn_data = tx.transaction.transaction_data();
-        if let TransactionKind::ProgrammableTransaction(_pt) = txn_data.kind() {
+        if let TransactionKind::ProgrammableTransaction(_) = txn_data.kind() {
             return tx
                 .input_objects
                 .iter()
@@ -188,6 +188,11 @@ impl Worker for SuiBridgeWorker {
                 Ok::<_, anyhow::Error>(result)
             })?;
 
-        write(&self.pg_pool, bridge_data)
+        write(&self.pg_pool, bridge_data).tap_ok(|_| {
+            info!("Processed checkpoint [{}] successfully", checkpoint_num,);
+            self.metrics
+                .last_committed_sui_checkpoint
+                .set(checkpoint_num as i64);
+        })
     }
 }

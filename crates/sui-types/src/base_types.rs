@@ -765,6 +765,7 @@ impl TryFrom<&GenericSignature> for SuiAddress {
             GenericSignature::ZkLoginAuthenticator(zklogin) => {
                 SuiAddress::try_from_unpadded(&zklogin.inputs)
             }
+            GenericSignature::PasskeyAuthenticator(s) => Ok(SuiAddress::from(&s.get_pk()?)),
         }
     }
 }

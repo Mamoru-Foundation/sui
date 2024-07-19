@@ -1192,13 +1192,7 @@ async fn test_handle_transfer_transaction_bad_signature() {
         rgp,
     );
 
-    let consensus_address = "/ip4/127.0.0.1/tcp/0/http".parse().unwrap();
-
-    let server = AuthorityServer::new_for_test(
-        "/ip4/127.0.0.1/tcp/0/http".parse().unwrap(),
-        authority_state.clone(),
-        consensus_address,
-    );
+    let server = AuthorityServer::new_for_test(authority_state.clone());
     let _metrics = server.metrics.clone();
 
     let server_handle = server.spawn_for_test().await.unwrap();
@@ -2342,14 +2336,14 @@ async fn test_handle_confirmation_transaction_receiver_equal_sender() {
         gas_object.compute_object_reference(),
         &authority_state,
     );
-    let signed_effects = authority_state
+    let effects = authority_state
         .execute_certificate(
             &certified_transfer_transaction,
             &authority_state.epoch_store_for_testing(),
         )
         .await
         .unwrap();
-    signed_effects.into_message().status().unwrap();
+    effects.status().unwrap();
 }
 
 #[tokio::test]
@@ -2396,7 +2390,7 @@ async fn test_handle_confirmation_transaction_ok() {
         )
         .await
         .unwrap();
-    signed_effects.into_message().status().unwrap();
+    signed_effects.status().unwrap();
     // Key check: the ownership has changed
 
     let new_account = authority_state
@@ -2453,14 +2447,14 @@ async fn test_handle_confirmation_transaction_idempotent() {
         &authority_state,
     );
 
-    let signed_effects = authority_state
+    let effects = authority_state
         .execute_certificate(
             &certified_transfer_transaction,
             &authority_state.epoch_store_for_testing(),
         )
         .await
         .unwrap();
-    assert_eq!(signed_effects.data().status(), &ExecutionStatus::Success);
+    assert_eq!(effects.status(), &ExecutionStatus::Success);
 
     let signed_effects2 = authority_state
         .execute_certificate(
@@ -2469,10 +2463,10 @@ async fn test_handle_confirmation_transaction_idempotent() {
         )
         .await
         .unwrap();
-    assert_eq!(signed_effects2.data().status(), &ExecutionStatus::Success);
+    assert_eq!(signed_effects2.status(), &ExecutionStatus::Success);
 
     // this is valid because we're checking the authority state does not change the certificate
-    assert_eq!(signed_effects, signed_effects2);
+    assert_eq!(effects, signed_effects2);
 
     // Now check the transaction info request is also the same
     let info = authority_state
@@ -2482,10 +2476,7 @@ async fn test_handle_confirmation_transaction_idempotent() {
         .await
         .unwrap();
 
-    assert_eq!(
-        info.status.into_effects_for_testing(),
-        signed_effects.into_inner()
-    );
+    assert_eq!(info.status.into_effects_for_testing().data(), &effects);
 }
 
 #[tokio::test]
@@ -2614,8 +2605,7 @@ async fn test_move_call_insufficient_gas() {
             &authority_state.epoch_store_for_testing(),
         )
         .await
-        .unwrap()
-        .into_message();
+        .unwrap();
     let gas_used = effects.gas_cost_summary().net_gas_usage() as u64;
     let kind_of_rebate_to_remove = effects.gas_cost_summary().storage_cost / 2;
 
@@ -2978,7 +2968,7 @@ async fn test_idempotent_reversed_confirmation() {
         .await;
     assert!(result2.is_ok());
     assert_eq!(
-        result1.unwrap().into_message(),
+        result1.unwrap(),
         result2
             .unwrap()
             .status
@@ -3264,11 +3254,10 @@ async fn test_transfer_sui_no_amount() {
         .unwrap();
 
     let certificate = init_certified_transaction(transaction.into(), &authority_state);
-    let signed_effects = authority_state
+    let effects = authority_state
         .execute_certificate(&certificate, &authority_state.epoch_store_for_testing())
         .await
         .unwrap();
-    let effects = signed_effects.into_message();
     // Check that the transaction was successful, and the gas object is the only mutated object,
     // and got transferred. Also check on its version and new balance.
     assert!(effects.status().is_ok());
@@ -3310,11 +3299,10 @@ async fn test_transfer_sui_with_amount() {
     );
     let transaction = to_sender_signed_transaction(tx_data, &sender_key);
     let certificate = init_certified_transaction(transaction, &authority_state);
-    let signed_effects = authority_state
+    let effects = authority_state
         .execute_certificate(&certificate, &authority_state.epoch_store_for_testing())
         .await
         .unwrap();
-    let effects = signed_effects.into_message();
     // Check that the transaction was successful, the gas object remains in the original owner,
     // and an amount is split out and send to the recipient.
     assert!(effects.status().is_ok());
@@ -3435,8 +3423,7 @@ async fn test_store_revert_wrap_move_call() {
     let wrap_effects = authority_state
         .execute_certificate(&wrap_cert, &authority_state.epoch_store_for_testing())
         .await
-        .unwrap()
-        .into_message();
+        .unwrap();
 
     assert!(wrap_effects.status().is_ok());
     assert_eq!(wrap_effects.created().len(), 1);
@@ -3523,8 +3510,7 @@ async fn test_store_revert_unwrap_move_call() {
     let unwrap_effects = authority_state
         .execute_certificate(&unwrap_cert, &authority_state.epoch_store_for_testing())
         .await
-        .unwrap()
-        .into_message();
+        .unwrap();
 
     assert!(unwrap_effects.status().is_ok());
     assert_eq!(unwrap_effects.deleted().len(), 1);
@@ -3778,8 +3764,7 @@ async fn test_store_revert_add_ofield() {
     let add_effects = authority_state
         .execute_certificate(&add_cert, &authority_state.epoch_store_for_testing())
         .await
-        .unwrap()
-        .into_message();
+        .unwrap();
 
     assert!(add_effects.status().is_ok());
     assert_eq!(add_effects.created().len(), 1);
@@ -3894,8 +3879,7 @@ async fn test_store_revert_remove_ofield() {
             &authority_state.epoch_store_for_testing(),
         )
         .await
-        .unwrap()
-        .into_message();
+        .unwrap();
 
     assert!(remove_effects.status().is_ok());
     let outer_v2 = find_by_id(&remove_effects.mutated(), outer_v0.0).unwrap();
@@ -4158,7 +4142,7 @@ pub async fn init_state_with_ids_and_object_basics<
     publish_object_basics(state).await
 }
 
-async fn publish_object_basics(state: Arc<AuthorityState>) -> (Arc<AuthorityState>, ObjectRef) {
+pub async fn publish_object_basics(state: Arc<AuthorityState>) -> (Arc<AuthorityState>, ObjectRef) {
     use sui_move_build::BuildConfig;
 
     // add object_basics package object to genesis, since lots of test use it
@@ -5729,7 +5713,7 @@ async fn test_publish_not_a_package_dependency() {
     )
 }
 
-fn create_gas_objects(num: u32, owner: SuiAddress) -> Vec<Object> {
+pub fn create_gas_objects(num: u32, owner: SuiAddress) -> Vec<Object> {
     let mut objects = vec![];
     for _ in 0..num {
         let gas_object_id = ObjectID::random();
@@ -5862,11 +5846,13 @@ async fn test_consensus_handler_per_object_congestion_control(
     }
 
     // Checks that deferral keys are formed correctly.
-    let commit_round = authority
-        .epoch_store_for_testing()
-        .get_highest_pending_checkpoint_height();
-    let deferred_txns = authority
-        .epoch_store_for_testing()
+    let epoch_store = authority.epoch_store_for_testing();
+    let commit_round = if epoch_store.randomness_state_enabled() {
+        epoch_store.get_highest_pending_checkpoint_height() / 2
+    } else {
+        epoch_store.get_highest_pending_checkpoint_height()
+    };
+    let deferred_txns = epoch_store
         .get_all_deferred_transactions_for_test()
         .unwrap();
     assert_eq!(deferred_txns.len(), 1);
@@ -5985,6 +5971,8 @@ async fn test_consensus_handler_per_object_congestion_control_using_tx_count() {
 //   4. Consensus commit prologue contains cancelled transaction version assignment.
 #[sim_test]
 async fn test_consensus_handler_congestion_control_transaction_cancellation() {
+    telemetry_subscribers::init_for_testing();
+
     let (sender, keypair): (_, AccountKeyPair) = get_key_pair();
 
     // Test setup. We will create some shared object transactions with one that will be cancelled at round 3.

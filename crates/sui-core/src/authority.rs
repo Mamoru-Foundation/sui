@@ -163,6 +163,7 @@ pub use crate::checkpoints::checkpoint_executor::{
 
 #[cfg(msim)]
 use sui_types::committee::CommitteeTrait;
+use sui_types::deny_list_v2::check_coin_deny_list_v2_during_signing;
 use sui_types::execution_config_utils::to_binary_config;
 
 #[cfg(test)]
@@ -205,6 +206,7 @@ pub mod authority_store_types;
 pub mod epoch_start_configuration;
 pub mod shared_object_congestion_tracker;
 pub mod shared_object_version_manager;
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_authority_builder;
 pub mod transaction_deferral;
 
@@ -878,6 +880,15 @@ impl AuthorityState {
             )?;
         }
 
+        if epoch_store.protocol_config().enable_coin_deny_list_v2() {
+            check_coin_deny_list_v2_during_signing(
+                tx_data.sender(),
+                &checked_input_objects,
+                &receiving_objects,
+                &self.get_object_store(),
+            )?;
+        }
+
         let owned_objects = checked_input_objects.inner().filter_owned_objects();
 
         let signed_transaction = VerifiedSignedTransaction::new(
@@ -1064,7 +1075,7 @@ impl AuthorityState {
         &self,
         certificate: &VerifiedCertificate,
         epoch_store: &Arc<AuthorityPerEpochStore>,
-    ) -> SuiResult<VerifiedSignedTransactionEffects> {
+    ) -> SuiResult<TransactionEffects> {
         let _metrics_guard = if certificate.contains_shared_object() {
             self.metrics
                 .execute_certificate_latency_shared_object
@@ -1085,8 +1096,7 @@ impl AuthorityState {
             self.enqueue_certificates_for_execution(vec![certificate.clone()], epoch_store);
         }
 
-        let effects = self.notify_read_effects(certificate).await?;
-        self.sign_effects(effects, epoch_store)
+        self.notify_read_effects(certificate).await
     }
 
     /// Internal logic to execute a certificate.
@@ -1104,7 +1114,7 @@ impl AuthorityState {
     pub async fn try_execute_immediately(
         &self,
         certificate: &VerifiedExecutableTransaction,
-        expected_effects_digest: Option<TransactionEffectsDigest>,
+        mut expected_effects_digest: Option<TransactionEffectsDigest>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
     ) -> SuiResult<(TransactionEffects, Option<ExecutionError>)> {
         let _scope = monitored_scope("Execution::try_execute_immediately");
@@ -1115,6 +1125,14 @@ impl AuthorityState {
         let input_objects = self
             .read_objects_for_execution(certificate, epoch_store)
             .await?;
+
+        if expected_effects_digest.is_none() {
+            // We could be re-executing a previously executed but uncommitted transaction, perhaps after
+            // restarting with a new binary. In this situation, if we have published an effects signature,
+            // we must be sure not to equivocate.
+            // TODO: read from cache instead of DB
+            expected_effects_digest = epoch_store.get_signed_effects_digest(tx_digest)?;
+        }
 
         // This acquires a lock on the tx digest to prevent multiple concurrent executions of the
         // same tx. While we don't need this for safety (tx sequencing is ultimately atomic), it is
@@ -1403,8 +1421,12 @@ impl AuthorityState {
 
         let output_keys = inner_temporary_store.get_output_keys(effects);
 
-        // Only need to sign effects if we are a validator.
-        let effects_sig = if self.is_validator(epoch_store) {
+        // Only need to sign effects if we are a validator, and if the executed_in_epoch_table is not yet enabled.
+        // TODO: once executed_in_epoch_table is enabled everywhere, we can remove the code below entirely.
+        let should_sign_effects =
+            self.is_validator(epoch_store) && !epoch_store.executed_in_epoch_table_enabled();
+
+        let effects_sig = if should_sign_effects {
             Some(AuthoritySignInfo::new(
                 epoch_store.epoch(),
                 effects,
@@ -1460,10 +1482,10 @@ impl AuthorityState {
 
         // The insertion to epoch_store is not atomic with the insertion to the perpetual store. This is OK because
         // we insert to the epoch store first. And during lookups we always look up in the perpetual store first.
-        epoch_store.insert_tx_cert_and_effects_signature(
+        epoch_store.insert_tx_key_and_effects_signature(
             &tx_key,
             tx_digest,
-            certificate.certificate_sig(),
+            &effects.digest(),
             effects_sig.as_ref(),
         )?;
 
@@ -1565,9 +1587,8 @@ impl AuthorityState {
         let _metrics_guard = self.metrics.prepare_certificate_latency.start_timer();
         let prepare_certificate_start_time = tokio::time::Instant::now();
 
-        // Cheap validity checks for a transaction, including input size limits.
+        // TODO: We need to move this to a more appropriate place to avoid redundant checks.
         let tx_data = certificate.data().transaction_data();
-        tx_data.check_version_and_features_supported(epoch_store.protocol_config())?;
         tx_data.validity_check(epoch_store.protocol_config())?;
 
         // The cost of partially re-auditing a transaction before execution is tolerated.
@@ -1695,7 +1716,6 @@ impl AuthorityState {
         Option<ObjectID>,
     )> {
         // Cheap validity checks for a transaction, including input size limits.
-        transaction.check_version_and_features_supported(epoch_store.protocol_config())?;
         transaction.validity_check_no_gas_check(epoch_store.protocol_config())?;
 
         let input_object_kinds = transaction.input_objects()?;
@@ -1915,7 +1935,6 @@ impl AuthorityState {
             vec![]
         };
 
-        transaction.check_version_and_features_supported(protocol_config)?;
         transaction.validity_check_no_gas_check(protocol_config)?;
 
         let input_object_kinds = transaction.input_objects()?;
@@ -4051,28 +4070,32 @@ impl AuthorityState {
                 // to return either an effects certificate, -or- a proof of inclusion in a checkpoint. In
                 // the case above, the Quorum Driver would return a proof of inclusion in the final
                 // checkpoint, and this code would no longer be necessary.
-                //
-                // Alternatively, some of the confusion around re-signing could be resolved if
-                // CertifiedTransactionEffects included both the epoch in which the transaction became
-                // final, as well as the epoch at which the effects were certified. In this case, there
-                // would be nothing terribly odd about the validators from epoch N certifying that a
-                // given TX became final in epoch N - 1. The confusion currently arises from the fact that
-                // the epoch field in AuthoritySignInfo is overloaded both to identify the provenance of
-                // the authority's signature, as well as to identify in which epoch the transaction was
-                // executed.
                 debug!(
                     ?tx_digest,
                     epoch=?epoch_store.epoch(),
                     "Re-signing the effects with the current epoch"
                 );
-                SignedTransactionEffects::new(
+
+                let sig = AuthoritySignInfo::new(
                     epoch_store.epoch(),
-                    effects,
-                    &*self.secret,
+                    &effects,
+                    Intent::sui_app(IntentScope::TransactionEffects),
                     self.name,
-                )
+                    &*self.secret,
+                );
+
+                let effects = SignedTransactionEffects::new_from_data_and_sig(effects, sig.clone());
+
+                epoch_store.insert_effects_digest_and_signature(
+                    &tx_digest,
+                    effects.digest(),
+                    &sig,
+                )?;
+
+                effects
             }
         };
+
         Ok(VerifiedSignedTransactionEffects::new_unchecked(
             signed_effects,
         ))

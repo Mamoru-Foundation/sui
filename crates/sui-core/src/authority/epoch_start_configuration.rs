@@ -55,9 +55,10 @@ pub enum EpochFlag {
     // This flag was "burned" because it was deployed with a broken version of the code. The
     // new flags below are required to enable state accumulator v2
     _StateAccumulatorV2EnabledDeprecated,
-
     StateAccumulatorV2EnabledTestnet,
     StateAccumulatorV2EnabledMainnet,
+
+    ExecutedInEpochTable,
 }
 
 impl EpochFlag {
@@ -74,7 +75,7 @@ impl EpochFlag {
         cache_config: &ExecutionCacheConfig,
         enable_state_accumulator_v2: bool,
     ) -> Vec<Self> {
-        let mut new_flags = vec![];
+        let mut new_flags = vec![EpochFlag::ExecutedInEpochTable];
 
         if matches!(
             choose_execution_cache(cache_config),
@@ -85,8 +86,7 @@ impl EpochFlag {
 
         if enable_state_accumulator_v2 {
             new_flags.push(EpochFlag::StateAccumulatorV2EnabledTestnet);
-            // TODO: enable on mainnet
-            // new_flags.push(EpochFlag::StateAccumulatorV2EnabledMainnet);
+            new_flags.push(EpochFlag::StateAccumulatorV2EnabledMainnet);
         }
 
         new_flags
@@ -110,6 +110,7 @@ impl fmt::Display for EpochFlag {
             EpochFlag::_StateAccumulatorV2EnabledDeprecated => {
                 write!(f, "StateAccumulatorV2EnabledDeprecated (DEPRECATED)")
             }
+            EpochFlag::ExecutedInEpochTable => write!(f, "ExecutedInEpochTable"),
             EpochFlag::StateAccumulatorV2EnabledTestnet => {
                 write!(f, "StateAccumulatorV2EnabledTestnet")
             }

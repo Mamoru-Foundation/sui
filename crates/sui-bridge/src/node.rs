@@ -35,7 +35,7 @@ pub async fn run_bridge_node(
 ) -> anyhow::Result<JoinHandle<()>> {
     init_all_struct_tags();
     let metrics = Arc::new(BridgeMetrics::new(&prometheus_registry));
-    let (server_config, client_config) = config.validate().await?;
+    let (server_config, client_config) = config.validate(metrics.clone()).await?;
 
     // Start Client
     let _handles = if let Some(client_config) = client_config {
@@ -85,7 +85,7 @@ async fn start_client_components(
     let mut all_handles = vec![];
     let (task_handles, eth_events_rx, _) =
         EthSyncer::new(client_config.eth_client.clone(), eth_contracts_to_watch)
-            .run()
+            .run(metrics.clone())
             .await
             .expect("Failed to start eth syncer");
     all_handles.extend(task_handles);
