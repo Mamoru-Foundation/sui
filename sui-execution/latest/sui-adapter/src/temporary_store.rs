@@ -248,7 +248,9 @@ impl<'backing> TemporaryStore<'backing> {
         let object_changes = self.get_object_changes();
 
         let lamport_version = self.lamport_timestamp;
-        let inner = self.into_inner_with_call_traces(call_traces);
+        // TODO: Cleanup this clone. Potentially add unchanged_shraed_objects directly to InnerTempStore.
+        let loaded_per_epoch_config_objects = self.loaded_per_epoch_config_objects.read().clone();
+        let inner = self.into_inner();
 
         let effects = TransactionEffects::new_from_execution_v2(
             status,
