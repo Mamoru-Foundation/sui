@@ -316,10 +316,7 @@ impl SuiTransactionBuilder {
                                     .iter()
                                     .map(|(seq_num, modules, object_ids)| {
                                         (
-                                            seq_num
-                                                .to_string()
-                                                .parse()
-                                                .expect("Ups, I can not convert the seq number"), // TODO it is necessary to grant the  permissions
+                                            seq_num.value(),
                                             modules.clone(),
                                             object_ids
                                                 .iter()
