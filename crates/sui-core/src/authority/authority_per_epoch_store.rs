@@ -893,7 +893,7 @@ impl AuthorityPerEpochStore {
         mut randomness_manager: RandomnessManager,
     ) -> SuiResult<()> {
         let reporter = randomness_manager.reporter();
-        let result = randomness_manager.start_dkg();
+        let result = randomness_manager.start_dkg().await;
         if self
             .randomness_manager
             .set(tokio::sync::Mutex::new(randomness_manager))
@@ -932,9 +932,20 @@ impl AuthorityPerEpochStore {
     }
 
     pub fn state_accumulator_v2_enabled(&self) -> bool {
-        self.epoch_start_configuration
-            .flags()
-            .contains(&EpochFlag::StateAccumulatorV2Enabled)
+        let flag = match self.get_chain_identifier().chain() {
+            Chain::Unknown | Chain::Testnet => EpochFlag::StateAccumulatorV2EnabledTestnet,
+            Chain::Mainnet => EpochFlag::StateAccumulatorV2EnabledMainnet,
+        };
+
+        self.epoch_start_configuration.flags().contains(&flag)
+    }
+
+    pub fn executed_in_epoch_table_enabled(&self) -> bool {
+        *self.executed_in_epoch_table_enabled.get_or_init(|| {
+            self.epoch_start_configuration
+                .flags()
+                .contains(&EpochFlag::ExecutedInEpochTable)
+        })
     }
 
     /// Returns `&Arc<EpochStartConfiguration>`
