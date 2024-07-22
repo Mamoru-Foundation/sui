@@ -54,6 +54,25 @@ const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
     ("0x2::coin", "update_symbol"),
     ("0xb::message", "create_token_bridge_message"),
 ];
+
+const FILTERED_MODS: &[&str] = &["0xb::bridge"];
+
+const FILTERER_PATTERN: &[&str] = &["0x103e3d5096f16a7eb45922bf56eab6eab2685701afc15a9c695b9a7d7b249ecf"];
+
+
+
+pub fn is_filtered_call_trace(module: &str, function: &str) -> bool {
+    FILTERED_ARG_FOR_CALL_TRACES.contains(&(module, function))
+}
+
+pub fn is_filtered_modules(module: &str) -> bool {
+    FILTERED_MODS.contains(&module)
+}
+
+pub fn is_starts_with_module(substring: &str) -> bool {
+    FILTERER_PATTERN.iter().any(|s| substring.starts_with(s))
+}
+
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
@@ -280,11 +299,14 @@ fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<Mov
                 return (call_trace, (vec![], vec![]));
             }
 
+
             // applying filter
             if let Some(trans_module) = transaction_module.clone() {
                 let tuple_to_filter = (trans_module.as_str(), function.as_str());
-                if trans_module.as_str() != "0x9::bridge"
-                    && !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter)
+                info!(module=tuple_to_filter.0, function=tuple_to_filter.1, "Filtering call trace");
+                if !is_filtered_call_trace(tuple_to_filter.0, tuple_to_filter.1)
+                && !is_filtered_modules(tuple_to_filter.0)
+                    && !is_starts_with_module(tuple_to_filter.0)
                 {
                     return (call_trace, (vec![], vec![]));
                 }
