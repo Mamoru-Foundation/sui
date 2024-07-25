@@ -45,9 +45,8 @@ mod error;
 pub struct SuiSniffer {
     inner: Sniffer,
     load_patterns: Vec<String>,
-    load_modules:  Vec<String>,
-    load_tuples: Vec<(String, String)>
-
+    load_modules: Vec<String>,
+    load_tuples: Vec<(String, String)>,
 }
 
 const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
@@ -61,10 +60,8 @@ const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
 
 const FILTERED_MODS: &[&str] = &["0xb::bridge"];
 
-const FILTERER_PATTERN: &[&str] = &["0x103e3d5096f16a7eb45922bf56eab6eab2685701afc15a9c695b9a7d7b249ecf"];
-
-
-
+const FILTERER_PATTERN: &[&str] =
+    &["0x103e3d5096f16a7eb45922bf56eab6eab2685701afc15a9c695b9a7d7b249ecf"];
 
 fn remove_whitespace(input: &str) -> String {
     input.chars().filter(|c| !c.is_whitespace()).collect()
@@ -86,10 +83,13 @@ pub fn load_modules(env_var: &str) -> Vec<String> {
     str.split(',').map(|s| s.to_string()).collect()
 }
 
-pub fn load_modules_with_functions(env_var: &str) -> Vec<(String, String)>{
+pub fn load_modules_with_functions(env_var: &str) -> Vec<(String, String)> {
     let tuples_str = remove_whitespace(env::var(env_var).unwrap_or_default().as_str());
     if tuples_str.is_empty() {
-        return FILTERED_ARG_FOR_CALL_TRACES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        return FILTERED_ARG_FOR_CALL_TRACES
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
     }
     // Parse the environment variable value into an array of string tuples
     let tuples: Result<Vec<(String, String)>, String> = tuples_str
@@ -100,16 +100,14 @@ pub fn load_modules_with_functions(env_var: &str) -> Vec<(String, String)>{
             if parts.len() != 2 {
                 Err("Invalid tuple format".to_string())
             } else {
-               Ok((parts[0].to_string(), parts[1].to_string())) // Convert parts into a tuple
+                Ok((parts[0].to_string(), parts[1].to_string())) // Convert parts into a tuple
             }
         })
         .collect();
     tuples.unwrap_or_default()
 }
 
-
 impl SuiSniffer {
-
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
@@ -119,17 +117,17 @@ impl SuiSniffer {
         let load_modules = load_modules("FILTERED_MODULES");
         let load_tuples = load_modules_with_functions("FILTERED_ARGS");
 
-
         Ok(Self {
             inner: sniffer,
             load_patterns,
             load_modules,
-            load_tuples
+            load_tuples,
         })
     }
 
     pub fn is_filtered_call_trace(&self, module: &str, function: &str) -> bool {
-        self.load_tuples.contains(&(module.to_string(), function.to_string()))
+        self.load_tuples
+            .contains(&(module.to_string(), function.to_string()))
     }
 
     pub fn is_filtered_modules(&self, module: &str) -> bool {
@@ -205,7 +203,7 @@ impl SuiSniffer {
             "sniffer.register_call_traces() executed",
         );
 
-            let object_changes_timer = Instant::now();
+        let object_changes_timer = Instant::now();
         register_object_changes(
             ctx_builder.data_mut(),
             layout_resolver,
@@ -229,7 +227,12 @@ impl SuiSniffer {
         Ok(ctx)
     }
 
-    fn register_call_traces(&self, ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
+    fn register_call_traces(
+        &self,
+        ctx: &mut SuiCtx,
+        tx_seq: u64,
+        move_call_traces: Vec<MoveCallTrace>,
+    ) {
         info!("Starting register calltraces");
         let mut call_trace_args_len = ctx.call_trace_args.len();
         let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
@@ -268,11 +271,14 @@ impl SuiSniffer {
                     return (call_trace, (vec![], vec![]));
                 }
 
-
                 // applying filter
                 if let Some(trans_module) = transaction_module.clone() {
                     let tuple_to_filter = (trans_module.as_str(), function.as_str());
-                    info!(module=tuple_to_filter.0, function=tuple_to_filter.1, "Filtering call trace");
+                    info!(
+                        module = tuple_to_filter.0,
+                        function = tuple_to_filter.1,
+                        "Filtering call trace"
+                    );
                     if !self.is_filtered_call_trace(tuple_to_filter.0, tuple_to_filter.1)
                         && !self.is_filtered_modules(tuple_to_filter.0)
                         && !self.is_starts_with_module(tuple_to_filter.0)
@@ -357,7 +363,6 @@ impl SuiSniffer {
         ctx.call_trace_type_args
             .extend(type_args.into_iter().flatten());
     }
-
 }
 
 fn register_programmable_transaction(ctx: &mut SuiCtx, tx: &ProgrammableTransaction) {
@@ -448,7 +453,6 @@ fn register_programmable_transaction(ctx: &mut SuiCtx, tx: &ProgrammableTransact
         }
     }
 }
-
 
 fn register_events(
     data: &mut SuiCtx,
@@ -849,9 +853,7 @@ mod tests {
     #[test]
     fn test_parse_env_var_to_tuples_single_from_env() {
         env::set_var("TUPLES", "(single,tuple)");
-        let expected_output = vec![
-            ("single".to_string(), "tuple".to_string()),
-        ];
+        let expected_output = vec![("single".to_string(), "tuple".to_string())];
         let output = load_modules_with_functions("TUPLES");
         assert_eq!(output, expected_output);
     }
@@ -877,9 +879,7 @@ mod tests {
     #[test]
     fn test_parse_module_functions() {
         env::set_var("TUPLES", "(single,tuple)");
-        let expected_output = vec![
-            ("single".to_string(), "tuple".to_string()),
-        ];
+        let expected_output = vec![("single".to_string(), "tuple".to_string())];
         let output = load_modules_with_functions("TUPLES");
         assert_eq!(output, expected_output);
     }
@@ -887,7 +887,13 @@ mod tests {
     #[test]
     fn test_parse_default_module_functions() {
         let output = load_modules_with_functions("TUPLES");
-        assert_eq!(output, FILTERED_ARG_FOR_CALL_TRACES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<(String, String)>>());
+        assert_eq!(
+            output,
+            FILTERED_ARG_FOR_CALL_TRACES
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect::<Vec<(String, String)>>()
+        );
     }
 
     #[test]
@@ -900,9 +906,14 @@ mod tests {
     #[test]
     fn test_parse_default_load_patterns() {
         let output = load_patterns("PATTERNS");
-        assert_eq!(output, FILTERER_PATTERN.iter().map(|s| s.to_string()).collect::<Vec<String>>());
+        assert_eq!(
+            output,
+            FILTERER_PATTERN
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+        );
     }
-    
 
     #[test]
     fn test_parse_load_modules() {
@@ -914,7 +925,12 @@ mod tests {
     #[test]
     fn test_parse_default_load_modules() {
         let output = load_patterns("MODS");
-        assert_eq!(output, FILTERED_MODS.iter().map(|s| s.to_string()).collect::<Vec<String>>());
+        assert_eq!(
+            output,
+            FILTERED_MODS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+        );
     }
-
 }
