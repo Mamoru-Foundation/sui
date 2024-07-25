@@ -1,7 +1,7 @@
 // Not a license :)
 
 use std::any::Any;
-use std::{collections::HashMap, mem::size_of_val, sync::Arc};
+use std::{collections::HashMap, env, mem::size_of_val, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use fastcrypto::encoding::{Base58, Encoding, Hex};
@@ -44,6 +44,9 @@ mod error;
 
 pub struct SuiSniffer {
     inner: Sniffer,
+    load_patterns: Vec<String>,
+    load_modules: Vec<String>,
+    load_tuples: Vec<(String, String)>,
 }
 
 const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
@@ -54,12 +57,89 @@ const FILTERED_ARG_FOR_CALL_TRACES: &[(&str, &str)] = &[
     ("0x2::coin", "update_symbol"),
     ("0xb::message", "create_token_bridge_message"),
 ];
+
+const FILTERED_MODS: &[&str] = &["0xb::bridge"];
+
+const FILTERER_PATTERN: &[&str] =
+    &["0x103e3d5096f16a7eb45922bf56eab6eab2685701afc15a9c695b9a7d7b249ecf"];
+
+fn remove_whitespace(input: &str) -> String {
+    input.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+pub fn load_patterns(env_var: &str) -> Vec<String> {
+    let str = remove_whitespace(env::var(env_var).unwrap_or_default().as_str());
+    if str.is_empty() {
+        return FILTERER_PATTERN.iter().map(|s| s.to_string()).collect();
+    }
+    str.split(',').map(|s| s.to_string()).collect()
+}
+
+pub fn load_modules(env_var: &str) -> Vec<String> {
+    let str = remove_whitespace(env::var(env_var).unwrap_or_default().as_str());
+    if str.is_empty() {
+        return FILTERED_MODS.iter().map(|s| s.to_string()).collect();
+    }
+    str.split(',').map(|s| s.to_string()).collect()
+}
+
+pub fn load_modules_with_functions(env_var: &str) -> Vec<(String, String)> {
+    let tuples_str = remove_whitespace(env::var(env_var).unwrap_or_default().as_str());
+    if tuples_str.is_empty() {
+        return FILTERED_ARG_FOR_CALL_TRACES
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
+    }
+    // Parse the environment variable value into an array of string tuples
+    let tuples: Result<Vec<(String, String)>, String> = tuples_str
+        .split("),(") // Split the string into individual tuples
+        .map(|s| s.replace("(", "").replace(")", "")) // Remove parentheses
+        .map(|s| {
+            let parts: Vec<&str> = s.split(',').collect();
+            if parts.len() != 2 {
+                Err("Invalid tuple format".to_string())
+            } else {
+                Ok((parts[0].to_string(), parts[1].to_string())) // Convert parts into a tuple
+            }
+        })
+        .collect();
+    tuples.unwrap_or_default()
+}
+
 impl SuiSniffer {
     pub async fn new() -> Result<Self, SuiSnifferError> {
         let sniffer =
             Sniffer::new(SnifferConfig::from_env().expect("Missing environment variables")).await?;
 
-        Ok(Self { inner: sniffer })
+        // TODO move to sniffer config?
+        let load_patterns = load_patterns("FILTERED_ARGS_PATTERNS");
+        let load_modules = load_modules("FILTERED_MODULES");
+        let load_tuples = load_modules_with_functions("FILTERED_ARGS");
+
+        Ok(Self {
+            inner: sniffer,
+            load_patterns,
+            load_modules,
+            load_tuples,
+        })
+    }
+
+    pub fn is_filtered_call_trace(&self, module: &str, function: &str) -> bool {
+        self.load_tuples
+            .contains(&(module.to_string(), function.to_string()))
+    }
+
+    pub fn is_filtered_modules(&self, module: &str) -> bool {
+        self.load_modules.contains(&module.to_string())
+    }
+
+    pub fn is_starts_with_module(&self, substring: &str) -> bool {
+        self.load_patterns.iter().any(|s| substring.starts_with(s))
+    }
+
+    pub async fn observe_data(&self, data: BlockchainData<SuiCtx>) {
+        self.inner.observe_data(data).await;
     }
 
     pub fn prepare_ctx(
@@ -116,7 +196,7 @@ impl SuiSniffer {
         );
 
         let call_traces_timer = Instant::now();
-        register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
+        self.register_call_traces(ctx_builder.data_mut(), seq, call_traces.clone());
 
         info!(
             duration_ns = call_traces_timer.elapsed().as_nanos(),
@@ -147,8 +227,141 @@ impl SuiSniffer {
         Ok(ctx)
     }
 
-    pub async fn observe_data(&self, data: BlockchainData<SuiCtx>) {
-        self.inner.observe_data(data).await;
+    fn register_call_traces(
+        &self,
+        ctx: &mut SuiCtx,
+        tx_seq: u64,
+        move_call_traces: Vec<MoveCallTrace>,
+    ) {
+        info!("Starting register calltraces");
+        let mut call_trace_args_len = ctx.call_trace_args.len();
+        let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
+
+        let mut name_functions = vec![];
+        let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
+
+        let start_time = Instant::now();
+
+        let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
+            .into_iter()
+            .zip(0..)
+            .map(|(trace, trace_seq)| {
+                let loop_start_time = Instant::now();
+                let trace_seq = trace_seq as u64;
+
+                let transaction_module: Option<String> =
+                    trace.module_id.map(|module| module.short_str_lossless());
+                let function = trace.function.to_string();
+
+                let call_trace = CallTrace {
+                    seq: trace_seq,
+                    tx_seq,
+                    depth: trace.depth,
+                    call_type: match trace.call_type {
+                        MoveCallType::Call => 0,
+                        MoveCallType::CallGeneric => 1,
+                    },
+                    gas_used: trace.gas_used,
+                    transaction_module: transaction_module.clone(),
+                    function: function.clone(),
+                };
+
+                // applying filter, not module, we don t need args
+                if transaction_module.is_none() {
+                    return (call_trace, (vec![], vec![]));
+                }
+
+                // applying filter
+                if let Some(trans_module) = transaction_module.clone() {
+                    let tuple_to_filter = (trans_module.as_str(), function.as_str());
+                    info!(
+                        module = tuple_to_filter.0,
+                        function = tuple_to_filter.1,
+                        "Filtering call trace"
+                    );
+                    if !self.is_filtered_call_trace(tuple_to_filter.0, tuple_to_filter.1)
+                        && !self.is_filtered_modules(tuple_to_filter.0)
+                        && !self.is_starts_with_module(tuple_to_filter.0)
+                    {
+                        return (call_trace, (vec![], vec![]));
+                    }
+                }
+
+                if let Some(trans_module) = transaction_module.clone() {
+                    let cloned_trans_module = trans_module.clone();
+                    let cloned_function = function.clone();
+                    let str_typ = format!("{cloned_trans_module}.{cloned_function}");
+                    name_functions.push(str_typ);
+                }
+
+                call_trace_info.push((transaction_module.clone(), function.clone()));
+
+                let mut cta = vec![];
+                let mut ca = vec![];
+
+                let ty_args_start_time = Instant::now();
+                for (arg, seq) in trace
+                    .ty_args
+                    .into_iter()
+                    .zip(call_trace_type_args_len as u64..)
+                {
+                    cta.push(CallTraceTypeArg {
+                        seq,
+                        call_trace_seq: trace_seq,
+                        arg: arg.to_canonical_string(true),
+                    });
+                }
+                let duration_ns = ty_args_start_time.elapsed().as_nanos();
+                info!(duration_ns = duration_ns, "Type args loop duration in  ns");
+
+                call_trace_type_args_len += cta.len();
+
+                let args_start_time = Instant::now();
+                for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
+                    match ValueData::new(to_value(&arg)) {
+                        Some(arg) => {
+                            ca.push(CallTraceArg {
+                                seq,
+                                call_trace_seq: trace_seq,
+                                arg,
+                            });
+                        }
+                        None => continue,
+                    }
+                }
+                let duration_ns = args_start_time.elapsed().as_nanos();
+                info!(duration_ns = duration_ns, "Args loop duration ns");
+
+                call_trace_args_len += ca.len();
+
+                let duration_ns = loop_start_time.elapsed().as_nanos();
+                info!(duration_ns = duration_ns, "Loop duration in  ns");
+
+                (call_trace, (ca, cta))
+            })
+            .unzip();
+
+        let total_duration = start_time.elapsed().as_nanos();
+        let call_traces_len = call_traces.len();
+        let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
+        let total_type_args_len = type_args
+            .iter()
+            .map(|typ_arg| (*typ_arg).len())
+            .sum::<usize>();
+
+        let str_name_functions = format!("{:?}", name_functions);
+        let str_call_trace_info = format!("{:?}", call_trace_info);
+
+        info!(duration_ns = total_duration, total_call_traces_len=call_traces_len,
+        total_args_len=total_args_len, total_type_args_len=total_type_args_len,
+        name_functions = str_name_functions,
+        call_trace_names = str_call_trace_info
+        ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
+
+        ctx.call_traces.extend(call_traces);
+        ctx.call_trace_args.extend(args.into_iter().flatten());
+        ctx.call_trace_type_args
+            .extend(type_args.into_iter().flatten());
     }
 }
 
@@ -239,132 +452,6 @@ fn register_programmable_transaction(ctx: &mut SuiCtx, tx: &ProgrammableTransact
             _ => continue,
         }
     }
-}
-
-fn register_call_traces(ctx: &mut SuiCtx, tx_seq: u64, move_call_traces: Vec<MoveCallTrace>) {
-    info!("Starting register calltraces");
-    let mut call_trace_args_len = ctx.call_trace_args.len();
-    let mut call_trace_type_args_len = ctx.call_trace_type_args.len();
-
-    let mut name_functions = vec![];
-    let mut call_trace_info: Vec<(Option<String>, String)> = vec![];
-
-    let start_time = Instant::now();
-
-    let (call_traces, (args, type_args)): (Vec<_>, (Vec<_>, Vec<_>)) = move_call_traces
-        .into_iter()
-        .zip(0..)
-        .map(|(trace, trace_seq)| {
-            let loop_start_time = Instant::now();
-            let trace_seq = trace_seq as u64;
-
-            let transaction_module: Option<String> =
-                trace.module_id.map(|module| module.short_str_lossless());
-            let function = trace.function.to_string();
-
-            let call_trace = CallTrace {
-                seq: trace_seq,
-                tx_seq,
-                depth: trace.depth,
-                call_type: match trace.call_type {
-                    MoveCallType::Call => 0,
-                    MoveCallType::CallGeneric => 1,
-                },
-                gas_used: trace.gas_used,
-                transaction_module: transaction_module.clone(),
-                function: function.clone(),
-            };
-
-            // applying filter, not module, we don t need args
-            if transaction_module.is_none() {
-                return (call_trace, (vec![], vec![]));
-            }
-
-            // applying filter
-            if let Some(trans_module) = transaction_module.clone() {
-                let tuple_to_filter = (trans_module.as_str(), function.as_str());
-                if trans_module.as_str() != "0x9::bridge"
-                    && !FILTERED_ARG_FOR_CALL_TRACES.contains(&tuple_to_filter)
-                {
-                    return (call_trace, (vec![], vec![]));
-                }
-            }
-
-            if let Some(trans_module) = transaction_module.clone() {
-                let cloned_trans_module = trans_module.clone();
-                let cloned_function = function.clone();
-                let str_typ = format!("{cloned_trans_module}.{cloned_function}");
-                name_functions.push(str_typ);
-            }
-
-            call_trace_info.push((transaction_module.clone(), function.clone()));
-
-            let mut cta = vec![];
-            let mut ca = vec![];
-
-            let ty_args_start_time = Instant::now();
-            for (arg, seq) in trace
-                .ty_args
-                .into_iter()
-                .zip(call_trace_type_args_len as u64..)
-            {
-                cta.push(CallTraceTypeArg {
-                    seq,
-                    call_trace_seq: trace_seq,
-                    arg: arg.to_canonical_string(true),
-                });
-            }
-            let duration_ns = ty_args_start_time.elapsed().as_nanos();
-            info!(duration_ns = duration_ns, "Type args loop duration in  ns");
-
-            call_trace_type_args_len += cta.len();
-
-            let args_start_time = Instant::now();
-            for (arg, seq) in trace.args.into_iter().zip(call_trace_args_len as u64..) {
-                match ValueData::new(to_value(&arg)) {
-                    Some(arg) => {
-                        ca.push(CallTraceArg {
-                            seq,
-                            call_trace_seq: trace_seq,
-                            arg,
-                        });
-                    }
-                    None => continue,
-                }
-            }
-            let duration_ns = args_start_time.elapsed().as_nanos();
-            info!(duration_ns = duration_ns, "Args loop duration ns");
-
-            call_trace_args_len += ca.len();
-
-            let duration_ns = loop_start_time.elapsed().as_nanos();
-            info!(duration_ns = duration_ns, "Loop duration in  ns");
-
-            (call_trace, (ca, cta))
-        })
-        .unzip();
-
-    let total_duration = start_time.elapsed().as_nanos();
-    let call_traces_len = call_traces.len();
-    let total_args_len = args.iter().map(|arg| (*arg).len()).sum::<usize>();
-    let total_type_args_len = type_args
-        .iter()
-        .map(|typ_arg| (*typ_arg).len())
-        .sum::<usize>();
-
-    let str_name_functions = format!("{:?}", name_functions);
-    let str_call_trace_info = format!("{:?}", call_trace_info);
-
-    info!(duration_ns = total_duration, total_call_traces_len=call_traces_len,
-        total_args_len=total_args_len, total_type_args_len=total_type_args_len,
-        name_functions = str_name_functions,
-        call_trace_names = str_call_trace_info
-        ,"Total duration (ns), total call traces size, args size and type args size, time for cta and ca loops");
-
-    ctx.call_traces.extend(call_traces);
-    ctx.call_trace_args.extend(args.into_iter().flatten());
-    ctx.call_trace_type_args
-        .extend(type_args.into_iter().flatten());
 }
 
 fn register_events(
@@ -740,5 +827,110 @@ mod tests {
         let value: &'static str = (&command).into();
 
         assert_eq!(value, String::from("Publish"));
+    }
+
+    #[test]
+    fn test_parse_env_var_to_tuples_from_env() {
+        env::set_var("TUPLES", "(foo,bar),(baz,qux),(quux,corge)");
+        let tuples_str = env::var("TUPLES").unwrap();
+        let expected_output = vec![
+            ("foo".to_string(), "bar".to_string()),
+            ("baz".to_string(), "qux".to_string()),
+            ("quux".to_string(), "corge".to_string()),
+        ];
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, expected_output);
+    }
+
+    #[test]
+    fn test_parse_env_var_to_tuples_empty_from_env() {
+        env::set_var("TUPLES", "");
+        let expected_output: Vec<(String, String)> = Vec::new();
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, expected_output);
+    }
+
+    #[test]
+    fn test_parse_env_var_to_tuples_single_from_env() {
+        env::set_var("TUPLES", "(single,tuple)");
+        let expected_output = vec![("single".to_string(), "tuple".to_string())];
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, expected_output);
+    }
+
+    #[test]
+    fn test_parse_env_var_to_tuples_whitespace_from_env() {
+        env::set_var("TUPLES", "( with, spaces ),(more,spaces)");
+        let expected_output = vec![
+            ("with".to_string(), "spaces".to_string()),
+            ("more".to_string(), "spaces".to_string()),
+        ];
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, expected_output);
+    }
+
+    #[test]
+    fn test_parse_env_to_tuples_wrong_info_from_env() {
+        env::set_var("TUPLES", "aaaa");
+        let filtered_vector = load_modules_with_functions("TUPLES");
+        assert_eq!(filtered_vector, vec![]);
+    }
+
+    #[test]
+    fn test_parse_module_functions() {
+        env::set_var("TUPLES", "(single,tuple)");
+        let expected_output = vec![("single".to_string(), "tuple".to_string())];
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, expected_output);
+    }
+
+    #[test]
+    fn test_parse_default_module_functions() {
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(
+            output,
+            FILTERED_ARG_FOR_CALL_TRACES
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect::<Vec<(String, String)>>()
+        );
+    }
+
+    #[test]
+    fn test_parse_load_patterns() {
+        env::set_var("PATTERNS", "single,second");
+        let output = load_patterns("PATTERNS");
+        assert_eq!(output, vec![String::from("single"), String::from("second")]);
+    }
+
+    #[test]
+    fn test_parse_default_load_patterns() {
+        let output = load_patterns("PATTERNS");
+        assert_eq!(
+            output,
+            FILTERER_PATTERN
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+        );
+    }
+
+    #[test]
+    fn test_parse_load_modules() {
+        env::set_var("MODS", "single,second");
+        let output = load_modules("MODS");
+        assert_eq!(output, vec![String::from("single"), String::from("second")]);
+    }
+
+    #[test]
+    fn test_parse_default_load_modules() {
+        let output = load_patterns("MODS");
+        assert_eq!(
+            output,
+            FILTERED_MODS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+        );
     }
 }

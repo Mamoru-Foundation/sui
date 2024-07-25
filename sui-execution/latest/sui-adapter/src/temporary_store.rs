@@ -252,7 +252,6 @@ impl<'backing> TemporaryStore<'backing> {
         let loaded_per_epoch_config_objects = self.loaded_per_epoch_config_objects.read().clone();
         let inner = self.into_inner_with_call_traces(call_traces);
 
-
         let effects = TransactionEffects::new_from_execution_v2(
             status,
             epoch,
