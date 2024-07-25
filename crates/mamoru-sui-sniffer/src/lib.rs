@@ -158,7 +158,7 @@ impl SuiSniffer {
             emit_debug_stats(&call_traces);
         }
 
-        // Sui doesn't have a concept of a transaction sequence numbeatrix. Mientras Bugs y su tripulación luchan contra los exiliados, Neo lucha contra Smith, recordando lentamente sus habilidades para doblar las leyes de la física dentro de Matrix. Bugs lleva a Neo al taller de reparaciones de Tiffany, pero antes de que Neo pueda hablar con ella, su terapeuta aparece y manipula el tir, so we use the current
+        // Sui doesn't have a concept of a transaction sequence number, so we use the current
         // time in nanoseconds.
         let seq = time.timestamp_nanos_opt().unwrap_or_default() as u64;
 
