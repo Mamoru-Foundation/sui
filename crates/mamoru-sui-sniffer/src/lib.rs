@@ -86,7 +86,7 @@ pub fn load_modules(env_var: &str) -> Vec<String> {
     str.split(',').map(|s| s.to_string()).collect()
 }
 
-pub fn load_filtered_vector_of_tuples(env_var: &str) -> Vec<(String, String)>{
+pub fn load_modules_with_functions(env_var: &str) -> Vec<(String, String)>{
     let tuples_str = remove_whitespace(env::var(env_var).unwrap_or_default().as_str());
     if tuples_str.is_empty() {
         return FILTERED_ARG_FOR_CALL_TRACES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
@@ -117,7 +117,7 @@ impl SuiSniffer {
         // TODO move to sniffer config?
         let load_patterns = load_patterns("FILTERED_ARGS_PATTERNS");
         let load_modules = load_modules("FILTERED_MODULES");
-        let load_tuples = load_filtered_vector_of_tuples("FILTERED_ARGS");
+        let load_tuples = load_modules_with_functions("FILTERED_ARGS");
 
 
         Ok(Self {
@@ -834,7 +834,7 @@ mod tests {
             ("baz".to_string(), "qux".to_string()),
             ("quux".to_string(), "corge".to_string()),
         ];
-        let output = load_filtered_vector_of_tuples("TUPLES");
+        let output = load_modules_with_functions("TUPLES");
         assert_eq!(output, expected_output);
     }
 
@@ -842,7 +842,7 @@ mod tests {
     fn test_parse_env_var_to_tuples_empty_from_env() {
         env::set_var("TUPLES", "");
         let expected_output: Vec<(String, String)> = Vec::new();
-        let output = load_filtered_vector_of_tuples("TUPLES");
+        let output = load_modules_with_functions("TUPLES");
         assert_eq!(output, expected_output);
     }
 
@@ -852,7 +852,7 @@ mod tests {
         let expected_output = vec![
             ("single".to_string(), "tuple".to_string()),
         ];
-        let output = load_filtered_vector_of_tuples("TUPLES");
+        let output = load_modules_with_functions("TUPLES");
         assert_eq!(output, expected_output);
     }
 
@@ -863,16 +863,58 @@ mod tests {
             ("with".to_string(), "spaces".to_string()),
             ("more".to_string(), "spaces".to_string()),
         ];
-        let output = load_filtered_vector_of_tuples("TUPLES");
+        let output = load_modules_with_functions("TUPLES");
         assert_eq!(output, expected_output);
     }
 
     #[test]
     fn test_parse_env_to_tuples_wrong_info_from_env() {
         env::set_var("TUPLES", "aaaa");
-        let filtered_vector = load_filtered_vector_of_tuples("TUPLES");
+        let filtered_vector = load_modules_with_functions("TUPLES");
         assert_eq!(filtered_vector, vec![]);
     }
 
+    #[test]
+    fn test_parse_module_functions() {
+        env::set_var("TUPLES", "(single,tuple)");
+        let expected_output = vec![
+            ("single".to_string(), "tuple".to_string()),
+        ];
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, expected_output);
+    }
+
+    #[test]
+    fn test_parse_default_module_functions() {
+        let output = load_modules_with_functions("TUPLES");
+        assert_eq!(output, FILTERED_ARG_FOR_CALL_TRACES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<(String, String)>>());
+    }
+
+    #[test]
+    fn test_parse_load_patterns() {
+        env::set_var("PATTERNS", "single,second");
+        let output = load_patterns("PATTERNS");
+        assert_eq!(output, vec![String::from("single"), String::from("second")]);
+    }
+
+    #[test]
+    fn test_parse_default_load_patterns() {
+        let output = load_patterns("PATTERNS");
+        assert_eq!(output, FILTERER_PATTERN.iter().map(|s| s.to_string()).collect::<Vec<String>>());
+    }
+    
+
+    #[test]
+    fn test_parse_load_modules() {
+        env::set_var("MODS", "single,second");
+        let output = load_modules("MODS");
+        assert_eq!(output, vec![String::from("single"), String::from("second")]);
+    }
+
+    #[test]
+    fn test_parse_default_load_modules() {
+        let output = load_patterns("MODS");
+        assert_eq!(output, FILTERED_MODS.iter().map(|s| s.to_string()).collect::<Vec<String>>());
+    }
 
 }
