@@ -44,7 +44,7 @@ use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
 use sui_types::transaction::{EndOfEpochTransactionKind, TransactionData, TransactionExpiration};
-use sui_types::type_resolver::LayoutResolver;
+use sui_types::layout_resolver::LayoutResolver;
 use sui_types::{
     effects::{TransactionEffects, TransactionEffectsAPI},
     event::Event,

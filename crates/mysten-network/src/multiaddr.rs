@@ -101,6 +101,16 @@ impl Multiaddr {
         Ok(SocketAddr::new(ip, tcp_port))
     }
 
+    // Returns true if the third component in the multiaddr is `Protocol::Tcp`
+    pub fn is_loosely_valid_tcp_addr(&self) -> bool {
+        let mut iter = self.iter();
+        iter.next(); // Skip the ip/dns part
+        match iter.next() {
+            Some(Protocol::Tcp(_)) => true,
+            _ => false, // including `None` and `Some(other)`
+        }
+    }
+
     /// Set the ip address to `0.0.0.0`. For instance, it converts the following address
     /// `/ip4/155.138.174.208/tcp/1500/http` into `/ip4/0.0.0.0/tcp/1500/http`.
     /// This is useful when starting a server and you want to listen on all interfaces.
@@ -330,24 +340,6 @@ pub(crate) fn parse_ip6(address: &Multiaddr) -> Result<(SocketAddr, &'static str
     Ok((socket_addr, http_or_https))
 }
 
-// Parse a full /unix/-/{http,https} address
-#[cfg(unix)]
-pub(crate) fn parse_unix(address: &Multiaddr) -> Result<(Cow<'_, str>, &'static str)> {
-    let mut iter = address.iter();
-
-    let path = match iter
-        .next()
-        .ok_or_else(|| eyre!("unexpected end of multiaddr"))?
-    {
-        Protocol::Unix(path) => path,
-        other => return Err(eyre!("expected unix found {other}")),
-    };
-    let http_or_https = parse_http_https(&mut iter)?;
-    parse_end(&mut iter)?;
-
-    Ok((path, http_or_https))
-}
-
 #[cfg(test)]
 mod test {
     use super::Multiaddr;
@@ -374,6 +366,26 @@ mod test {
         let _ = multi_addr_dns
             .to_socket_addr()
             .expect_err("DNS is unsupported");
+    }
+
+    #[test]
+    fn test_is_loosely_valid_tcp_addr() {
+        let multi_addr_ipv4 = Multiaddr(multiaddr!(Ip4([127, 0, 0, 1]), Tcp(10500u16)));
+        assert!(multi_addr_ipv4.is_loosely_valid_tcp_addr());
+        let multi_addr_ipv6 = Multiaddr(multiaddr!(Ip6([172, 0, 0, 1, 1, 1, 1, 1]), Tcp(10500u16)));
+        assert!(multi_addr_ipv6.is_loosely_valid_tcp_addr());
+        let multi_addr_dns = Multiaddr(multiaddr!(Dnsaddr("mysten.sui"), Tcp(10500u16)));
+        assert!(multi_addr_dns.is_loosely_valid_tcp_addr());
+
+        let multi_addr_ipv4 = Multiaddr(multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16)));
+        assert!(!multi_addr_ipv4.is_loosely_valid_tcp_addr());
+        let multi_addr_ipv6 = Multiaddr(multiaddr!(Ip6([172, 0, 0, 1, 1, 1, 1, 1]), Udp(10500u16)));
+        assert!(!multi_addr_ipv6.is_loosely_valid_tcp_addr());
+        let multi_addr_dns = Multiaddr(multiaddr!(Dnsaddr("mysten.sui"), Udp(10500u16)));
+        assert!(!multi_addr_dns.is_loosely_valid_tcp_addr());
+
+        let invalid_multi_addr_ipv4 = Multiaddr(multiaddr!(Ip4([127, 0, 0, 1])));
+        assert!(!invalid_multi_addr_ipv4.is_loosely_valid_tcp_addr());
     }
 
     #[test]
