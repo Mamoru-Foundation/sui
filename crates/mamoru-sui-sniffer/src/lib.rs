@@ -32,7 +32,7 @@ use sui_types::base_types::ObjectRef;
 use sui_types::inner_temporary_store::InnerTemporaryStore;
 use sui_types::object::{Data, Owner};
 use sui_types::storage::ObjectStore;
-use sui_types::type_resolver::{into_struct_layout, LayoutResolver};
+use sui_types::layout_resolver::{into_struct_layout, LayoutResolver};
 use sui_types::{
     effects::{TransactionEffects, TransactionEffectsAPI},
     event::Event,
