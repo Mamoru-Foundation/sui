@@ -42,8 +42,8 @@ impl<P: ProgressStore> ProgressStore for ProgressStoreWrapper<P> {
             self.progress_store
                 .save(task_name.clone(), checkpoint_number)
                 .await?;
-            self.pending_state.insert(task_name, checkpoint_number);
         }
+        self.pending_state.insert(task_name, checkpoint_number);
         Ok(())
     }
 }

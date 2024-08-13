@@ -1,5 +1,31 @@
 # @mysten/wallet-standard
 
+## 0.13.0
+
+### Minor Changes
+
+- 0851b31: Deprecate requestType option when executing transactions
+
+### Patch Changes
+
+- Updated dependencies [0851b31]
+- Updated dependencies [f37b3c2]
+  - @mysten/sui@1.5.0
+
+## 0.12.14
+
+### Patch Changes
+
+- Updated dependencies [4419234]
+  - @mysten/sui@1.4.0
+
+## 0.12.13
+
+### Patch Changes
+
+- Updated dependencies [a45f461]
+  - @mysten/sui@1.3.1
+
 ## 0.12.12
 
 ### Patch Changes
