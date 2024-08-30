@@ -6,6 +6,9 @@ license = "Apache-2.0"
 publish = false
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = { workspace = true, features = ["backtrace"] }
 arc-swap.workspace = true
@@ -86,7 +89,6 @@ sui-framework.workspace = true
 sui-swarm-config.workspace = true
 sui-genesis-builder.workspace = true
 sui-json-rpc-types.workspace = true
-sui-rest-api.workspace = true
 sui-macros.workspace = true
 sui-move-build.workspace = true
 sui-network.workspace = true

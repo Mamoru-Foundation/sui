@@ -1121,7 +1121,7 @@ impl GlobalEnv {
     }
 
     /// Gets a StructEnv in this module by its `StructTag`
-    pub fn find_struct_by_tag(
+    pub fn find_datatype_by_tag(
         &self,
         tag: &language_storage::StructTag,
     ) -> Option<QualifiedId<DatatypeId>> {
@@ -1129,6 +1129,10 @@ impl GlobalEnv {
             .and_then(|menv| {
                 menv.find_struct_by_identifier(tag.name.clone())
                     .map(|sid| menv.get_id().qualified(sid))
+                    .or_else(|| {
+                        menv.find_enum_by_identifier(tag.name.clone())
+                            .map(|sid| menv.get_id().qualified(sid))
+                    })
             })
     }
 
@@ -1242,16 +1246,23 @@ impl GlobalEnv {
         sid: DatatypeId,
         ts: &[Type],
     ) -> Option<language_storage::StructTag> {
-        self.get_struct_type(mid, sid, ts)?.into_struct_tag()
+        self.get_datatype(mid, sid, ts)?.into_struct_tag()
     }
 
     /// Attempt to compute a struct type for (`mid`, `sid`, `ts`).
-    pub fn get_struct_type(&self, mid: ModuleId, sid: DatatypeId, ts: &[Type]) -> Option<MType> {
+    pub fn get_datatype(&self, mid: ModuleId, sid: DatatypeId, ts: &[Type]) -> Option<MType> {
         let menv = self.get_module(mid);
+        let name = menv
+            .find_struct(sid.symbol())
+            .map(|senv| senv.get_identifier())
+            .or_else(|| {
+                menv.find_enum(sid.symbol())
+                    .map(|eenv| eenv.get_identifier())
+            })??;
         Some(MType::Struct {
             address: *menv.self_address(),
             module: menv.get_identifier(),
-            name: menv.get_struct(sid).get_identifier()?,
+            name,
             type_arguments: ts
                 .iter()
                 .map(|t| t.clone().into_normalized_type(self).unwrap())
@@ -2030,10 +2041,13 @@ impl<'env> ModuleEnv<'env> {
                     .env
                     .find_module(&self.env.to_module_name(&declaring_module))
                     .expect("undefined module");
-                let struct_env = declaring_module_env
-                    .find_struct(self.env.symbol_pool.make(sname))
-                    .expect("undefined struct");
-                Type::Datatype(declaring_module_env.data.id, struct_env.get_id(), vec![])
+                let name = self.env.symbol_pool.make(sname);
+                let datatype_id = declaring_module_env
+                    .find_struct(name)
+                    .map(|env| env.get_id())
+                    .or_else(|| declaring_module_env.find_enum(name).map(|env| env.get_id()))
+                    .expect("undefined datatype");
+                Type::Datatype(declaring_module_env.data.id, datatype_id, vec![])
             }
             SignatureToken::DatatypeInstantiation(inst) => {
                 let (handle_idx, args) = &**inst;
@@ -2046,12 +2060,15 @@ impl<'env> ModuleEnv<'env> {
                     .env
                     .find_module(&self.env.to_module_name(&declaring_module))
                     .expect("undefined module");
-                let struct_env = declaring_module_env
-                    .find_struct(self.env.symbol_pool.make(sname))
-                    .expect("undefined struct");
+                let name = self.env.symbol_pool.make(sname);
+                let datatype_id = declaring_module_env
+                    .find_struct(name)
+                    .map(|env| env.get_id())
+                    .or_else(|| declaring_module_env.find_enum(name).map(|env| env.get_id()))
+                    .expect("undefined datatype");
                 Type::Datatype(
                     declaring_module_env.data.id,
-                    struct_env.get_id(),
+                    datatype_id,
                     self.globalize_signatures(args),
                 )
             }

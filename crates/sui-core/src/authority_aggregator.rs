@@ -277,6 +277,7 @@ pub enum AggregatorProcessCertificateError {
 }
 
 pub fn group_errors(errors: Vec<(SuiError, Vec<AuthorityName>, StakeUnit)>) -> GroupedErrors {
+    #[allow(clippy::mutable_key_type)]
     let mut grouped_errors = HashMap::new();
     for (error, names, stake) in errors {
         let entry = grouped_errors.entry(error).or_insert((0, vec![]));
@@ -1501,11 +1502,11 @@ where
         // create a set of validators that we should sample to request input/output objects from
         let validators_to_sample =
             if request.include_input_objects || request.include_output_objects {
-                // Always at least ask 1 validator
-                let number_to_sample = std::cmp::max(1, self.committee.num_members() / 2);
+                // Number of validators to request input/output objects from
+                const NUMBER_TO_SAMPLE: usize = 5;
 
                 self.committee
-                    .choose_multiple_weighted_iter(number_to_sample)
+                    .choose_multiple_weighted_iter(NUMBER_TO_SAMPLE)
                     .cloned()
                     .collect()
             } else {

@@ -1,56 +1,50 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::handlers::committer::start_tx_checkpoint_commit_task;
-use crate::handlers::tx_processor::IndexingPackageBuffer;
-use crate::models::display::StoredDisplay;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex};
+
 use async_trait::async_trait;
+use diesel::r2d2::R2D2Connection;
 use itertools::Itertools;
+use tap::tap::TapFallible;
+use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
+
 use move_core_types::annotated_value::{MoveStructLayout, MoveTypeLayout};
 use move_core_types::language_storage::{StructTag, TypeTag};
 use mysten_metrics::{get_metrics, spawn_monitored_task};
-use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex};
+use sui_data_ingestion_core::Worker;
+use sui_json_rpc_types::SuiMoveValue;
 use sui_package_resolver::{PackageStore, PackageStoreWithLruCache, Resolver};
 use sui_rest_api::{CheckpointData, CheckpointTransaction};
-use sui_types::base_types::ObjectRef;
+use sui_types::base_types::ObjectID;
 use sui_types::dynamic_field::DynamicFieldInfo;
 use sui_types::dynamic_field::DynamicFieldName;
 use sui_types::dynamic_field::DynamicFieldType;
+use sui_types::effects::TransactionEffectsAPI;
+use sui_types::event::SystemEpochInfoEvent;
 use sui_types::messages_checkpoint::{
     CertifiedCheckpointSummary, CheckpointContents, CheckpointSequenceNumber,
 };
 use sui_types::object::Object;
-use tokio_util::sync::CancellationToken;
-
-use tokio::sync::watch;
-
-use diesel::r2d2::R2D2Connection;
-use std::collections::hash_map::Entry;
-use std::collections::HashSet;
-use sui_data_ingestion_core::Worker;
-use sui_json_rpc_types::SuiMoveValue;
-use sui_types::base_types::SequenceNumber;
-use sui_types::effects::{TransactionEffects, TransactionEffectsAPI};
-use sui_types::event::SystemEpochInfoEvent;
 use sui_types::object::Owner;
-use sui_types::transaction::TransactionDataAPI;
-use tap::tap::TapFallible;
-use tracing::{info, warn};
-
-use sui_types::base_types::ObjectID;
 use sui_types::sui_system_state::sui_system_state_summary::SuiSystemStateSummary;
 use sui_types::sui_system_state::{get_sui_system_state, SuiSystemStateTrait};
-
-use crate::errors::IndexerError;
-use crate::metrics::IndexerMetrics;
+use sui_types::transaction::TransactionDataAPI;
 
 use crate::db::ConnectionPool;
+use crate::errors::IndexerError;
+use crate::handlers::committer::start_tx_checkpoint_commit_task;
+use crate::handlers::tx_processor::IndexingPackageBuffer;
+use crate::metrics::IndexerMetrics;
+use crate::models::display::StoredDisplay;
 use crate::store::package_resolver::{IndexerStorePackageResolver, InterimPackageResolver};
 use crate::store::{IndexerStore, PgIndexerStore};
 use crate::types::{
-    IndexedCheckpoint, IndexedDeletedObject, IndexedEpochInfo, IndexedEvent, IndexedObject,
-    IndexedPackage, IndexedTransaction, IndexerResult, TransactionKind, TxIndex,
+    EventIndex, IndexedCheckpoint, IndexedDeletedObject, IndexedEpochInfo, IndexedEvent,
+    IndexedObject, IndexedPackage, IndexedTransaction, IndexerResult, TransactionKind, TxIndex,
 };
 
 use super::tx_processor::EpochEndIndexingObjectStore;
@@ -215,6 +209,7 @@ where
                     0, //first_checkpoint_id
                     None,
                 ),
+                network_total_transactions: 0,
             }));
         }
 
@@ -241,7 +236,12 @@ where
         let event = bcs::from_bytes::<SystemEpochInfoEvent>(&epoch_event.contents)?;
 
         // Now we just entered epoch X, we want to calculate the diff between
-        // TotalTransactionsByEndOfEpoch(X-1) and TotalTransactionsByEndOfEpoch(X-2)
+        // TotalTransactionsByEndOfEpoch(X-1) and TotalTransactionsByEndOfEpoch(X-2). Note that on
+        // the indexer's chain-reading side, this is not guaranteed to have the latest data. Rather
+        // than impose a wait on the reading side, however, we overwrite this on the persisting
+        // side, where we can guarantee that the previous epoch's checkpoints have been written to
+        // db.
+
         let network_tx_count_prev_epoch = match system_state.epoch {
             // If first epoch change, this number is 0
             1 => Ok(0),
@@ -265,6 +265,7 @@ where
                 checkpoint_summary.sequence_number + 1, // first_checkpoint_id
                 Some(&event),
             ),
+            network_total_transactions: checkpoint_summary.network_total_transactions,
         }))
     }
 
@@ -287,20 +288,21 @@ where
         let object_history_changes: TransactionObjectChangesToCommit =
             Self::index_objects_history(data.clone(), package_resolver.clone()).await?;
 
-        let (checkpoint, db_transactions, db_events, db_indices, db_displays) = {
+        let (checkpoint, db_transactions, db_events, db_tx_indices, db_event_indices, db_displays) = {
             let CheckpointData {
                 transactions,
                 checkpoint_summary,
                 checkpoint_contents,
             } = data;
 
-            let (db_transactions, db_events, db_indices, db_displays) = Self::index_transactions(
-                transactions,
-                &checkpoint_summary,
-                &checkpoint_contents,
-                &metrics,
-            )
-            .await?;
+            let (db_transactions, db_events, db_tx_indices, db_event_indices, db_displays) =
+                Self::index_transactions(
+                    transactions,
+                    &checkpoint_summary,
+                    &checkpoint_contents,
+                    &metrics,
+                )
+                .await?;
 
             let successful_tx_num: u64 = db_transactions.iter().map(|t| t.successful_tx_num).sum();
             (
@@ -311,7 +313,8 @@ where
                 ),
                 db_transactions,
                 db_events,
-                db_indices,
+                db_tx_indices,
+                db_event_indices,
                 db_displays,
             )
         };
@@ -334,7 +337,8 @@ where
             checkpoint,
             transactions: db_transactions,
             events: db_events,
-            tx_indices: db_indices,
+            tx_indices: db_tx_indices,
+            event_indices: db_event_indices,
             display_updates: db_displays,
             object_changes,
             object_history_changes,
@@ -352,6 +356,7 @@ where
         Vec<IndexedTransaction>,
         Vec<IndexedEvent>,
         Vec<TxIndex>,
+        Vec<EventIndex>,
         BTreeMap<String, StoredDisplay>,
     )> {
         let checkpoint_seq = checkpoint_summary.sequence_number();
@@ -372,7 +377,8 @@ where
         let mut db_transactions = Vec::new();
         let mut db_events = Vec::new();
         let mut db_displays = BTreeMap::new();
-        let mut db_indices = Vec::new();
+        let mut db_tx_indices = Vec::new();
+        let mut db_event_indices = Vec::new();
 
         for tx in transactions {
             let CheckpointTransaction {
@@ -390,6 +396,7 @@ where
                     checkpoint_seq, tx_digest, sender_signed_data.digest()
                 )));
             }
+
             let tx = sender_signed_data.transaction_data();
             let events = events
                 .as_ref()
@@ -412,6 +419,12 @@ where
                     checkpoint_summary.timestamp_ms,
                 )
             }));
+
+            db_event_indices.extend(
+                events.iter().enumerate().map(|(idx, event)| {
+                    EventIndex::from_event(tx_sequence_number, idx as u64, event)
+                }),
+            );
 
             db_displays.extend(
                 events
@@ -440,7 +453,7 @@ where
                 object_changes,
                 balance_change,
                 events,
-                transaction_kind,
+                transaction_kind: transaction_kind.clone(),
                 successful_tx_num: if fx.status().is_ok() {
                     tx.kind().tx_count() as u64
                 } else {
@@ -468,8 +481,8 @@ where
             // Payers
             let payers = vec![tx.gas_owner()];
 
-            // Senders
-            let senders = vec![tx.sender()];
+            // Sender
+            let sender = tx.sender();
 
             // Recipients
             let recipients = fx
@@ -489,19 +502,26 @@ where
                 .map(|(p, m, f)| (*<&ObjectID>::clone(p), m.to_string(), f.to_string()))
                 .collect();
 
-            db_indices.push(TxIndex {
+            db_tx_indices.push(TxIndex {
                 tx_sequence_number,
                 transaction_digest: tx_digest,
                 checkpoint_sequence_number: *checkpoint_seq,
                 input_objects,
                 changed_objects,
-                senders,
+                sender,
                 payers,
                 recipients,
                 move_calls,
+                tx_kind: transaction_kind,
             });
         }
-        Ok((db_transactions, db_events, db_indices, db_displays))
+        Ok((
+            db_transactions,
+            db_events,
+            db_tx_indices,
+            db_event_indices,
+            db_displays,
+        ))
     }
 
     pub(crate) async fn index_objects(
@@ -511,71 +531,41 @@ where
     ) -> Result<TransactionObjectChangesToCommit, IndexerError> {
         let _timer = metrics.indexing_objects_latency.start_timer();
         let checkpoint_seq = data.checkpoint_summary.sequence_number;
-        let deleted_objects = data
-            .transactions
-            .iter()
-            .flat_map(|tx| get_deleted_objects(&tx.effects))
-            .collect::<Vec<_>>();
-        let deleted_object_ids = deleted_objects
-            .iter()
-            .map(|o| (o.0, o.1))
-            .collect::<HashSet<_>>();
-        let indexed_deleted_objects = deleted_objects
+
+        let eventually_removed_object_refs_post_version =
+            data.eventually_removed_object_refs_post_version();
+        let indexed_eventually_removed_objects = eventually_removed_object_refs_post_version
             .into_iter()
-            .map(|o| IndexedDeletedObject {
-                object_id: o.0,
-                object_version: o.1.value(),
+            .map(|obj_ref| IndexedDeletedObject {
+                object_id: obj_ref.0,
+                object_version: obj_ref.1.into(),
                 checkpoint_sequence_number: checkpoint_seq,
             })
             .collect();
 
-        let (latest_objects, intermediate_versions) = get_latest_objects(data.output_objects());
-
-        let live_objects: Vec<Object> = data
-            .transactions
-            .iter()
-            .flat_map(|tx| {
-                let CheckpointTransaction {
-                    transaction: tx,
-                    effects: fx,
-                    ..
-                } = tx;
-                fx.all_changed_objects()
-                    .into_iter()
-                    .filter_map(|(oref, _owner, _kind)| {
-                        // We don't care about objects that are deleted or updated more than once
-                        if intermediate_versions.contains(&(oref.0, oref.1))
-                            || deleted_object_ids.contains(&(oref.0, oref.1))
-                        {
-                            return None;
-                        }
-                        let object = latest_objects.get(&(oref.0)).unwrap_or_else(|| {
-                            panic!(
-                                "object {:?} not found in CheckpointData (tx_digest: {})",
-                                oref.0,
-                                tx.digest()
-                            )
-                        });
-                        assert_eq!(oref.1, object.version());
-                        Some(object.clone())
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-
+        let latest_live_output_objects = data.latest_live_output_objects();
+        let latest_live_output_object_map = latest_live_output_objects
+            .clone()
+            .into_iter()
+            .map(|o| (o.id(), o.clone()))
+            .collect::<HashMap<_, _>>();
         let move_struct_layout_map =
-            get_move_struct_layout_map(&live_objects, package_resolver).await?;
-        let changed_objects = live_objects
+            get_move_struct_layout_map(latest_live_output_objects.clone(), package_resolver)
+                .await?;
+        let changed_objects = latest_live_output_objects
             .into_iter()
             .map(|o| {
-                let df_info =
-                    try_create_dynamic_field_info(&o, &move_struct_layout_map, &latest_objects);
-                df_info.map(|info| IndexedObject::from_object(checkpoint_seq, o, info))
+                let df_info = try_create_dynamic_field_info(
+                    o,
+                    &move_struct_layout_map,
+                    &latest_live_output_object_map,
+                );
+                df_info.map(|info| IndexedObject::from_object(checkpoint_seq, o.clone(), info))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(TransactionObjectChangesToCommit {
             changed_objects,
-            deleted_objects: indexed_deleted_objects,
+            deleted_objects: indexed_eventually_removed_objects,
         })
     }
 
@@ -588,59 +578,42 @@ where
         let deleted_objects = data
             .transactions
             .iter()
-            .flat_map(|tx| get_deleted_objects(&tx.effects))
+            .flat_map(|tx| tx.removed_object_refs_post_version())
             .collect::<Vec<_>>();
         let indexed_deleted_objects: Vec<IndexedDeletedObject> = deleted_objects
             .into_iter()
-            .map(|o| IndexedDeletedObject {
-                object_id: o.0,
-                object_version: o.1.value(),
+            .map(|obj_ref| IndexedDeletedObject {
+                object_id: obj_ref.0,
+                object_version: obj_ref.1.into(),
                 checkpoint_sequence_number: checkpoint_seq,
             })
             .collect();
 
-        let (latest_objects, _) = get_latest_objects(data.output_objects());
-        let history_object_map = data
-            .output_objects()
+        let latest_live_output_objects = data.latest_live_output_objects();
+        let latest_live_output_object_map = latest_live_output_objects
+            .clone()
             .into_iter()
-            .map(|o| ((o.id(), o.version()), o.clone()))
+            .map(|o| (o.id(), o.clone()))
             .collect::<HashMap<_, _>>();
 
-        let history_objects: Vec<Object> = data
+        let output_objects = data
             .transactions
             .iter()
-            .flat_map(|tx| {
-                let CheckpointTransaction {
-                    transaction: tx,
-                    effects: fx,
-                    ..
-                } = tx;
-                fx.all_changed_objects()
-                    .into_iter()
-                    .map(|(oref, _owner, _kind)| {
-                        let history_object = history_object_map.get(&(oref.0, oref.1)).unwrap_or_else(|| {
-                            panic!(
-                                "object {:?} version {:?} not found in CheckpointData (tx_digest: {})",
-                                oref.0,
-                                oref.1,
-                                tx.digest()
-                            )
-                        });
-                        assert_eq!(oref.2, history_object.digest());
-                        history_object.clone()
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-
+            .flat_map(|tx| &tx.output_objects)
+            .collect::<Vec<_>>();
+        // TODO(gegaowp): the current df_info implementation is not correct,
+        // but we have decided remove all df_* except df_kind.
         let move_struct_layout_map =
-            get_move_struct_layout_map(&history_objects, package_resolver).await?;
-        let changed_objects = history_objects
+            get_move_struct_layout_map(output_objects.clone(), package_resolver).await?;
+        let changed_objects = output_objects
             .into_iter()
             .map(|o| {
-                let df_info =
-                    try_create_dynamic_field_info(&o, &move_struct_layout_map, &latest_objects);
-                df_info.map(|info| IndexedObject::from_object(checkpoint_seq, o, info))
+                let df_info = try_create_dynamic_field_info(
+                    o,
+                    &move_struct_layout_map,
+                    &latest_live_output_object_map,
+                );
+                df_info.map(|info| IndexedObject::from_object(checkpoint_seq, o.clone(), info))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -659,8 +632,9 @@ where
             .iter()
             .flat_map(|data| {
                 let checkpoint_sequence_number = data.checkpoint_summary.sequence_number;
-                data.output_objects()
+                data.transactions
                     .iter()
+                    .flat_map(|tx| &tx.output_objects)
                     .filter_map(|o| {
                         if let sui_types::object::Data::Package(p) = &o.data {
                             Some(IndexedPackage {
@@ -684,8 +658,9 @@ where
             .iter()
             .flat_map(|data| {
                 let checkpoint_sequence_number = data.checkpoint_summary.sequence_number;
-                data.output_objects()
+                data.transactions
                     .iter()
+                    .flat_map(|tx| &tx.output_objects)
                     .filter_map(|o| {
                         if let sui_types::object::Data::Package(p) = &o.data {
                             let indexed_pkg = IndexedPackage {
@@ -693,7 +668,7 @@ where
                                 move_package: p.clone(),
                                 checkpoint_sequence_number,
                             };
-                            Some((indexed_pkg, (**o).clone()))
+                            Some((indexed_pkg, o.clone()))
                         } else {
                             None
                         }
@@ -715,11 +690,11 @@ where
 }
 
 async fn get_move_struct_layout_map(
-    objects: &[Object],
+    objects: Vec<&Object>,
     package_resolver: Arc<Resolver<impl PackageStore>>,
 ) -> Result<HashMap<StructTag, MoveStructLayout>, IndexerError> {
     let struct_tags = objects
-        .iter()
+        .into_iter()
         .filter_map(|o| {
             let move_object = o.data.try_as_move().cloned();
             move_object.map(|move_object| {
@@ -768,40 +743,6 @@ async fn get_move_struct_layout_map(
         .into_iter()
         .collect::<HashMap<_, _>>();
     Ok(move_struct_layout_map)
-}
-
-pub fn get_deleted_objects(effects: &TransactionEffects) -> Vec<ObjectRef> {
-    let deleted = effects.deleted().into_iter();
-    let wrapped = effects.wrapped().into_iter();
-    let unwrapped_then_deleted = effects.unwrapped_then_deleted().into_iter();
-    deleted
-        .chain(wrapped)
-        .chain(unwrapped_then_deleted)
-        .collect::<Vec<_>>()
-}
-
-pub fn get_latest_objects(
-    objects: Vec<&Object>,
-) -> (
-    HashMap<ObjectID, Object>,
-    HashSet<(ObjectID, SequenceNumber)>,
-) {
-    let mut latest_objects = HashMap::new();
-    let mut discarded_versions = HashSet::new();
-    for object in objects {
-        match latest_objects.entry(object.id()) {
-            Entry::Vacant(e) => {
-                e.insert(object.clone());
-            }
-            Entry::Occupied(mut e) => {
-                if object.version() > e.get().version() {
-                    discarded_versions.insert((e.get().id(), e.get().version()));
-                    e.insert(object.clone());
-                }
-            }
-        }
-    }
-    (latest_objects, discarded_versions)
 }
 
 fn try_create_dynamic_field_info(

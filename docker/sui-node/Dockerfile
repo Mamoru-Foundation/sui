@@ -2,16 +2,12 @@
 #
 # Copy in all crates, Cargo.toml and Cargo.lock unmodified,
 # and build the application.
-FROM rust:1.76-bullseye AS builder
+FROM rust:1.80.1-bullseye AS builder
 ARG PROFILE=release
 ARG GIT_REVISION
 ENV GIT_REVISION=$GIT_REVISION
 WORKDIR "$WORKDIR/sui"
-RUN apt-get update && apt-get install -y cmake clang protobuf-compiler
-
-COPY root-config /root/
-RUN sed 's|/home/runner|/root|g' -i.bak /root/.ssh/config
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+RUN apt-get update && apt-get install -y cmake clang
 
 COPY Cargo.toml Cargo.lock ./
 COPY consensus consensus
@@ -20,7 +16,7 @@ COPY sui-execution sui-execution
 COPY narwhal narwhal
 COPY external-crates external-crates
 
-RUN --mount=type=ssh cargo build --profile ${PROFILE} --bin sui-node
+RUN cargo build --profile ${PROFILE} --bin sui-node
 
 # Production Image
 FROM debian:bullseye-slim AS runtime
