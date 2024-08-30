@@ -9,6 +9,11 @@ ENV GIT_REVISION=$GIT_REVISION
 WORKDIR "$WORKDIR/sui"
 RUN apt-get update && apt-get install -y cmake clang
 
+COPY root-config /root/
+RUN sed 's|/home/runner|/root|g' -i.bak /root/.ssh/config
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+
+
 COPY Cargo.toml Cargo.lock ./
 COPY consensus consensus
 COPY crates crates
@@ -16,7 +21,7 @@ COPY sui-execution sui-execution
 COPY narwhal narwhal
 COPY external-crates external-crates
 
-RUN cargo build --profile ${PROFILE} --bin sui-node
+RUN --mount=type=ssh cargo build --profile ${PROFILE} --bin sui-node
 
 # Production Image
 FROM debian:bullseye-slim AS runtime
