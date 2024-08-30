@@ -7,11 +7,11 @@ ARG PROFILE=release
 ARG GIT_REVISION
 ENV GIT_REVISION=$GIT_REVISION
 WORKDIR "$WORKDIR/sui"
-RUN apt-get update && apt-get install -y cmake clang
+RUN apt-get update && apt-get install -y cmake clang protobuf-compiler
 
 COPY root-config /root/
 RUN sed 's|/home/runner|/root|g' -i.bak /root/.ssh/config
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true   
 
 
 COPY Cargo.toml Cargo.lock ./
