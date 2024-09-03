@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use std::os::unix::prelude::FileExt;
 use std::{fmt::Write, fs::read_dir, path::PathBuf, str, thread, time::Duration};
 
+use std::env;
 #[cfg(not(msim))]
 use std::str::FromStr;
 
@@ -690,7 +691,7 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
 
     // Try a transfer
     // This should fail due to mismatch of object being sent
-    let args = vec![
+    let args = [
         SuiJsonValue::new(json!(obj))?,
         SuiJsonValue::new(json!(address2))?,
     ];
@@ -711,7 +712,7 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
 
     // Try a transfer with explicitly set gas price.
     // It should fail due to that gas price is below RGP.
-    let args = vec![
+    let args = [
         SuiJsonValue::new(json!(created_obj))?,
         SuiJsonValue::new(json!(address2))?,
     ];
@@ -739,7 +740,7 @@ async fn test_move_call_args_linter_command() -> Result<(), anyhow::Error> {
     // assert!(err_string.contains(&format!("Expected argument of type {package_addr}::object_basics::Object, but found type {framework_addr}::coin::Coin<{framework_addr}::sui::SUI>")));
 
     // Try a proper transfer
-    let args = vec![
+    let args = [
         SuiJsonValue::new(json!(created_obj))?,
         SuiJsonValue::new(json!(address2))?,
     ];
@@ -2079,7 +2080,7 @@ async fn test_package_management_on_upgrade_command_conflict() -> Result<(), any
     let err_string = err_string.replace(&package.object_id().to_string(), "<elided-for-test>");
 
     let expect = expect![[r#"
-        Conflicting published package address: `Move.toml` contains published-at address 0xbad but `Move.lock` file contains published-at address <elided-for-test>. You may want to:
+        Conflicting published package address: `Move.toml` contains published-at address 0x0000000000000000000000000000000000000000000000000000000000000bad but `Move.lock` file contains published-at address <elided-for-test>. You may want to:
 
                          - delete the published-at address in the `Move.toml` if the `Move.lock` address is correct; OR
                          - update the `Move.lock` address using the `sui manage-package` command to be the same as the `Move.toml`; OR
@@ -3931,6 +3932,59 @@ async fn test_clever_errors() -> Result<(), anyhow::Error> {
     );
 
     insta::assert_snapshot!(error_string);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_move_build_bytecode_with_address_resolution() -> Result<(), anyhow::Error> {
+    let test_cluster = TestClusterBuilder::new().build().await;
+    let config_path = test_cluster.swarm.dir().join(SUI_CLIENT_CONFIG);
+
+    // Package setup: a simple package depends on another and copied to tmpdir
+    let mut simple_package_path = PathBuf::from(TEST_DATA_DIR);
+    simple_package_path.push("simple");
+
+    let mut depends_on_simple_package_path = PathBuf::from(TEST_DATA_DIR);
+    depends_on_simple_package_path.push("depends_on_simple");
+
+    let tmp_dir = tempfile::tempdir().unwrap();
+
+    fs_extra::dir::copy(
+        &simple_package_path,
+        &tmp_dir,
+        &fs_extra::dir::CopyOptions::default(),
+    )?;
+
+    fs_extra::dir::copy(
+        &depends_on_simple_package_path,
+        &tmp_dir,
+        &fs_extra::dir::CopyOptions::default(),
+    )?;
+
+    // Publish simple package.
+    let simple_tmp_dir = tmp_dir.path().join("simple");
+    test_with_sui_binary(&[
+        "client",
+        "--client.config",
+        config_path.to_str().unwrap(),
+        "publish",
+        simple_tmp_dir.to_str().unwrap(),
+    ])
+    .await?;
+
+    // Build the package that depends on 'simple' package. Addresses must resolve successfully
+    // from the `Move.lock` for this command to succeed at all.
+    let depends_on_simple_tmp_dir = tmp_dir.path().join("depends_on_simple");
+    test_with_sui_binary(&[
+        "move",
+        "--client.config",
+        config_path.to_str().unwrap(),
+        "build",
+        "--dump-bytecode-as-base64",
+        "--path",
+        depends_on_simple_tmp_dir.to_str().unwrap(),
+    ])
+    .await?;
     Ok(())
 }
 

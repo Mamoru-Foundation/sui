@@ -7,6 +7,7 @@ use std::{net::SocketAddr, sync::Arc};
 use sui_types::traffic_control::RemoteFirewallConfig;
 
 use axum::extract::{ConnectInfo, Json, State};
+use axum::response::Response;
 use futures::StreamExt;
 use hyper::header::HeaderValue;
 use hyper::HeaderMap;
@@ -23,6 +24,7 @@ use serde_json::value::RawValue;
 use sui_core::traffic_controller::{
     metrics::TrafficControllerMetrics, policies::TrafficTally, TrafficController,
 };
+use sui_json_rpc_api::TRANSACTION_EXECUTION_CLIENT_ERROR_CODE;
 use sui_types::traffic_control::ClientIdSource;
 use sui_types::traffic_control::{PolicyConfig, Weight};
 use tracing::error;
@@ -101,12 +103,12 @@ impl<L: Logger> JsonRpcService<L> {
 }
 
 /// Create a response body.
-fn from_template<S: Into<hyper::Body>>(
+fn from_template<S: Into<axum::body::Body>>(
     status: hyper::StatusCode,
     body: S,
     content_type: &'static str,
-) -> hyper::Response<hyper::Body> {
-    hyper::Response::builder()
+) -> Response {
+    Response::builder()
         .status(status)
         .header(
             "content-type",
@@ -119,7 +121,7 @@ fn from_template<S: Into<hyper::Body>>(
 }
 
 /// Create a valid JSON response.
-pub(crate) fn ok_response(body: String) -> hyper::Response<hyper::Body> {
+pub(crate) fn ok_response(body: String) -> Response {
     const JSON: &str = "application/json; charset=utf-8";
     from_template(hyper::StatusCode::OK, body, JSON)
 }
@@ -277,6 +279,8 @@ fn handle_traffic_resp(
 fn normalize(err: ErrorCode) -> Weight {
     match err {
         ErrorCode::InvalidRequest | ErrorCode::InvalidParams => Weight::one(),
+        // e.g. invalid client signature
+        ErrorCode::ServerError(i) if i == TRANSACTION_EXECUTION_CLIENT_ERROR_CODE => Weight::one(),
         _ => Weight::zero(),
     }
 }

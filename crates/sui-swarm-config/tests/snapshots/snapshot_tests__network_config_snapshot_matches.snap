@@ -19,6 +19,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -97,13 +99,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple
@@ -156,6 +164,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -234,13 +244,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple
@@ -293,6 +309,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -371,13 +389,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple
@@ -430,6 +454,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -508,13 +534,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple
@@ -567,6 +599,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -645,13 +679,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple
@@ -704,6 +744,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -782,13 +824,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple
@@ -841,6 +889,8 @@ validator_configs:
     admin-interface-port: 8888
     consensus-config:
       db-path: /tmp/foo/
+      db-retention-epochs: ~
+      db-pruner-period-secs: ~
       max-pending-transactions: ~
       max-submit-position: ~
       submit-delay-step-override-millis: ~
@@ -919,13 +969,19 @@ validator_configs:
     zklogin-oauth-providers:
       Mainnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Testnet:
         - Apple
+        - "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8"
+        - Credenza3
         - Facebook
         - Google
+        - KarrierOne
         - Twitch
       Unknown:
         - Apple

@@ -12,12 +12,14 @@ axum = { workspace = true, features = ["matched-path"] }
 bcs.workspace = true
 rand.workspace = true
 reqwest.workspace = true
+url.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 serde_with.workspace = true
 tap.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 async-trait.workspace = true
 itertools.workspace = true
 sui-sdk2.workspace = true
@@ -30,7 +32,5 @@ sui-types.workspace = true
 mysten-network.workspace = true
 sui-protocol-config.workspace = true
 
-
 [dev-dependencies]
-tokio.workspace = true
 diffy = "0.3"

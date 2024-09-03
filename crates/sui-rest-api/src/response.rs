@@ -19,6 +19,7 @@ use crate::{
 
 pub struct Bcs<T>(pub T);
 
+#[derive(Debug)]
 pub enum ResponseContent<T, J = T> {
     Bcs(T),
     Json(J),
@@ -52,17 +53,17 @@ where
 }
 
 #[axum::async_trait]
-impl<T, S, B> axum::extract::FromRequest<S, B> for Bcs<T>
+impl<T, S> axum::extract::FromRequest<S> for Bcs<T>
 where
     T: serde::de::DeserializeOwned,
     S: Send + Sync,
-    B: axum::body::HttpBody + Send + 'static,
-    B::Data: Send,
-    B::Error: Into<axum::BoxError>,
 {
     type Rejection = BcsRejection;
 
-    async fn from_request(req: axum::http::Request<B>, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(
+        req: axum::http::Request<axum::body::Body>,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
         if bcs_content_type(req.headers()) {
             let bytes = axum::body::Bytes::from_request(req, state)
                 .await
@@ -101,9 +102,9 @@ impl axum::response::IntoResponse for BcsRejection {
                 "Expected request with `Content-Type: application/bcs`",
             )
                 .into_response(),
-            BcsRejection::DeserializationError(_) => (
+            BcsRejection::DeserializationError(e) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                "Failed to deserialize the BCS body into the target type",
+                format!("Failed to deserialize the BCS body into the target type: {e}"),
             )
                 .into_response(),
             BcsRejection::BytesRejection(bytes_rejection) => bytes_rejection.into_response(),

@@ -126,12 +126,13 @@ pub enum ErrorConstants {
     /// No constant information is available, only a line number.
     None,
     /// The error is a complete error, with an error identifier and constant that can be rendered.
-    /// The the rendered string representation of the constant is returned only when the contant
+    /// The rendered string representation of the constant is returned only when the contant
     /// value is one of the following types:
     /// * A vector of bytes convertible to a valid UTF-8 string; or
     /// * A numeric value (u8, u16, u32, u64, u128, u256); or
     /// * A boolean value; or
     /// * An address value
+    ///
     /// Otherwise, the `Raw` bytes of the error constant are returned.
     Rendered {
         /// The name of the error constant.
@@ -1547,7 +1548,7 @@ impl<'l> ResolutionContext<'l> {
 
             O::Datatype(key, params) => {
                 // SAFETY: `add_signature` ensures `datatypes` has an element with this key.
-                let def = &self.datatypes[&key];
+                let def = &self.datatypes[key];
 
                 let param_layouts = params
                     .iter()
@@ -1639,7 +1640,7 @@ impl<'l> ResolutionContext<'l> {
 
             O::Datatype(key, params) => {
                 // SAFETY: `add_signature` ensures `datatypes` has an element with this key.
-                let defining_id = &self.datatypes[&key].defining_id;
+                let defining_id = &self.datatypes[key].defining_id;
                 for param in params {
                     self.relocate_signature(param)?;
                 }

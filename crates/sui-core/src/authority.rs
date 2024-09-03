@@ -871,15 +871,12 @@ impl AuthorityState {
             self.get_backing_package_store().as_ref(),
         )?;
 
-        let (input_objects, receiving_objects) = self
-            .input_loader
-            .read_objects_for_signing(
-                Some(tx_digest),
-                &input_object_kinds,
-                &receiving_objects_refs,
-                epoch_store.epoch(),
-            )
-            .await?;
+        let (input_objects, receiving_objects) = self.input_loader.read_objects_for_signing(
+            Some(tx_digest),
+            &input_object_kinds,
+            &receiving_objects_refs,
+            epoch_store.epoch(),
+        )?;
 
         let (_gas_status, checked_input_objects) = sui_transaction_checks::check_transaction_input(
             epoch_store.protocol_config(),
@@ -1008,11 +1005,18 @@ impl AuthorityState {
         do_authority_overload_check: bool,
     ) -> SuiResult {
         if do_authority_overload_check {
-            self.check_authority_overload(tx_data)?;
+            self.check_authority_overload(tx_data).tap_err(|_| {
+                self.update_overload_metrics("execution_queue");
+            })?;
         }
         self.transaction_manager
-            .check_execution_overload(self.overload_config(), tx_data)?;
-        consensus_adapter.check_consensus_overload()?;
+            .check_execution_overload(self.overload_config(), tx_data)
+            .tap_err(|_| {
+                self.update_overload_metrics("execution_pending");
+            })?;
+        consensus_adapter.check_consensus_overload().tap_err(|_| {
+            self.update_overload_metrics("consensus");
+        })?;
         Ok(())
     }
 
@@ -1161,9 +1165,7 @@ impl AuthorityState {
         debug!("execute_certificate_internal");
 
         let tx_digest = certificate.digest();
-        let input_objects = self
-            .read_objects_for_execution(certificate, epoch_store)
-            .await?;
+        let input_objects = self.read_objects_for_execution(certificate, epoch_store)?;
 
         if expected_effects_digest.is_none() {
             // We could be re-executing a previously executed but uncommitted transaction, perhaps after
@@ -1190,7 +1192,7 @@ impl AuthorityState {
         .tap_err(|e| info!(?tx_digest, "process_certificate failed: {e}"))
     }
 
-    pub async fn read_objects_for_execution(
+    pub fn read_objects_for_execution(
         &self,
         certificate: &VerifiedExecutableTransaction,
         epoch_store: &Arc<AuthorityPerEpochStore>,
@@ -1201,14 +1203,12 @@ impl AuthorityState {
             .execution_load_input_objects_latency
             .start_timer();
         let input_objects = &certificate.data().transaction_data().input_objects()?;
-        self.input_loader
-            .read_objects_for_execution(
-                epoch_store.as_ref(),
-                &certificate.key(),
-                input_objects,
-                epoch_store.epoch(),
-            )
-            .await
+        self.input_loader.read_objects_for_execution(
+            epoch_store.as_ref(),
+            &certificate.key(),
+            input_objects,
+            epoch_store.epoch(),
+        )
     }
 
     /// Test only wrapper for `try_execute_immediately()` above, useful for checking errors if the
@@ -1772,16 +1772,13 @@ impl AuthorityState {
             self.get_backing_package_store().as_ref(),
         )?;
 
-        let (input_objects, receiving_objects) = self
-            .input_loader
-            .read_objects_for_signing(
-                // We don't want to cache this transaction since it's a dry run.
-                None,
-                &input_object_kinds,
-                &receiving_object_refs,
-                epoch_store.epoch(),
-            )
-            .await?;
+        let (input_objects, receiving_objects) = self.input_loader.read_objects_for_signing(
+            // We don't want to cache this transaction since it's a dry run.
+            None,
+            &input_object_kinds,
+            &receiving_object_refs,
+            epoch_store.epoch(),
+        )?;
 
         // make a gas object if one was not provided
         let mut gas_object_refs = transaction.gas().to_vec();
@@ -1991,16 +1988,13 @@ impl AuthorityState {
             self.get_backing_package_store().as_ref(),
         )?;
 
-        let (mut input_objects, receiving_objects) = self
-            .input_loader
-            .read_objects_for_signing(
-                // We don't want to cache this transaction since it's a dev inspect.
-                None,
-                &input_object_kinds,
-                &receiving_object_refs,
-                epoch_store.epoch(),
-            )
-            .await?;
+        let (mut input_objects, receiving_objects) = self.input_loader.read_objects_for_signing(
+            // We don't want to cache this transaction since it's a dev inspect.
+            None,
+            &input_object_kinds,
+            &receiving_object_refs,
+            epoch_store.epoch(),
+        )?;
 
         // Create and use a dummy gas object if there is no gas object provided.
         let dummy_gas_object = Object::new_gas_with_balance_and_owner_for_testing(
@@ -3718,12 +3712,12 @@ impl AuthorityState {
                     .rev()
                     .skip_while(|d| cursor.is_some() && Some(*d) != cursor)
                     .skip(usize::from(cursor.is_some()));
-                return Ok(iter.take(limit.unwrap_or(usize::max_value())).collect());
+                return Ok(iter.take(limit.unwrap_or(usize::MAX)).collect());
             } else {
                 let iter = iter
                     .skip_while(|d| cursor.is_some() && Some(*d) != cursor)
                     .skip(usize::from(cursor.is_some()));
-                return Ok(iter.take(limit.unwrap_or(usize::max_value())).collect());
+                return Ok(iter.take(limit.unwrap_or(usize::MAX)).collect());
             }
         }
         self.get_indexes()?
@@ -4907,9 +4901,7 @@ impl AuthorityState {
             )
             .await?;
 
-        let input_objects = self
-            .read_objects_for_execution(&executable_tx, epoch_store)
-            .await?;
+        let input_objects = self.read_objects_for_execution(&executable_tx, epoch_store)?;
 
         let (temporary_store, effects, _execution_error_opt) =
             self.prepare_certificate(&execution_guard, &executable_tx, input_objects, epoch_store)?;
@@ -5538,7 +5530,6 @@ impl NodeStateDump {
         Ok(path)
     }
 
-    #[cfg(not(release))]
     pub fn read_from_file(path: &PathBuf) -> Result<Self, anyhow::Error> {
         let file = File::open(path)?;
         serde_json::from_reader(file).map_err(|e| anyhow::anyhow!(e))

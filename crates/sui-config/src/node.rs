@@ -19,7 +19,6 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use std::usize;
 use sui_keys::keypair_file::{read_authority_keypair_from_file, read_keypair_from_file};
 use sui_types::base_types::{ObjectID, SuiAddress};
 use sui_types::committee::EpochId;
@@ -228,6 +227,8 @@ fn default_jwk_fetch_interval_seconds() -> u64 {
 
 pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
     let mut map = BTreeMap::new();
+
+    // providers that are available on devnet only.
     let experimental_providers = BTreeSet::from([
         "Google".to_string(),
         "Facebook".to_string(),
@@ -239,14 +240,19 @@ pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
         "Microsoft".to_string(),
         "KarrierOne".to_string(),
         "Credenza3".to_string(),
-        "AwsTenant-region:us-east-1-tenant_id:us-east-1_LPSLCkC3A".to_string(),
-        "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8".to_string(),
+        "AwsTenant-region:us-east-1-tenant_id:us-east-1_LPSLCkC3A".to_string(), // test tenant in mysten aws
+        "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8".to_string(), // ambrus, external partner
     ]);
+
+    // providers that are available for mainnet and testnet.
     let providers = BTreeSet::from([
         "Google".to_string(),
         "Facebook".to_string(),
         "Twitch".to_string(),
         "Apple".to_string(),
+        "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8".to_string(),
+        "KarrierOne".to_string(),
+        "Credenza3".to_string(),
     ]);
     map.insert(Chain::Mainnet, providers.clone());
     map.insert(Chain::Testnet, providers);
@@ -412,10 +418,17 @@ pub struct ConsensusConfig {
     // Base consensus DB path for all epochs.
     pub db_path: PathBuf,
 
+    // The number of epochs for which to retain the consensus DBs. Setting it to 0 will make a consensus DB getting
+    // dropped as soon as system is switched to a new epoch.
+    pub db_retention_epochs: Option<u64>,
+
+    // Pruner will run on every epoch change but it will also check periodically on every `db_pruner_period_secs`
+    // seconds to see if there are any epoch DBs to remove.
+    pub db_pruner_period_secs: Option<u64>,
+
     /// Maximum number of pending transactions to submit to consensus, including those
     /// in submission wait.
-    /// Assuming 10_000 txn tps * 10 sec consensus latency = 100_000 inflight consensus txns,
-    /// Default to 100_000.
+    /// Default to 20_000 inflight limit, assuming 20_000 txn tps * 1 sec consensus latency.
     pub max_pending_transactions: Option<usize>,
 
     /// When defined caps the calculated submission position to the max_submit_position. Even if the
@@ -444,7 +457,7 @@ impl ConsensusConfig {
     }
 
     pub fn max_pending_transactions(&self) -> usize {
-        self.max_pending_transactions.unwrap_or(100_000)
+        self.max_pending_transactions.unwrap_or(20_000)
     }
 
     pub fn submit_delay_step_override(&self) -> Option<Duration> {
@@ -454,6 +467,17 @@ impl ConsensusConfig {
 
     pub fn narwhal_config(&self) -> &NarwhalParameters {
         &self.narwhal_config
+    }
+
+    pub fn db_retention_epochs(&self) -> u64 {
+        self.db_retention_epochs.unwrap_or(0)
+    }
+
+    pub fn db_pruner_period(&self) -> Duration {
+        // Default to 1 hour
+        self.db_pruner_period_secs
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(3_600))
     }
 }
 

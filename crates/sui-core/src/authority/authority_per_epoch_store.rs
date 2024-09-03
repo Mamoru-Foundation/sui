@@ -14,7 +14,6 @@ use itertools::{izip, Itertools};
 use narwhal_executor::ExecutionIndices;
 use parking_lot::RwLock;
 use parking_lot::{Mutex, RwLockReadGuard, RwLockWriteGuard};
-use rocksdb::Options;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::future::Future;
@@ -41,6 +40,7 @@ use sui_types::transaction::{
 use tokio::sync::OnceCell;
 use tracing::{debug, error, info, instrument, trace, warn};
 use typed_store::rocks::{read_size_from_env, ReadWriteOptions};
+use typed_store::rocksdb::Options;
 use typed_store::{
     rocks::{default_db_options, DBBatch, DBMap, DBOptions, MetricConf},
     traits::{TableSummary, TypedStoreDebug},
@@ -108,8 +108,8 @@ use sui_types::sui_system_state::epoch_start_sui_system_state::{
 };
 use tap::TapOptional;
 use tokio::time::Instant;
+use typed_store::DBMapUtils;
 use typed_store::{retry_transaction_forever, Map};
-use typed_store_derive::DBMapUtils;
 
 /// The key where the latest consensus index is stored in the database.
 // TODO: Make a single table (e.g., called `variables`) storing all our lonely variables in one place.
@@ -125,8 +125,8 @@ pub(crate) type EncG = bls12381::G2Element;
 // CertLockGuard and CertTxGuard are functionally identical right now, but we retain a distinction
 // anyway. If we need to support distributed object storage, having this distinction will be
 // useful, as we will most likely have to re-implement a retry / write-ahead-log at that point.
-pub struct CertLockGuard(MutexGuard);
-pub struct CertTxGuard(CertLockGuard);
+pub struct CertLockGuard(#[allow(unused)] MutexGuard);
+pub struct CertTxGuard(#[allow(unused)] CertLockGuard);
 
 impl CertTxGuard {
     pub fn release(self) {}
@@ -370,15 +370,15 @@ pub struct AuthorityEpochTables {
     /// The tables below manage shared object locks / versions. There are three ways they can be
     /// updated:
     /// 1. (validators only): Upon receiving a certified transaction from consensus, the authority
-    /// assigns the next version to each shared object of the transaction. The next versions of
-    /// the shared objects are updated as well.
+    ///     assigns the next version to each shared object of the transaction. The next versions of
+    ///     the shared objects are updated as well.
     /// 2. (validators only): Upon receiving a new consensus commit, the authority assigns the
-    /// next version of the randomness state object to an expected future transaction to be
-    /// generated after the next random value is available. The next version of the randomness
-    /// state object is updated as well.
+    ///     next version of the randomness state object to an expected future transaction to be
+    ///     generated after the next random value is available. The next version of the randomness
+    ///     state object is updated as well.
     /// 3. (fullnodes + validators): Upon receiving a certified effect from state sync, or
-    /// transaction orchestrator fast execution path, the node assigns the shared object
-    /// versions from the transaction effect. Next object versions are not updated.
+    ///     transaction orchestrator fast execution path, the node assigns the shared object
+    ///     versions from the transaction effect. Next object versions are not updated.
     ///
     /// REQUIRED: all authorities must assign the same shared object versions for each transaction.
     assigned_shared_object_versions: DBMap<TransactionDigest, Vec<(ObjectID, SequenceNumber)>>,

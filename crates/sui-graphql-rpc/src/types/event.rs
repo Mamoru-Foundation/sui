@@ -3,7 +3,7 @@
 
 use std::str::FromStr;
 
-use super::cursor::{self, Page, Paginated, Target};
+use super::cursor::{self, Page, Paginated, ScanLimited, Target};
 use super::digest::Digest;
 use super::type_filter::{ModuleFilter, TypeFilter};
 use super::{
@@ -143,13 +143,12 @@ impl Event {
     /// checkpoint sequence numbers as the cursor to determine the correct page of results. The
     /// query can optionally be further `filter`-ed by the `EventFilter`.
     ///
-    /// The `checkpoint_viewed_at` parameter is represents the checkpoint sequence number at which
-    /// this page was queried for. Each entity returned in the connection will inherit this
-    /// checkpoint, so that when viewing that entity's state, it will be from the reference of this
-    /// checkpoint_viewed_at parameter.
+    /// The `checkpoint_viewed_at` parameter represents the checkpoint sequence number at which
+    /// this page was queried. Each entity returned in the connection inherits this checkpoint, so
+    /// that when viewing that entity's state, it's as if it's being viewed at this checkpoint.
     ///
-    /// If the `Page<Cursor>` is set, then this function will defer to the `checkpoint_viewed_at` in
-    /// the cursor if they are consistent.
+    /// The cursors in `page` might also include checkpoint viewed at fields. If these are set,
+    /// they take precedence over the checkpoint that pagination is being conducted in.
     pub(crate) async fn paginate(
         db: &Db,
         page: Page<Cursor>,
@@ -260,9 +259,6 @@ impl Event {
             checkpoint_sequence_number: stored_tx.checkpoint_sequence_number,
             #[cfg(feature = "postgres-feature")]
             senders: vec![Some(native_event.sender.to_vec())],
-            #[cfg(feature = "mysql-feature")]
-            #[cfg(not(feature = "postgres-feature"))]
-            senders: serde_json::to_value(vec![native_event.sender.to_vec()]).unwrap(),
             package: native_event.package_id.to_vec(),
             module: native_event.transaction_module.to_string(),
             event_type: native_event
@@ -290,17 +286,6 @@ impl Event {
             #[cfg(feature = "postgres-feature")]
             {
                 stored.senders.first()
-            }
-            #[cfg(feature = "mysql-feature")]
-            #[cfg(not(feature = "postgres-feature"))]
-            {
-                stored
-                    .senders
-                    .as_array()
-                    .ok_or_else(|| {
-                        Error::Internal("Failed to parse event senders as array".to_string())
-                    })?
-                    .first()
             }
         }) else {
             return Err(Error::Internal("No senders found for event".to_string()));
@@ -376,3 +361,5 @@ impl Checkpointed for Cursor {
         self.checkpoint_viewed_at
     }
 }
+
+impl ScanLimited for Cursor {}

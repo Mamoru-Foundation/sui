@@ -16,7 +16,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 53;
+const MAX_PROTOCOL_VERSION: u64 = 55;
 
 // Record history of protocol version allocations here:
 //
@@ -165,6 +165,10 @@ const MAX_PROTOCOL_VERSION: u64 = 53;
 //             Enable consensus commit prologue V3 on testnet.
 //             Turn on shared object congestion control in testnet.
 //             Update stdlib natives costs
+// Version 54: Enable random beacon on mainnet.
+//             Enable soft bundle on mainnet.
+// Version 55: Enable enums on mainnet.
+//             Rethrow serialization type layout errors instead of converting them.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -503,6 +507,10 @@ struct FeatureFlags {
     // Use AuthorityCapabilitiesV2
     #[serde(skip_serializing_if = "is_false")]
     authority_capabilities_v2: bool,
+
+    // Rethrow type layout errors during serialization instead of trying to convert them.
+    #[serde(skip_serializing_if = "is_false")]
+    rethrow_serialization_type_layout_errors: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -692,7 +700,7 @@ pub struct ProtocolConfig {
     /// Max number of publish or upgrade commands allowed in a programmable transaction block.
     max_publish_or_upgrade_per_ptb: Option<u64>,
 
-    /// Maximum number of gas units that a single MoveCall transaction can use. Enforced by the Sui adapter.
+    /// Maximum gas budget in MIST that a transaction can use.
     max_tx_gas: Option<u64>,
 
     /// Maximum amount of the proposed gas price in MIST (defined in the transaction).
@@ -1181,8 +1189,10 @@ pub struct ProtocolConfig {
     /// The maximum serialised transaction size (in bytes) accepted by consensus. That should be bigger than the
     /// `max_tx_size_bytes` with some additional headroom.
     consensus_max_transaction_size_bytes: Option<u64>,
-    /// The maximum size of transactions included in a consensus proposed block
+    /// The maximum size of transactions included in a consensus block.
     consensus_max_transactions_in_block_bytes: Option<u64>,
+    /// The maximum number of transactions included in a consensus block.
+    consensus_max_num_transactions_in_block: Option<u64>,
 
     /// The max accumulated txn execution cost per object in a Narwhal commit. Transactions
     /// in a checkpoint will be deferred once their touch shared objects hit this limit.
@@ -1525,6 +1535,15 @@ impl ProtocolConfig {
 
     pub fn authority_capabilities_v2(&self) -> bool {
         self.feature_flags.authority_capabilities_v2
+    }
+
+    pub fn max_num_transactions_in_block(&self) -> u64 {
+        // 500 is the value used before this field is introduced.
+        self.consensus_max_num_transactions_in_block.unwrap_or(500)
+    }
+
+    pub fn rethrow_serialization_type_layout_errors(&self) -> bool {
+        self.feature_flags.rethrow_serialization_type_layout_errors
     }
 }
 
@@ -2012,6 +2031,8 @@ impl ProtocolConfig {
             consensus_max_transaction_size_bytes: None,
 
             consensus_max_transactions_in_block_bytes: None,
+
+            consensus_max_num_transactions_in_block: None,
 
             max_accumulated_txn_cost_per_object_in_narwhal_commit: None,
 
@@ -2633,6 +2654,35 @@ impl ProtocolConfig {
                     cfg.vector_destroy_empty_base_cost = Some(52);
                     cfg.vector_swap_base_cost = Some(52);
                 }
+                54 => {
+                    // Enable random beacon on mainnet.
+                    cfg.feature_flags.random_beacon = true;
+                    cfg.random_beacon_reduction_lower_bound = Some(1000);
+                    cfg.random_beacon_dkg_timeout_round = Some(3000);
+                    cfg.random_beacon_min_round_interval_ms = Some(500);
+
+                    // Turns on shared object congestion control on mainnet.
+                    cfg.max_accumulated_txn_cost_per_object_in_narwhal_commit = Some(100);
+                    cfg.max_accumulated_txn_cost_per_object_in_mysticeti_commit = Some(10);
+                    cfg.feature_flags.per_object_congestion_control_mode =
+                        PerObjectCongestionControlMode::TotalTxCount;
+
+                    // Enable soft bundle on mainnet.
+                    cfg.feature_flags.soft_bundle = true;
+                    cfg.max_soft_bundle_size = Some(5);
+                }
+                55 => {
+                    // Turn on enums mainnet
+                    cfg.move_binary_format_version = Some(7);
+
+                    // Assume 1KB per transaction and 500 transactions per block.
+                    cfg.consensus_max_transactions_in_block_bytes = Some(512 * 1024);
+                    // Assume 20_000 TPS * 5% max stake per validator / (minimum) 4 blocks per round = 250 transactions per block maximum
+                    // Using a higher limit that is 512, to account for bursty traffic and system transactions.
+                    cfg.consensus_max_num_transactions_in_block = Some(512);
+
+                    cfg.feature_flags.rethrow_serialization_type_layout_errors = true;
+                }
                 // Use this template when making changes:
                 //
                 //     // modify an existing constant.
@@ -2686,16 +2736,13 @@ impl ProtocolConfig {
         }
     }
 
-    pub fn meter_config(&self) -> MeterConfig {
+    /// MeterConfig for metering packages during signing. It is NOT stable between binaries and
+    /// cannot used during execution.
+    pub fn meter_config_for_signing(&self) -> MeterConfig {
         MeterConfig {
-            max_per_fun_meter_units: Some(self.max_verifier_meter_ticks_per_function() as u128),
-            max_per_mod_meter_units: Some(self.max_meter_ticks_per_module() as u128),
-            max_per_pkg_meter_units: Some(
-                // Until the per-package limit was introduced, the per-module limit played double
-                // duty.
-                self.max_meter_ticks_per_package_as_option()
-                    .unwrap_or_else(|| self.max_meter_ticks_per_module()) as u128,
-            ),
+            max_per_fun_meter_units: Some(2_200_000),
+            max_per_mod_meter_units: Some(2_200_000),
+            max_per_pkg_meter_units: Some(2_200_000),
         }
     }
 

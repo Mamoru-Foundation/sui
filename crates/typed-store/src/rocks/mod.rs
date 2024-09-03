@@ -60,7 +60,7 @@ const DEFAULT_DB_WAL_SIZE: usize = 1024;
 
 // Environment variable to control behavior of write throughput optimized tables.
 const ENV_VAR_L0_NUM_FILES_COMPACTION_TRIGGER: &str = "L0_NUM_FILES_COMPACTION_TRIGGER";
-const DEFAULT_L0_NUM_FILES_COMPACTION_TRIGGER: usize = 6;
+const DEFAULT_L0_NUM_FILES_COMPACTION_TRIGGER: usize = 4;
 const ENV_VAR_MAX_WRITE_BUFFER_SIZE_MB: &str = "MAX_WRITE_BUFFER_SIZE_MB";
 const DEFAULT_MAX_WRITE_BUFFER_SIZE_MB: usize = 256;
 const ENV_VAR_MAX_WRITE_BUFFER_NUMBER: &str = "MAX_WRITE_BUFFER_NUMBER";
@@ -88,9 +88,8 @@ mod tests;
 /// # Arguments
 ///
 /// * `db` - a reference to a rocks DB object
-/// * `cf;<ty,ty>` - a comma separated list of column families to open. For each
-/// column family a concatenation of column family name (cf) and Key-Value <ty, ty>
-/// should be provided.
+/// * `cf;<ty,ty>` - a comma separated list of column families to open. For each column family a
+///     concatenation of column family name (cf) and Key-Value <ty, ty> should be provided.
 ///
 /// # Examples
 ///
@@ -1050,7 +1049,7 @@ impl<K, V> DBMap<K, V> {
             );
         db_metrics
             .cf_metrics
-            .rocskdb_estimate_table_readers_mem
+            .rocksdb_estimate_table_readers_mem
             .with_label_values(&[cf_name])
             .set(
                 Self::get_int_property(rocksdb, &cf, properties::ESTIMATE_TABLE_READERS_MEM)
@@ -1074,7 +1073,7 @@ impl<K, V> DBMap<K, V> {
             );
         db_metrics
             .cf_metrics
-            .rocskdb_compaction_pending
+            .rocksdb_compaction_pending
             .with_label_values(&[cf_name])
             .set(
                 Self::get_int_property(rocksdb, &cf, properties::COMPACTION_PENDING)
@@ -1082,7 +1081,7 @@ impl<K, V> DBMap<K, V> {
             );
         db_metrics
             .cf_metrics
-            .rocskdb_num_running_compactions
+            .rocksdb_num_running_compactions
             .with_label_values(&[cf_name])
             .set(
                 Self::get_int_property(rocksdb, &cf, properties::NUM_RUNNING_COMPACTIONS)
@@ -1106,7 +1105,7 @@ impl<K, V> DBMap<K, V> {
             );
         db_metrics
             .cf_metrics
-            .rocskdb_background_errors
+            .rocksdb_background_errors
             .with_label_values(&[cf_name])
             .set(
                 Self::get_int_property(rocksdb, &cf, properties::BACKGROUND_ERRORS)
@@ -1451,15 +1450,21 @@ impl DBBatch {
         if !Arc::ptr_eq(&db.rocksdb, &self.rocksdb) {
             return Err(TypedStoreError::CrossDBBatch);
         }
-
+        let mut total = 0usize;
         new_vals
             .into_iter()
             .try_for_each::<_, Result<_, TypedStoreError>>(|(k, v)| {
                 let k_buf = be_fix_int_ser(k.borrow())?;
                 let v_buf = bcs::to_bytes(v.borrow()).map_err(typed_store_err_from_bcs_err)?;
+                total += k_buf.len() + v_buf.len();
                 self.batch.put_cf(&db.cf(), k_buf, v_buf);
                 Ok(())
             })?;
+        self.db_metrics
+            .op_metrics
+            .rocksdb_batch_put_bytes
+            .with_label_values(&[&db.cf])
+            .observe(total as f64);
         Ok(self)
     }
 
@@ -2346,7 +2351,7 @@ impl DBOptions {
         let target_file_size_base = 64 << 20;
         self.options
             .set_target_file_size_base(target_file_size_base);
-        // Level 1 default to 64MiB * 6 ~ 384MiB.
+        // Level 1 default to 64MiB * 4 ~ 256MiB.
         let max_level_zero_file_num = read_size_from_env(ENV_VAR_L0_NUM_FILES_COMPACTION_TRIGGER)
             .unwrap_or(DEFAULT_L0_NUM_FILES_COMPACTION_TRIGGER);
         self.options
@@ -2395,10 +2400,10 @@ impl DBOptions {
             max_level_zero_file_num.try_into().unwrap(),
         );
         self.options.set_level_zero_slowdown_writes_trigger(
-            (max_level_zero_file_num * 4).try_into().unwrap(),
+            (max_level_zero_file_num * 12).try_into().unwrap(),
         );
         self.options
-            .set_level_zero_stop_writes_trigger((max_level_zero_file_num * 5).try_into().unwrap());
+            .set_level_zero_stop_writes_trigger((max_level_zero_file_num * 16).try_into().unwrap());
 
         // Increase sst file size to 128MiB.
         self.options.set_target_file_size_base(
@@ -2729,7 +2734,7 @@ fn populate_missing_cfs(
 /// Given a vec<u8>, find the value which is one more than the vector
 /// if the vector was a big endian number.
 /// If the vector is already minimum, don't change it.
-fn big_endian_saturating_add_one(v: &mut Vec<u8>) {
+fn big_endian_saturating_add_one(v: &mut [u8]) {
     if is_max(v) {
         return;
     }
@@ -2763,7 +2768,6 @@ fn test_helpers() {
 
     uint::construct_uint! {
         // 32 byte number
-        #[cfg_attr(feature = "scale-info", derive(TypeInfo))]
         struct Num32(4);
     }
 

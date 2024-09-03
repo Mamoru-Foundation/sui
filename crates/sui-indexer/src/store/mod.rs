@@ -11,7 +11,7 @@ pub mod pg_partition_manager;
 
 pub mod diesel_macro {
     thread_local! {
-        pub static CALLED_FROM_BLOCKING_POOL: std::cell::RefCell<bool> = std::cell::RefCell::new(false);
+        pub static CALLED_FROM_BLOCKING_POOL: std::cell::RefCell<bool> = const { std::cell::RefCell::new(false) };
     }
 
     #[macro_export]
@@ -292,10 +292,11 @@ pub mod diesel_macro {
     /// Check that we are in a context conducive to making blocking calls.
     /// This is done by either:
     /// - Checking that we are not inside a tokio runtime context
+    ///
     /// Or:
     /// - If we are inside a tokio runtime context, ensure that the call went through
-    /// `IndexerReader::spawn_blocking` which properly moves the blocking call to a blocking thread
-    /// pool.
+    ///     `IndexerReader::spawn_blocking` which properly moves the blocking call to a blocking thread
+    ///     pool.
     #[macro_export]
     macro_rules! blocking_call_is_ok_or_panic {
         () => {{
@@ -309,6 +310,36 @@ pub mod diesel_macro {
                         operation to a blocking thread"
                 );
             }
+        }};
+    }
+
+    #[macro_export]
+    macro_rules! persist_chunk_into_table {
+        ($table:expr, $chunk:expr, $pool:expr) => {{
+            let now = std::time::Instant::now();
+            let chunk_len = $chunk.len();
+            transactional_blocking_with_retry!(
+                $pool,
+                |conn| {
+                    for chunk in $chunk.chunks(PG_COMMIT_CHUNK_SIZE_INTRA_DB_TX) {
+                        insert_or_ignore_into!($table, chunk, conn);
+                    }
+                    Ok::<(), IndexerError>(())
+                },
+                PG_DB_COMMIT_SLEEP_DURATION
+            )
+            .tap_ok(|_| {
+                let elapsed = now.elapsed().as_secs_f64();
+                info!(
+                    elapsed,
+                    "Persisted {} rows to {}",
+                    chunk_len,
+                    stringify!($table),
+                );
+            })
+            .tap_err(|e| {
+                tracing::error!("Failed to persist {} with error: {}", stringify!($table), e);
+            })
         }};
     }
 

@@ -14,11 +14,10 @@ use tokio::sync::oneshot::Sender;
 use anyhow::{anyhow, bail};
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, IntoMakeService};
+use axum::routing::get;
 use axum::Extension;
-use axum::{Json, Router, Server};
+use axum::{Json, Router};
 use hyper::http::{HeaderName, HeaderValue, Method};
-use hyper::server::conn::AddrIncoming;
 use hyper::{HeaderMap, StatusCode};
 use mysten_metrics::RegistryService;
 use prometheus::{register_int_counter_with_registry, IntCounter, Registry};
@@ -35,7 +34,7 @@ use sui_move_build::{BuildConfig, SuiPackageHooks};
 use sui_sdk::rpc_types::SuiTransactionBlockEffects;
 use sui_sdk::types::base_types::ObjectID;
 use sui_sdk::SuiClientBuilder;
-use sui_source_validation::{BytecodeSourceVerifier, SourceMode};
+use sui_source_validation::{BytecodeSourceVerifier, ValidationMode};
 
 pub const HOST_PORT_ENV: &str = "HOST_PORT";
 pub const SUI_SOURCE_VALIDATION_VERSION_HEADER: &str = "x-sui-source-validation-version";
@@ -173,11 +172,7 @@ pub async fn verify_package(
     let compiled_package = build_config.build(package_path.as_ref())?;
 
     BytecodeSourceVerifier::new(client.read_api())
-        .verify_package(
-            &compiled_package,
-            /* verify_deps */ false,
-            SourceMode::Verify,
-        )
+        .verify(&compiled_package, ValidationMode::root())
         .await
         .map_err(|e| anyhow!("Network {network}: {e}"))?;
 
@@ -445,9 +440,7 @@ pub struct AppState {
     pub sources_list: NetworkLookup,
 }
 
-pub fn serve(
-    app_state: Arc<RwLock<AppState>>,
-) -> anyhow::Result<Server<AddrIncoming, IntoMakeService<Router>>> {
+pub async fn serve(app_state: Arc<RwLock<AppState>>) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/api", get(api_route))
         .route("/api/list", get(list_route))
@@ -462,7 +455,10 @@ pub fn serve(
         )
         .with_state(app_state);
     let listener = TcpListener::bind(host_port())?;
-    Ok(Server::from_tcp(listener)?.serve(app.into_make_service()))
+    listener.set_nonblocking(true).unwrap();
+    let listener = tokio::net::TcpListener::from_std(listener)?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -535,10 +531,10 @@ async fn api_route(
     }
 }
 
-async fn check_version_header<B>(
+async fn check_version_header(
     headers: HeaderMap,
-    req: hyper::Request<B>,
-    next: Next<B>,
+    req: hyper::Request<axum::body::Body>,
+    next: Next,
 ) -> Response {
     let version = headers
         .get(SUI_SOURCE_VALIDATION_VERSION_HEADER)
@@ -599,7 +595,7 @@ impl SourceServiceMetrics {
     }
 }
 
-pub fn start_prometheus_server(addr: TcpListener) -> RegistryService {
+pub fn start_prometheus_server(listener: TcpListener) -> RegistryService {
     let registry = Registry::new();
 
     let registry_service = RegistryService::new(registry);
@@ -609,11 +605,9 @@ pub fn start_prometheus_server(addr: TcpListener) -> RegistryService {
         .layer(Extension(registry_service.clone()));
 
     tokio::spawn(async move {
-        axum::Server::from_tcp(addr)
-            .unwrap()
-            .serve(app.into_make_service())
-            .await
-            .unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        axum::serve(listener, app).await.unwrap();
     });
 
     registry_service

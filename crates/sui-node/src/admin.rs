@@ -128,10 +128,15 @@ pub async fn run_admin_server(node: Arc<SuiNode>, port: u16, tracing_handle: Tra
         "starting admin server"
     );
 
-    axum::Server::bind(&socket_address)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+    let listener = tokio::net::TcpListener::bind(&socket_address)
         .await
-        .unwrap()
+        .unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
 
 #[derive(Deserialize)]
@@ -236,7 +241,12 @@ async fn capabilities(State(state): State<Arc<AppState>>) -> (StatusCode, String
     // Only one of v1 or v2 will be populated at a time
     let capabilities = epoch_store.get_capabilities_v1();
     let mut output = String::new();
-    for capability in &capabilities {
+    for capability in capabilities.unwrap_or_default() {
+        output.push_str(&format!("{:?}\n", capability));
+    }
+
+    let capabilities = epoch_store.get_capabilities_v2();
+    for capability in capabilities.unwrap_or_default() {
         output.push_str(&format!("{:?}\n", capability));
     }
 

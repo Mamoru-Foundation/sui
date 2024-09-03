@@ -3,7 +3,6 @@
 
 use super::*;
 use crate::authority::authority_store::LockDetailsWrapperDeprecated;
-use rocksdb::Options;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use sui_types::accumulator::Accumulator;
@@ -16,6 +15,7 @@ use typed_store::rocks::util::{empty_compaction_filter, reference_count_merge_op
 use typed_store::rocks::{
     default_db_options, read_size_from_env, DBBatch, DBMap, DBOptions, MetricConf, ReadWriteOptions,
 };
+use typed_store::rocksdb::Options;
 use typed_store::traits::{Map, TableSummary, TypedStoreDebug};
 
 use crate::authority::authority_store_types::{
@@ -23,7 +23,7 @@ use crate::authority::authority_store_types::{
     StoreMoveObjectWrapper, StoreObject, StoreObjectPair, StoreObjectValue, StoreObjectWrapper,
 };
 use crate::authority::epoch_start_configuration::EpochStartConfiguration;
-use typed_store_derive::DBMapUtils;
+use typed_store::DBMapUtils;
 
 const ENV_VAR_OBJECTS_BLOCK_CACHE_SIZE: &str = "OBJECTS_BLOCK_CACHE_MB";
 pub(crate) const ENV_VAR_LOCKS_BLOCK_CACHE_SIZE: &str = "LOCKS_BLOCK_CACHE_MB";
@@ -71,9 +71,10 @@ pub struct AuthorityPerpetualTables {
     /// A map between the transaction digest of a certificate to the effects of its execution.
     /// We store effects into this table in two different cases:
     /// 1. When a transaction is synced through state_sync, we store the effects here. These effects
-    /// are known to be final in the network, but may not have been executed locally yet.
+    ///     are known to be final in the network, but may not have been executed locally yet.
     /// 2. When the transaction is executed locally on this node, we store the effects here. This means that
-    /// it's possible to store the same effects twice (once for the synced transaction, and once for the executed).
+    ///     it's possible to store the same effects twice (once for the synced transaction, and once for the executed).
+    ///
     /// It's also possible for the effects to be reverted if the transaction didn't make it into the epoch.
     #[default_options_override_fn = "effects_table_default_config"]
     pub(crate) effects: DBMap<TransactionEffectsDigest, TransactionEffects>,
