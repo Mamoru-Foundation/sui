@@ -201,7 +201,7 @@ members = [
 
 [workspace.package]
 # This version string will be inherited by sui-core, sui-faucet, sui-node, sui-tools, sui-sdk, sui-move-build, and sui crates.
-version = "1.32.1"
+version = "1.32.2"
 
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
@@ -374,7 +374,6 @@ jsonrpsee = { git = "https://github.com/wlmyng/jsonrpsee.git", rev = "b1b3007847
 json_to_table = { git = "https://github.com/zhiburt/tabled/", rev = "e449317a1c02eb6b29e409ad6617e5d9eb7b3bd4" }
 leb128 = "0.2.5"
 lru = "0.10"
-markdown-gen = "1.2.1"
 match_opt = "0.1.2"
 miette = { version = "7", features = ["fancy"] }
 mime = "0.3"
@@ -505,7 +504,6 @@ tower-http = { version = "0.5", features = [
     "set-header",
     "propagate-header",
 ] }
-# tower-http = { version="0.4", features = ["trace"] }
 tower-layer = "0.3.2"
 twox-hash = "1.6.3"
 tracing = "0.1.37"
@@ -609,7 +607,6 @@ sui-authority-aggregation = { path = "crates/sui-authority-aggregation" }
 sui-benchmark = { path = "crates/sui-benchmark" }
 sui-bridge = { path = "crates/sui-bridge" }
 sui-cluster-test = { path = "crates/sui-cluster-test" }
-sui-common = { path = "crates/sui-common" }
 sui-config = { path = "crates/sui-config" }
 sui-core = { path = "crates/sui-core" }
 sui-cost = { path = "crates/sui-cost" }
@@ -677,7 +674,6 @@ telemetry-subscribers = { path = "crates/telemetry-subscribers" }
 test-cluster = { path = "crates/test-cluster" }
 transaction-fuzzer = { path = "crates/transaction-fuzzer" }
 typed-store = { path = "crates/typed-store" }
-typed-store-derive = { path = "crates/typed-store-derive" }
 typed-store-error = { path = "crates/typed-store-error" }
 x = { path = "crates/x" }
 
