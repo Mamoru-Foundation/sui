@@ -5530,6 +5530,7 @@ impl NodeStateDump {
         Ok(path)
     }
 
+    #[cfg(not(release))]
     pub fn read_from_file(path: &PathBuf) -> Result<Self, anyhow::Error> {
         let file = File::open(path)?;
         serde_json::from_reader(file).map_err(|e| anyhow::anyhow!(e))
