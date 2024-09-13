@@ -8,7 +8,6 @@ use consensus_config::{Committee, NetworkKeyPair, Parameters, ProtocolKeyPair};
 use consensus_core::{CommitConsumer, CommitIndex, ConsensusAuthority};
 use fastcrypto::ed25519;
 use mysten_metrics::{monitored_mpsc::unbounded_channel, RegistryID, RegistryService};
-use narwhal_executor::ExecutionState;
 use prometheus::Registry;
 use sui_config::NodeConfig;
 use sui_protocol_config::ConsensusNetwork;
@@ -107,7 +106,7 @@ impl ConsensusManagerTrait for MysticetiManager {
         tx_validator: SuiTxValidator,
     ) {
         let system_state = epoch_store.epoch_start_state();
-        let committee: Committee = system_state.get_mysticeti_committee();
+        let committee: Committee = system_state.get_consensus_committee();
         let epoch = epoch_store.epoch();
         let protocol_config = epoch_store.protocol_config();
         let network_type = self.pick_network(&epoch_store);
@@ -150,8 +149,7 @@ impl ConsensusManagerTrait for MysticetiManager {
         let consensus_handler = consensus_handler_initializer.new_consensus_handler();
         let consumer = CommitConsumer::new(
             commit_sender,
-            // TODO(mysticeti): remove dependency on narwhal executor
-            consensus_handler.last_executed_sub_dag_index() as CommitIndex,
+            consensus_handler.last_processed_subdag_index() as CommitIndex,
         );
         let monitor = consumer.monitor();
 

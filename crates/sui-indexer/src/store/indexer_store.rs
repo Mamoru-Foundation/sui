@@ -1,7 +1,6 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::any::Any;
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
@@ -21,7 +20,7 @@ pub enum ObjectChangeToCommit {
 }
 
 #[async_trait]
-pub trait IndexerStore: Any + Clone + Sync + Send + 'static {
+pub trait IndexerStore: Clone + Sync + Send + 'static {
     async fn get_latest_checkpoint_sequence_number(&self) -> Result<Option<u64>, IndexerError>;
 
     async fn get_available_epoch_range(&self) -> Result<(u64, u64), IndexerError>;
@@ -49,15 +48,10 @@ pub trait IndexerStore: Any + Clone + Sync + Send + 'static {
         object_changes: Vec<TransactionObjectChangesToCommit>,
     ) -> Result<(), IndexerError>;
 
-    // persist objects snapshot with object changes during backfill
-    async fn backfill_objects_snapshot(
+    async fn persist_objects_snapshot(
         &self,
         object_changes: Vec<TransactionObjectChangesToCommit>,
     ) -> Result<(), IndexerError>;
-
-    // update objects snapshot after backfill is done
-    async fn update_objects_snapshot(&self, start_cp: u64, end_cp: u64)
-        -> Result<(), IndexerError>;
 
     async fn persist_checkpoints(
         &self,
@@ -94,6 +88,4 @@ pub trait IndexerStore: Any + Clone + Sync + Send + 'static {
         &self,
         epoch: u64,
     ) -> Result<u64, IndexerError>;
-
-    fn as_any(&self) -> &dyn Any;
 }
