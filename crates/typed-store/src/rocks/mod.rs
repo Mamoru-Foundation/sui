@@ -1024,14 +1024,6 @@ impl<K, V> DBMap<K, V> {
             );
         db_metrics
             .cf_metrics
-            .rocksdb_current_size_active_mem_tables
-            .with_label_values(&[cf_name])
-            .set(
-                Self::get_int_property(rocksdb, &cf, properties::CUR_SIZE_ACTIVE_MEM_TABLE)
-                    .unwrap_or(METRICS_ERROR),
-            );
-        db_metrics
-            .cf_metrics
             .rocksdb_size_all_mem_tables
             .with_label_values(&[cf_name])
             .set(
