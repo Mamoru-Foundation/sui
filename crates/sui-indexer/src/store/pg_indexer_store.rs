@@ -1,7 +1,6 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::any::Any as StdAny;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -11,11 +10,9 @@ use std::time::Instant;
 use async_trait::async_trait;
 use core::result::Result::Ok;
 use diesel::dsl::{max, min};
-use diesel::r2d2::R2D2Connection;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::{QueryDsl, RunQueryDsl};
-use downcast::Any;
 use itertools::Itertools;
 use tap::TapFallible;
 use tracing::info;
@@ -23,7 +20,8 @@ use tracing::info;
 use sui_protocol_config::ProtocolConfig;
 use sui_types::base_types::ObjectID;
 
-use crate::db::ConnectionPool;
+use crate::database::ConnectionPool;
+use crate::db::ConnectionPool as BlockingConnectionPool;
 use crate::errors::{Context, IndexerError};
 use crate::handlers::EpochToCommit;
 use crate::handlers::TransactionObjectChangesToCommit;
@@ -36,6 +34,7 @@ use crate::models::epoch::StoredEpochInfo;
 use crate::models::epoch::{StoredFeatureFlag, StoredProtocolConfig};
 use crate::models::events::StoredEvent;
 use crate::models::obj_indices::StoredObjectVersion;
+use crate::models::objects::StoredFullHistoryObject;
 use crate::models::objects::{
     StoredDeletedHistoryObject, StoredDeletedObject, StoredHistoryObject, StoredObject,
     StoredObjectSnapshot,
@@ -45,10 +44,10 @@ use crate::models::transactions::StoredTransaction;
 use crate::schema::{
     chain_identifier, checkpoints, display, epochs, event_emit_module, event_emit_package,
     event_senders, event_struct_instantiation, event_struct_module, event_struct_name,
-    event_struct_package, events, feature_flags, objects, objects_history, objects_snapshot,
-    objects_version, packages, protocol_configs, pruner_cp_watermark, transactions, tx_calls_fun,
-    tx_calls_mod, tx_calls_pkg, tx_changed_objects, tx_digests, tx_input_objects, tx_kinds,
-    tx_recipients, tx_senders,
+    event_struct_package, events, feature_flags, full_objects_history, objects, objects_history,
+    objects_snapshot, objects_version, packages, protocol_configs, pruner_cp_watermark,
+    transactions, tx_calls_fun, tx_calls_mod, tx_calls_pkg, tx_changed_objects, tx_digests,
+    tx_input_objects, tx_kinds, tx_recipients, tx_senders,
 };
 use crate::types::EventIndex;
 use crate::types::{IndexedCheckpoint, IndexedEvent, IndexedPackage, IndexedTransaction, TxIndex};
@@ -61,7 +60,6 @@ use super::pg_partition_manager::{EpochPartitionData, PgPartitionManager};
 use super::IndexerStore;
 use super::ObjectChangeToCommit;
 
-#[cfg(feature = "postgres-feature")]
 use diesel::upsert::excluded;
 use sui_types::digests::{ChainIdentifier, CheckpointDigest};
 
@@ -99,66 +97,27 @@ const PG_COMMIT_PARALLEL_CHUNK_SIZE: usize = 100;
 const PG_COMMIT_OBJECTS_PARALLEL_CHUNK_SIZE: usize = 500;
 const PG_DB_COMMIT_SLEEP_DURATION: Duration = Duration::from_secs(3600);
 
-// with rn = 1, we only select the latest version of each object,
-// so that we don't have to update the same object multiple times.
-const UPDATE_OBJECTS_SNAPSHOT_QUERY: &str = r"
-INSERT INTO objects_snapshot (object_id, object_version, object_status, object_digest, checkpoint_sequence_number, owner_type, owner_id, object_type, object_type_package, object_type_module, object_type_name, serialized_object, coin_type, coin_balance, df_kind, df_name, df_object_type, df_object_id)
-SELECT object_id, object_version, object_status, object_digest, checkpoint_sequence_number, owner_type, owner_id, object_type, object_type_package, object_type_module, object_type_name, serialized_object, coin_type, coin_balance, df_kind, df_name, df_object_type, df_object_id
-FROM (
-    SELECT *,
-           ROW_NUMBER() OVER (PARTITION BY object_id ORDER BY object_version DESC) as rn
-    FROM objects_history
-    WHERE checkpoint_sequence_number >= $1 AND checkpoint_sequence_number < $2
-) as subquery
-WHERE rn = 1
-ON CONFLICT (object_id) DO UPDATE
-SET object_version = EXCLUDED.object_version,
-    object_status = EXCLUDED.object_status,
-    object_digest = EXCLUDED.object_digest,
-    checkpoint_sequence_number = EXCLUDED.checkpoint_sequence_number,
-    owner_type = EXCLUDED.owner_type,
-    owner_id = EXCLUDED.owner_id,
-    object_type = EXCLUDED.object_type,
-    object_type_package = EXCLUDED.object_type_package,
-    object_type_module = EXCLUDED.object_type_module,
-    object_type_name = EXCLUDED.object_type_name,
-    serialized_object = EXCLUDED.serialized_object,
-    coin_type = EXCLUDED.coin_type,
-    coin_balance = EXCLUDED.coin_balance,
-    df_kind = EXCLUDED.df_kind,
-    df_name = EXCLUDED.df_name,
-    df_object_type = EXCLUDED.df_object_type,
-    df_object_id = EXCLUDED.df_object_id;
-";
-
 #[derive(Clone)]
 pub struct PgIndexerStoreConfig {
     pub parallel_chunk_size: usize,
     pub parallel_objects_chunk_size: usize,
-    #[allow(unused)]
-    pub epochs_to_keep: Option<u64>,
 }
 
-pub struct PgIndexerStore<T: R2D2Connection + 'static> {
-    blocking_cp: ConnectionPool<T>,
+#[derive(Clone)]
+pub struct PgIndexerStore {
+    blocking_cp: BlockingConnectionPool,
+    pool: ConnectionPool,
     metrics: IndexerMetrics,
-    partition_manager: PgPartitionManager<T>,
+    partition_manager: PgPartitionManager,
     config: PgIndexerStoreConfig,
 }
 
-impl<T: R2D2Connection> Clone for PgIndexerStore<T> {
-    fn clone(&self) -> PgIndexerStore<T> {
-        Self {
-            blocking_cp: self.blocking_cp.clone(),
-            metrics: self.metrics.clone(),
-            partition_manager: self.partition_manager.clone(),
-            config: self.config.clone(),
-        }
-    }
-}
-
-impl<T: R2D2Connection + 'static> PgIndexerStore<T> {
-    pub fn new(blocking_cp: ConnectionPool<T>, metrics: IndexerMetrics) -> Self {
+impl PgIndexerStore {
+    pub fn new(
+        blocking_cp: BlockingConnectionPool,
+        pool: ConnectionPool,
+        metrics: IndexerMetrics,
+    ) -> Self {
         let parallel_chunk_size = std::env::var("PG_COMMIT_PARALLEL_CHUNK_SIZE")
             .unwrap_or_else(|_e| PG_COMMIT_PARALLEL_CHUNK_SIZE.to_string())
             .parse::<usize>()
@@ -167,27 +126,28 @@ impl<T: R2D2Connection + 'static> PgIndexerStore<T> {
             .unwrap_or_else(|_e| PG_COMMIT_OBJECTS_PARALLEL_CHUNK_SIZE.to_string())
             .parse::<usize>()
             .unwrap();
-        let epochs_to_keep = std::env::var("EPOCHS_TO_KEEP")
-            .map(|s| s.parse::<u64>().ok())
-            .unwrap_or_else(|_e| None);
         let partition_manager = PgPartitionManager::new(blocking_cp.clone())
             .expect("Failed to initialize partition manager");
         let config = PgIndexerStoreConfig {
             parallel_chunk_size,
             parallel_objects_chunk_size,
-            epochs_to_keep,
         };
 
         Self {
             blocking_cp,
+            pool,
             metrics,
             partition_manager,
             config,
         }
     }
 
-    pub fn blocking_cp(&self) -> ConnectionPool<T> {
+    pub fn blocking_cp(&self) -> BlockingConnectionPool {
         self.blocking_cp.clone()
+    }
+
+    pub fn pool(&self) -> ConnectionPool {
+        self.pool.clone()
     }
 
     pub fn get_latest_epoch_id(&self) -> Result<Option<u64>, IndexerError> {
@@ -628,32 +588,37 @@ impl<T: R2D2Connection + 'static> PgIndexerStore<T> {
         })
     }
 
-    fn update_objects_snapshot(&self, start_cp: u64, end_cp: u64) -> Result<(), IndexerError> {
-        let work_mem_gb = std::env::var("INDEXER_PG_WORK_MEM")
-            .unwrap_or_else(|_e| "16".to_string())
-            .parse::<i64>()
-            .unwrap();
-        let pg_work_mem_query_string = format!("SET work_mem = '{}GB'", work_mem_gb);
-        let pg_work_mem_query = pg_work_mem_query_string.as_str();
-        transactional_blocking_with_retry!(
-            &self.blocking_cp,
-            |conn| { RunQueryDsl::execute(diesel::sql_query(pg_work_mem_query), conn,) },
-            PG_DB_COMMIT_SLEEP_DURATION
-        )?;
+    fn persist_full_objects_history_chunk(
+        &self,
+        objects: Vec<StoredFullHistoryObject>,
+    ) -> Result<(), IndexerError> {
+        let guard = self
+            .metrics
+            .checkpoint_db_commit_latency_full_objects_history_chunks
+            .start_timer();
 
         transactional_blocking_with_retry!(
             &self.blocking_cp,
             |conn| {
-                RunQueryDsl::execute(
-                    diesel::sql_query(UPDATE_OBJECTS_SNAPSHOT_QUERY)
-                        .bind::<diesel::sql_types::BigInt, _>(start_cp as i64)
-                        .bind::<diesel::sql_types::BigInt, _>(end_cp as i64),
-                    conn,
-                )
+                for objects_chunk in objects.chunks(PG_COMMIT_CHUNK_SIZE_INTRA_DB_TX) {
+                    insert_or_ignore_into!(full_objects_history::table, objects_chunk, conn);
+                }
+
+                Ok::<(), IndexerError>(())
             },
             PG_DB_COMMIT_SLEEP_DURATION
-        )?;
-        Ok(())
+        )
+        .tap_ok(|_| {
+            let elapsed = guard.stop_and_record();
+            info!(
+                elapsed,
+                "Persisted {} chunked full objects history",
+                objects.len(),
+            );
+        })
+        .tap_err(|e| {
+            tracing::error!("Failed to persist full object history with error: {}", e);
+        })
     }
 
     fn persist_checkpoints(&self, checkpoints: Vec<IndexedCheckpoint>) -> Result<(), IndexerError> {
@@ -1652,7 +1617,7 @@ impl<T: R2D2Connection + 'static> PgIndexerStore<T> {
 }
 
 #[async_trait]
-impl<T: R2D2Connection> IndexerStore for PgIndexerStore<T> {
+impl IndexerStore for PgIndexerStore {
     async fn get_latest_checkpoint_sequence_number(&self) -> Result<Option<u64>, IndexerError> {
         self.execute_in_blocking_worker(|this| this.get_latest_checkpoint_sequence_number())
             .await
@@ -1773,7 +1738,7 @@ impl<T: R2D2Connection> IndexerStore for PgIndexerStore<T> {
         Ok(())
     }
 
-    async fn backfill_objects_snapshot(
+    async fn persist_objects_snapshot(
         &self,
         object_changes: Vec<TransactionObjectChangesToCommit>,
     ) -> Result<(), IndexerError> {
@@ -1868,34 +1833,71 @@ impl<T: R2D2Connection> IndexerStore for PgIndexerStore<T> {
         Ok(())
     }
 
-    async fn update_objects_snapshot(
+    // TODO: There are quite some shared boiler-plate code in all functions.
+    // We should clean them up eventually.
+    async fn persist_full_objects_history(
         &self,
-        start_cp: u64,
-        end_cp: u64,
+        object_changes: Vec<TransactionObjectChangesToCommit>,
     ) -> Result<(), IndexerError> {
-        let skip_snapshot = std::env::var("SKIP_OBJECT_SNAPSHOT")
+        let skip_history = std::env::var("SKIP_OBJECT_HISTORY")
             .map(|val| val.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
-        if skip_snapshot {
-            info!("skipping object snapshot");
+        if skip_history {
+            info!("skipping object history");
             return Ok(());
         }
 
-        let guard = self.metrics.update_object_snapshot_latency.start_timer();
+        if object_changes.is_empty() {
+            return Ok(());
+        }
+        let objects: Vec<StoredFullHistoryObject> = object_changes
+            .into_iter()
+            .flat_map(|c| {
+                let TransactionObjectChangesToCommit {
+                    changed_objects,
+                    deleted_objects,
+                } = c;
+                changed_objects
+                    .into_iter()
+                    .map(|o| o.into())
+                    .chain(deleted_objects.into_iter().map(|o| o.into()))
+            })
+            .collect();
+        let guard = self
+            .metrics
+            .checkpoint_db_commit_latency_full_objects_history
+            .start_timer();
 
-        self.spawn_blocking_task(move |this| this.update_objects_snapshot(start_cp, end_cp))
+        let len = objects.len();
+        let chunks = chunk!(objects, self.config.parallel_objects_chunk_size);
+        let futures = chunks
+            .into_iter()
+            .map(|c| {
+                self.spawn_blocking_task(move |this| this.persist_full_objects_history_chunk(c))
+            })
+            .collect::<Vec<_>>();
+
+        futures::future::join_all(futures)
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                tracing::error!(
+                    "Failed to join persist_full_objects_history_chunk futures: {}",
+                    e
+                );
+                IndexerError::from(e)
+            })?
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
                 IndexerError::PostgresWriteError(format!(
-                    "Failed to update objects snapshot: {:?}",
+                    "Failed to persist all full objects history chunks: {:?}",
                     e
                 ))
-            })??;
+            })?;
         let elapsed = guard.stop_and_record();
-        info!(
-            elapsed,
-            "Persisted snapshot for checkpoints from {} to {}", start_cp, end_cp
-        );
+        info!(elapsed, "Persisted {} full objects history", len);
         Ok(())
     }
 
@@ -2182,10 +2184,6 @@ impl<T: R2D2Connection> IndexerStore for PgIndexerStore<T> {
             this.get_network_total_transactions_by_end_of_epoch(epoch)
         })
         .await
-    }
-
-    fn as_any(&self) -> &dyn StdAny {
-        self
     }
 
     /// Persist protocol configs and feature flags until the protocol version for the latest epoch

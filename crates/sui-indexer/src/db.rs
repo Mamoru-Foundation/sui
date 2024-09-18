@@ -1,32 +1,55 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::anyhow;
-use std::time::Duration;
-
 use crate::errors::IndexerError;
-use diesel::connection::BoxableConnection;
-#[cfg(feature = "postgres-feature")]
+use clap::Args;
+use diesel::migration::{Migration, MigrationSource, MigrationVersion};
+use diesel::pg::Pg;
+use diesel::prelude::*;
 use diesel::query_dsl::RunQueryDsl;
 use diesel::r2d2::ConnectionManager;
-use diesel::r2d2::{Pool, PooledConnection, R2D2Connection};
+use diesel::r2d2::{Pool, PooledConnection};
+use diesel::PgConnection;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations};
+use std::time::Duration;
+use tracing::info;
 
-pub type ConnectionPool<T> = Pool<ConnectionManager<T>>;
-pub type PoolConnection<T> = PooledConnection<ConnectionManager<T>>;
+table! {
+    __diesel_schema_migrations (version) {
+        version -> VarChar,
+        run_on -> Timestamp,
+    }
+}
 
-#[derive(Debug, Clone, Copy)]
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/pg");
+
+pub type ConnectionPool = Pool<ConnectionManager<PgConnection>>;
+pub type PoolConnection = PooledConnection<ConnectionManager<PgConnection>>;
+
+#[derive(Args, Debug, Clone)]
 pub struct ConnectionPoolConfig {
+    #[arg(long, default_value_t = 100)]
+    #[arg(env = "DB_POOL_SIZE")]
     pub pool_size: u32,
+    #[arg(long, value_parser = parse_duration, default_value = "30")]
+    #[arg(env = "DB_CONNECTION_TIMEOUT")]
     pub connection_timeout: Duration,
+    #[arg(long, value_parser = parse_duration, default_value = "3600")]
+    #[arg(env = "DB_STATEMENT_TIMEOUT")]
     pub statement_timeout: Duration,
+}
+
+fn parse_duration(arg: &str) -> Result<std::time::Duration, std::num::ParseIntError> {
+    let seconds = arg.parse()?;
+    Ok(std::time::Duration::from_secs(seconds))
 }
 
 impl ConnectionPoolConfig {
     const DEFAULT_POOL_SIZE: u32 = 100;
-    const DEFAULT_CONNECTION_TIMEOUT: u64 = 3600;
+    const DEFAULT_CONNECTION_TIMEOUT: u64 = 30;
     const DEFAULT_STATEMENT_TIMEOUT: u64 = 3600;
 
-    fn connection_config(&self) -> ConnectionConfig {
+    pub(crate) fn connection_config(&self) -> ConnectionConfig {
         ConnectionConfig {
             statement_timeout: self.statement_timeout,
             read_only: false,
@@ -48,23 +71,10 @@ impl ConnectionPoolConfig {
 
 impl Default for ConnectionPoolConfig {
     fn default() -> Self {
-        let db_pool_size = std::env::var("DB_POOL_SIZE")
-            .ok()
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(Self::DEFAULT_POOL_SIZE);
-        let conn_timeout_secs = std::env::var("DB_CONNECTION_TIMEOUT")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(Self::DEFAULT_CONNECTION_TIMEOUT);
-        let statement_timeout_secs = std::env::var("DB_STATEMENT_TIMEOUT")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(Self::DEFAULT_STATEMENT_TIMEOUT);
-
         Self {
-            pool_size: db_pool_size,
-            connection_timeout: Duration::from_secs(conn_timeout_secs),
-            statement_timeout: Duration::from_secs(statement_timeout_secs),
+            pool_size: Self::DEFAULT_POOL_SIZE,
+            connection_timeout: Duration::from_secs(Self::DEFAULT_CONNECTION_TIMEOUT),
+            statement_timeout: Duration::from_secs(Self::DEFAULT_STATEMENT_TIMEOUT),
         }
     }
 }
@@ -75,70 +85,34 @@ pub struct ConnectionConfig {
     pub read_only: bool,
 }
 
-impl<T: R2D2Connection + 'static> diesel::r2d2::CustomizeConnection<T, diesel::r2d2::Error>
-    for ConnectionConfig
-{
-    fn on_acquire(&self, _conn: &mut T) -> std::result::Result<(), diesel::r2d2::Error> {
-        #[cfg(feature = "postgres-feature")]
-        {
-            _conn
-                .as_any_mut()
-                .downcast_mut::<diesel::PgConnection>()
-                .map_or_else(
-                    || {
-                        Err(diesel::r2d2::Error::QueryError(
-                            diesel::result::Error::DeserializationError(
-                                "Failed to downcast connection to PgConnection"
-                                    .to_string()
-                                    .into(),
-                            ),
-                        ))
-                    },
-                    |pg_conn| {
-                        diesel::sql_query(format!(
-                            "SET statement_timeout = {}",
-                            self.statement_timeout.as_millis(),
-                        ))
-                        .execute(pg_conn)
-                        .map_err(diesel::r2d2::Error::QueryError)?;
+impl diesel::r2d2::CustomizeConnection<PgConnection, diesel::r2d2::Error> for ConnectionConfig {
+    fn on_acquire(&self, conn: &mut PgConnection) -> std::result::Result<(), diesel::r2d2::Error> {
+        diesel::sql_query(format!(
+            "SET statement_timeout = {}",
+            self.statement_timeout.as_millis(),
+        ))
+        .execute(conn)
+        .map_err(diesel::r2d2::Error::QueryError)?;
 
-                        if self.read_only {
-                            diesel::sql_query("SET default_transaction_read_only = 't'")
-                                .execute(pg_conn)
-                                .map_err(diesel::r2d2::Error::QueryError)?;
-                        }
-                        Ok(())
-                    },
-                )?;
-            Ok(())
+        if self.read_only {
+            diesel::sql_query("SET default_transaction_read_only = 't'")
+                .execute(conn)
+                .map_err(diesel::r2d2::Error::QueryError)?;
         }
-        #[cfg(not(feature = "postgres-feature"))]
-        {
-            Ok(())
-        }
+        Ok(())
     }
 }
 
-pub fn new_connection_pool<T: R2D2Connection + 'static>(
+pub fn new_connection_pool(
     db_url: &str,
-    pool_size: Option<u32>,
-) -> Result<ConnectionPool<T>, IndexerError> {
-    let pool_config = ConnectionPoolConfig::default();
-    new_connection_pool_with_config(db_url, pool_size, pool_config)
-}
+    config: &ConnectionPoolConfig,
+) -> Result<ConnectionPool, IndexerError> {
+    let manager = ConnectionManager::<PgConnection>::new(db_url);
 
-pub fn new_connection_pool_with_config<T: R2D2Connection + 'static>(
-    db_url: &str,
-    pool_size: Option<u32>,
-    pool_config: ConnectionPoolConfig,
-) -> Result<ConnectionPool<T>, IndexerError> {
-    let manager = ConnectionManager::<T>::new(db_url);
-
-    let pool_size = pool_size.unwrap_or(pool_config.pool_size);
     Pool::builder()
-        .max_size(pool_size)
-        .connection_timeout(pool_config.connection_timeout)
-        .connection_customizer(Box::new(pool_config.connection_config()))
+        .max_size(config.pool_size)
+        .connection_timeout(config.connection_timeout)
+        .connection_customizer(Box::new(config.connection_config()))
         .build(manager)
         .map_err(|e| {
             IndexerError::PgConnectionPoolInitError(format!(
@@ -147,9 +121,7 @@ pub fn new_connection_pool_with_config<T: R2D2Connection + 'static>(
         })
 }
 
-pub fn get_pool_connection<T: R2D2Connection + Send + 'static>(
-    pool: &ConnectionPool<T>,
-) -> Result<PoolConnection<T>, IndexerError> {
+pub fn get_pool_connection(pool: &ConnectionPool) -> Result<PoolConnection, IndexerError> {
     pool.get().map_err(|e| {
         IndexerError::PgPoolConnectionError(format!(
             "Failed to get connection from PG connection pool with error: {:?}",
@@ -158,57 +130,65 @@ pub fn get_pool_connection<T: R2D2Connection + Send + 'static>(
     })
 }
 
-pub fn reset_database<T: R2D2Connection + Send + 'static>(
-    conn: &mut PoolConnection<T>,
-) -> Result<(), anyhow::Error> {
-    #[cfg(feature = "postgres-feature")]
-    {
-        conn.as_any_mut()
-            .downcast_mut::<PoolConnection<diesel::PgConnection>>()
-            .map_or_else(
-                || Err(anyhow!("Failed to downcast connection to PgConnection")),
-                |pg_conn| {
-                    setup_postgres::reset_database(pg_conn)?;
-                    Ok(())
-                },
-            )?;
+/// Checks that the local migration scripts is a prefix of the records in the database.
+/// This allows us run migration scripts against a DB at anytime, without worrying about
+/// existing readers fail over.
+/// We do however need to make sure that whenever we are deploying a new version of either reader or writer,
+/// we must first run migration scripts to ensure that there is not more local scripts than in the DB record.
+pub fn check_db_migration_consistency(conn: &mut PoolConnection) -> Result<(), IndexerError> {
+    info!("Starting compatibility check");
+    let migrations: Vec<Box<dyn Migration<Pg>>> = MIGRATIONS.migrations().map_err(|err| {
+        IndexerError::DbMigrationError(format!(
+            "Failed to fetch local migrations from schema: {err}"
+        ))
+    })?;
+    let local_migrations: Vec<_> = migrations.iter().map(|m| m.name().version()).collect();
+    check_db_migration_consistency_impl(conn, local_migrations)?;
+    info!("Compatibility check passed");
+    Ok(())
+}
+
+fn check_db_migration_consistency_impl(
+    conn: &mut PoolConnection,
+    local_migrations: Vec<MigrationVersion>,
+) -> Result<(), IndexerError> {
+    // Unfortunately we cannot call applied_migrations() directly on the connection,
+    // since it implicitly creates the __diesel_schema_migrations table if it doesn't exist,
+    // which is a write operation that we don't want to do in this function.
+    let applied_migrations: Vec<MigrationVersion> = __diesel_schema_migrations::table
+        .select(__diesel_schema_migrations::version)
+        .order(__diesel_schema_migrations::version.asc())
+        .load(conn)?;
+
+    // We check that the local migrations is a prefix of the applied migrations.
+    if local_migrations.len() > applied_migrations.len() {
+        return Err(IndexerError::DbMigrationError(format!(
+            "The number of local migrations is greater than the number of applied migrations. Local migrations: {:?}, Applied migrations: {:?}",
+            local_migrations, applied_migrations
+        )));
     }
-    #[cfg(feature = "mysql-feature")]
-    #[cfg(not(feature = "postgres-feature"))]
-    {
-        conn.as_any_mut()
-            .downcast_mut::<PoolConnection<diesel::MysqlConnection>>()
-            .map_or_else(
-                || Err(anyhow!("Failed to downcast connection to PgConnection")),
-                |mysql_conn| {
-                    setup_mysql::reset_database(mysql_conn)?;
-                    Ok(())
-                },
-            )?;
+    for (local_migration, applied_migration) in local_migrations.iter().zip(&applied_migrations) {
+        if local_migration != applied_migration {
+            return Err(IndexerError::DbMigrationError(format!(
+                "The next applied migration `{:?}` diverges from the local migration `{:?}`",
+                applied_migration, local_migration
+            )));
+        }
     }
     Ok(())
 }
 
-#[cfg(feature = "postgres-feature")]
+pub use setup_postgres::{reset_database, run_migrations};
+
 pub mod setup_postgres {
-    use crate::db::{get_pool_connection, new_connection_pool, PoolConnection};
-    use crate::errors::IndexerError;
-    use crate::indexer::Indexer;
-    use crate::metrics::IndexerMetrics;
-    use crate::store::PgIndexerStore;
-    use crate::IndexerConfig;
+    use crate::db::{PoolConnection, MIGRATIONS};
     use anyhow::anyhow;
-    use diesel::migration::MigrationSource;
-    use diesel::PgConnection;
+    use diesel::migration::MigrationConnection;
     use diesel::RunQueryDsl;
-    use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-    use prometheus::Registry;
-    use secrecy::ExposeSecret;
-    use tracing::{error, info};
+    use diesel_migrations::MigrationHarness;
+    use tracing::info;
 
-    const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/pg");
-
-    pub fn reset_database(conn: &mut PoolConnection<PgConnection>) -> Result<(), anyhow::Error> {
+    pub async fn reset_database(conn: &mut PoolConnection) -> Result<(), anyhow::Error> {
         info!("Resetting PG database ...");
 
         let drop_all_tables = "
@@ -251,222 +231,87 @@ pub mod setup_postgres {
         diesel::sql_query(drop_all_functions).execute(conn)?;
         info!("Dropped all functions.");
 
-        diesel::sql_query(
-            "
-        CREATE TABLE IF NOT EXISTS __diesel_schema_migrations (
-            version VARCHAR(50) PRIMARY KEY,
-            run_on TIMESTAMP NOT NULL DEFAULT NOW()
-        )",
-        )
-        .execute(conn)?;
+        conn.setup()?;
         info!("Created __diesel_schema_migrations table.");
 
-        conn.run_migrations(&MIGRATIONS.migrations().unwrap())
-            .map_err(|e| anyhow!("Failed to run migrations {e}"))?;
+        run_migrations(conn).await?;
         info!("Reset database complete.");
         Ok(())
     }
 
-    pub async fn setup(
-        indexer_config: IndexerConfig,
-        registry: Registry,
-    ) -> Result<(), IndexerError> {
-        let db_url_secret = indexer_config.get_db_url().map_err(|e| {
-            IndexerError::PgPoolConnectionError(format!(
-                "Failed parsing database url with error {:?}",
-                e
-            ))
-        })?;
-        let db_url = db_url_secret.expose_secret();
-        let blocking_cp = new_connection_pool::<PgConnection>(db_url, None).map_err(|e| {
-            error!(
-                "Failed creating Postgres connection pool with error {:?}",
-                e
-            );
-            e
-        })?;
-        info!("Postgres database connection pool is created at {}", db_url);
-        if indexer_config.reset_db {
-            let mut conn = get_pool_connection(&blocking_cp).map_err(|e| {
-                error!(
-                    "Failed getting Postgres connection from connection pool with error {:?}",
-                    e
-                );
-                e
-            })?;
-            reset_database(&mut conn).map_err(|e| {
-                let db_err_msg = format!(
-                    "Failed resetting database with url: {:?} and error: {:?}",
-                    db_url, e
-                );
-                error!("{}", db_err_msg);
-                IndexerError::PostgresResetError(db_err_msg)
-            })?;
-            info!("Reset Postgres database complete.");
-        }
-        let indexer_metrics = IndexerMetrics::new(&registry);
-        mysten_metrics::init_metrics(&registry);
-
-        let report_cp = blocking_cp.clone();
-        let report_metrics = indexer_metrics.clone();
-        tokio::spawn(async move {
-            loop {
-                let cp_state = report_cp.state();
-                info!(
-                    "DB connection pool size: {}, with idle conn: {}.",
-                    cp_state.connections, cp_state.idle_connections
-                );
-                report_metrics
-                    .db_conn_pool_size
-                    .set(cp_state.connections as i64);
-                report_metrics
-                    .idle_db_conn
-                    .set(cp_state.idle_connections as i64);
-                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-            }
-        });
-        if indexer_config.fullnode_sync_worker {
-            let store = PgIndexerStore::<PgConnection>::new(blocking_cp, indexer_metrics.clone());
-            return Indexer::start_writer::<PgIndexerStore<PgConnection>, PgConnection>(
-                &indexer_config,
-                store,
-                indexer_metrics,
-            )
-            .await;
-        } else if indexer_config.rpc_server_worker {
-            return Indexer::start_reader::<PgConnection>(
-                &indexer_config,
-                &registry,
-                db_url.to_string(),
-            )
-            .await;
-        }
+    pub async fn run_migrations(conn: &mut PoolConnection) -> Result<(), anyhow::Error> {
+        conn.run_pending_migrations(MIGRATIONS)
+            .map_err(|e| anyhow!("Failed to run migrations {e}"))?;
         Ok(())
     }
 }
 
-#[cfg(feature = "mysql-feature")]
-#[cfg(not(feature = "postgres-feature"))]
-pub mod setup_mysql {
-    use crate::db::{get_pool_connection, new_connection_pool, PoolConnection};
-    use crate::errors::IndexerError;
-    use crate::indexer::Indexer;
-    use crate::metrics::IndexerMetrics;
-    use crate::store::PgIndexerStore;
-    use crate::IndexerConfig;
-    use anyhow::anyhow;
-    use diesel::migration::MigrationSource;
-    use diesel::MysqlConnection;
-    use diesel::RunQueryDsl;
-    use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-    use prometheus::Registry;
-    use secrecy::ExposeSecret;
-    use tracing::{error, info};
+#[cfg(feature = "pg_integration")]
+#[cfg(test)]
+mod tests {
+    use crate::db::{
+        check_db_migration_consistency, check_db_migration_consistency_impl, get_pool_connection,
+        new_connection_pool, reset_database, ConnectionPoolConfig, MIGRATIONS,
+    };
+    use crate::tempdb::TempDb;
+    use diesel::migration::{Migration, MigrationSource};
+    use diesel::pg::Pg;
+    use diesel_migrations::MigrationHarness;
 
-    const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/mysql");
-
-    pub fn reset_database(conn: &mut PoolConnection<MysqlConnection>) -> Result<(), anyhow::Error> {
-        info!("Resetting MySQL database ...");
-
-        let table_names: Vec<String> = diesel::dsl::sql::<diesel::sql_types::Text>(
-            "SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = DATABASE()",
+    // Check that the migration records in the database created from the local schema
+    // pass the consistency check.
+    #[tokio::test]
+    async fn db_migration_consistency_smoke_test() {
+        let database = TempDb::new().unwrap();
+        let blocking_pool = new_connection_pool(
+            database.database().url().as_str(),
+            &ConnectionPoolConfig::default(),
         )
-        .load(conn)?;
-        for table_name in table_names {
-            let drop_table_query = format!("DROP TABLE IF EXISTS {}", table_name);
-            diesel::sql_query(drop_table_query).execute(conn)?;
-        }
-        info!("Drop tables complete.");
-
-        diesel::sql_query(
-            "
-            CREATE TABLE __diesel_schema_migrations (
-                version VARCHAR(50) PRIMARY KEY,
-                run_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP()
-            )
-        ",
-        )
-        .execute(conn)?;
-        info!("Created __diesel_schema_migrations table.");
-
-        conn.run_migrations(&MIGRATIONS.migrations().unwrap())
-            .map_err(|e| anyhow!("Failed to run migrations {e}"))?;
-        info!("All migrations complete, reset database complete");
-        Ok(())
+        .unwrap();
+        let mut conn = get_pool_connection(&blocking_pool).unwrap();
+        reset_database(&mut conn).await.unwrap();
+        check_db_migration_consistency(&mut conn).unwrap();
     }
 
-    pub async fn setup(
-        indexer_config: IndexerConfig,
-        registry: Registry,
-    ) -> Result<(), IndexerError> {
-        let db_url_secret = indexer_config.get_db_url().map_err(|e| {
-            IndexerError::PgPoolConnectionError(format!(
-                "Failed parsing database url with error {:?}",
-                e
-            ))
-        })?;
-        let db_url = db_url_secret.expose_secret();
-        let blocking_cp = new_connection_pool::<MysqlConnection>(db_url, None).map_err(|e| {
-            error!("Failed creating Mysql connection pool with error {:?}", e);
-            e
-        })?;
-        info!("MySQL database connection pool is created.");
-        if indexer_config.reset_db {
-            let mut conn = get_pool_connection(&blocking_cp).map_err(|e| {
-                error!(
-                    "Failed getting Mysql connection from connection pool with error {:?}",
-                    e
-                );
-                e
-            })?;
-            crate::db::setup_mysql::reset_database(&mut conn).map_err(|e| {
-                let db_err_msg = format!(
-                    "Failed resetting database with url: {:?} and error: {:?}",
-                    db_url, e
-                );
-                error!("{}", db_err_msg);
-                IndexerError::PostgresResetError(db_err_msg)
-            })?;
-            info!("Reset MySQL database complete.");
-        }
-        let indexer_metrics = IndexerMetrics::new(&registry);
-        mysten_metrics::init_metrics(&registry);
+    #[tokio::test]
+    async fn db_migration_consistency_non_prefix_test() {
+        let database = TempDb::new().unwrap();
+        let blocking_pool = new_connection_pool(
+            database.database().url().as_str(),
+            &ConnectionPoolConfig::default(),
+        )
+        .unwrap();
+        let mut conn = get_pool_connection(&blocking_pool).unwrap();
 
-        let report_cp = blocking_cp.clone();
-        let report_metrics = indexer_metrics.clone();
-        tokio::spawn(async move {
-            loop {
-                let cp_state = report_cp.state();
-                info!(
-                    "DB connection pool size: {}, with idle conn: {}.",
-                    cp_state.connections, cp_state.idle_connections
-                );
-                report_metrics
-                    .db_conn_pool_size
-                    .set(cp_state.connections as i64);
-                report_metrics
-                    .idle_db_conn
-                    .set(cp_state.idle_connections as i64);
-                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-            }
-        });
-        if indexer_config.fullnode_sync_worker {
-            let store =
-                PgIndexerStore::<MysqlConnection>::new(blocking_cp, indexer_metrics.clone());
-            return Indexer::start_writer::<PgIndexerStore<MysqlConnection>, MysqlConnection>(
-                &indexer_config,
-                store,
-                indexer_metrics,
-            )
-            .await;
-        } else if indexer_config.rpc_server_worker {
-            return Indexer::start_reader::<MysqlConnection>(
-                &indexer_config,
-                &registry,
-                db_url.to_string(),
-            )
-            .await;
-        }
-        Ok(())
+        reset_database(&mut conn).await.unwrap();
+
+        conn.revert_migration(MIGRATIONS.migrations().unwrap().last().unwrap())
+            .unwrap();
+        // Local migrations is one record more than the applied migrations.
+        // This will fail the consistency check since it's not a prefix.
+        assert!(check_db_migration_consistency(&mut conn).is_err());
+
+        conn.run_pending_migrations(MIGRATIONS).unwrap();
+        // After running pending migrations they should be consistent.
+        check_db_migration_consistency(&mut conn).unwrap();
+    }
+
+    #[tokio::test]
+    async fn db_migration_consistency_prefix_test() {
+        let database = TempDb::new().unwrap();
+        let blocking_pool = new_connection_pool(
+            database.database().url().as_str(),
+            &ConnectionPoolConfig::default(),
+        )
+        .unwrap();
+        let mut conn = get_pool_connection(&blocking_pool).unwrap();
+        reset_database(&mut conn).await.unwrap();
+
+        let migrations: Vec<Box<dyn Migration<Pg>>> = MIGRATIONS.migrations().unwrap();
+        let mut local_migrations: Vec<_> = migrations.iter().map(|m| m.name().version()).collect();
+        local_migrations.pop();
+        // Local migrations is one record less than the applied migrations.
+        // This should pass the consistency check since it's still a prefix.
+        check_db_migration_consistency_impl(&mut conn, local_migrations).unwrap();
     }
 }

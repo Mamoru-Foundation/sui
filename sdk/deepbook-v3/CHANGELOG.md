@@ -1,5 +1,36 @@
 # @mysten/deepbook-v3
 
+## 0.5.0
+
+### Minor Changes
+
+- c53baf2: Redeploy packages
+
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [569511a]
+  - @mysten/sui@1.8.0
+
+## 0.4.2
+
+### Patch Changes
+
+- 339b8eb: Try catch for getOrder function
+
+## 0.4.1
+
+### Patch Changes
+
+- 3221141: Book param function and package upgrade
+
+## 0.4.0
+
+### Minor Changes
+
+- adc704a: trade params and account getters
+
 ## 0.3.3
 
 ### Patch Changes
