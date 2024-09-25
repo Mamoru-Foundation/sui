@@ -1,24 +1,22 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
+use std::sync::Arc;
 
-use std::{collections::HashMap, sync::Arc};
-
-use anyhow::{anyhow, Result};
-use diesel::PgConnection;
+use anyhow::Result;
 use diesel::{
-    dsl::sql, r2d2::ConnectionManager, sql_types::Bool, ExpressionMethods, OptionalExtension,
-    QueryDsl, TextExpressionMethods,
+    dsl::sql, sql_types::Bool, ExpressionMethods, OptionalExtension, QueryDsl,
+    TextExpressionMethods,
 };
-use itertools::{any, Itertools};
-use tap::Pipe;
-use tap::TapFallible;
+use itertools::Itertools;
+use tap::{Pipe, TapFallible};
+use tracing::{debug, error, warn};
 
 use fastcrypto::encoding::Encoding;
 use fastcrypto::encoding::Hex;
-use move_core_types::annotated_value::MoveStructLayout;
-use move_core_types::language_storage::StructTag;
+use move_core_types::annotated_value::{MoveStructLayout, MoveTypeLayout};
+use move_core_types::language_storage::{StructTag, TypeTag};
 use sui_json_rpc_types::DisplayFieldsResponse;
-use sui_json_rpc_types::{Balance, Coin as SuiCoin, SuiCoinMetadata};
+use sui_json_rpc_types::{Balance, Coin as SuiCoin, SuiCoinMetadata, SuiMoveValue};
 use sui_json_rpc_types::{
     CheckpointId, EpochInfo, EventFilter, SuiEvent, SuiObjectDataFilter,
     SuiTransactionBlockResponse, TransactionFilter,
@@ -29,19 +27,18 @@ use sui_package_resolver::{PackageStoreWithLruCache, Resolver};
 use sui_types::effects::TransactionEvents;
 use sui_types::{balance::Supply, coin::TreasuryCap, dynamic_field::DynamicFieldName};
 use sui_types::{
-    base_types::{ObjectID, ObjectRef, SequenceNumber, SuiAddress, VersionNumber},
+    base_types::{ObjectID, SuiAddress, VersionNumber},
     committee::EpochId,
-    digests::{ObjectDigest, TransactionDigest},
-    dynamic_field::DynamicFieldInfo,
+    digests::TransactionDigest,
+    dynamic_field::{DynamicFieldInfo, DynamicFieldType},
     object::{Object, ObjectRead},
     sui_system_state::{sui_system_state_summary::SuiSystemStateSummary, SuiSystemStateTrait},
 };
 use sui_types::{coin::CoinMetadata, event::EventID};
 
 use crate::database::ConnectionPool;
-use crate::db::{ConnectionConfig, ConnectionPool as BlockingConnectionPool, ConnectionPoolConfig};
+use crate::db::ConnectionPoolConfig;
 use crate::models::transactions::{stored_events_to_events, StoredTransactionEvents};
-use crate::store::diesel_macro::*;
 use crate::{
     errors::IndexerError,
     models::{
@@ -49,7 +46,7 @@ use crate::{
         display::StoredDisplay,
         epoch::StoredEpochInfo,
         events::StoredEvent,
-        objects::{CoinBalance, ObjectRefColumn, StoredObject},
+        objects::{CoinBalance, StoredObject},
         transactions::{tx_events_to_sui_tx_events, StoredTransaction},
         tx_indices::TxSequenceNumber,
     },
@@ -64,7 +61,6 @@ pub const EVENT_SEQUENCE_NUMBER_STR: &str = "event_sequence_number";
 
 #[derive(Clone)]
 pub struct IndexerReader {
-    blocking_pool: BlockingConnectionPool,
     pool: ConnectionPool,
     package_resolver: PackageResolver,
 }
@@ -73,12 +69,11 @@ pub type PackageResolver = Arc<Resolver<PackageStoreWithLruCache<IndexerStorePac
 
 // Impl for common initialization and utilities
 impl IndexerReader {
-    pub fn new(blocking_pool: BlockingConnectionPool, pool: ConnectionPool) -> Self {
+    pub fn new(pool: ConnectionPool) -> Self {
         let indexer_store_pkg_resolver = IndexerStorePackageResolver::new(pool.clone());
         let package_cache = PackageStoreWithLruCache::new(indexer_store_pkg_resolver);
         let package_resolver = Arc::new(Resolver::new(package_cache));
         Self {
-            blocking_pool,
             pool,
             package_resolver,
         }
@@ -89,19 +84,6 @@ impl IndexerReader {
         config: ConnectionPoolConfig,
     ) -> Result<Self> {
         let db_url = db_url.into();
-        let manager = ConnectionManager::<PgConnection>::new(db_url.clone());
-
-        let connection_config = ConnectionConfig {
-            statement_timeout: config.statement_timeout,
-            read_only: true,
-        };
-
-        let blocking_pool = diesel::r2d2::Pool::builder()
-            .max_size(config.pool_size)
-            .connection_timeout(config.connection_timeout)
-            .connection_customizer(Box::new(connection_config))
-            .build(manager)
-            .map_err(|e| anyhow!("Failed to initialize connection pool. Error: {:?}. If Error is None, please check whether the configured pool size (currently {}) exceeds the maximum number of connections allowed by the database.", e, config.pool_size))?;
 
         let pool = ConnectionPool::new(db_url.parse()?, config).await?;
 
@@ -109,32 +91,13 @@ impl IndexerReader {
         let package_cache = PackageStoreWithLruCache::new(indexer_store_pkg_resolver);
         let package_resolver = Arc::new(Resolver::new(package_cache));
         Ok(Self {
-            blocking_pool,
             pool,
             package_resolver,
         })
     }
 
-    pub async fn spawn_blocking<F, R, E>(&self, f: F) -> Result<R, E>
-    where
-        F: FnOnce(Self) -> Result<R, E> + Send + 'static,
-        R: Send + 'static,
-        E: Send + 'static,
-    {
-        let this = self.clone();
-        let current_span = tracing::Span::current();
-        tokio::task::spawn_blocking(move || {
-            CALLED_FROM_BLOCKING_POOL
-                .with(|in_blocking_pool| *in_blocking_pool.borrow_mut() = true);
-            let _guard = current_span.enter();
-            f(this)
-        })
-        .await
-        .expect("propagate any panics")
-    }
-
-    pub fn get_pool(&self) -> BlockingConnectionPool {
-        self.blocking_pool.clone()
+    pub fn pool(&self) -> &ConnectionPool {
+        &self.pool
     }
 }
 
@@ -361,14 +324,26 @@ impl IndexerReader {
             None => return Err(IndexerError::InvalidArgumentError("Invalid epoch".into())),
         };
 
-        let system_state: SuiSystemStateSummary = bcs::from_bytes(&stored_epoch.system_state)
-            .map_err(|_| {
+        let system_state_summary: SuiSystemStateSummary =
+            bcs::from_bytes(&stored_epoch.system_state).map_err(|_| {
                 IndexerError::PersistentStorageDataCorruptionError(format!(
                     "Failed to deserialize `system_state` for epoch {:?}",
                     epoch,
                 ))
             })?;
-        Ok(system_state)
+        #[cfg(debug_assertions)]
+        {
+            let correct_system_state_summary: SuiSystemStateSummary =
+                serde_json::from_value(stored_epoch.system_state_summary_json.clone().unwrap())
+                    .unwrap();
+            // The old system state summary is incorrect and its epoch will be offset by 1.
+            // This is fixed in the new system state summary. Assert it here to double check.
+            assert_eq!(
+                correct_system_state_summary.epoch,
+                stored_epoch.epoch as u64
+            );
+        }
+        Ok(system_state_summary)
     }
 
     async fn get_checkpoint_from_db(
@@ -511,10 +486,10 @@ impl IndexerReader {
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .tap_err(|e| tracing::error!("Failed to join all tx block futures: {}", e))?
+            .tap_err(|e| error!("Failed to join all tx block futures: {}", e))?
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .tap_err(|e| tracing::error!("Failed to collect tx block futures: {}", e))?;
+            .tap_err(|e| error!("Failed to collect tx block futures: {}", e))?;
         Ok(tx_blocks)
     }
 
@@ -873,7 +848,7 @@ impl IndexerReader {
             limit,
         );
 
-        tracing::debug!("query transaction blocks: {}", query);
+        debug!("query transaction blocks: {}", query);
         let tx_sequence_numbers = diesel::sql_query(query.clone())
             .load::<TxSequenceNumber>(&mut connection)
             .await?
@@ -1110,7 +1085,7 @@ impl IndexerReader {
                 main_where_clause, cursor_clause, order_clause, limit,
             )
         };
-        tracing::debug!("query events: {}", query);
+        debug!("query events: {}", query);
         let stored_events = diesel::sql_query(query)
             .load::<StoredEvent>(&mut connection)
             .await?;
@@ -1126,10 +1101,10 @@ impl IndexerReader {
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .tap_err(|e| tracing::error!("Failed to join sui event futures: {}", e))?
+            .tap_err(|e| error!("Failed to join sui event futures: {}", e))?
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .tap_err(|e| tracing::error!("Failed to collect sui event futures: {}", e))?;
+            .tap_err(|e| error!("Failed to collect sui event futures: {}", e))?;
         Ok(sui_events)
     }
 
@@ -1139,57 +1114,31 @@ impl IndexerReader {
         cursor: Option<ObjectID>,
         limit: usize,
     ) -> Result<Vec<DynamicFieldInfo>, IndexerError> {
-        let objects = self
+        let stored_objects = self
             .get_dynamic_fields_raw(parent_object_id, cursor, limit)
             .await?;
-
-        if any(objects.iter(), |o| o.df_object_id.is_none()) {
-            return Err(IndexerError::PersistentStorageDataCorruptionError(format!(
-                "Dynamic field has empty df_object_id column for parent object {}",
-                parent_object_id
-            )));
-        }
-
-        // for Dynamic field objects, df_object_id != object_id, we need another look up
-        // to get the version and digests.
-        // TODO: simply store df_object_version and df_object_digest as well?
-        let dfo_ids = objects
-            .iter()
-            .filter_map(|o| {
-                // Unwrap safe: checked nullity above
-                if o.df_object_id.as_ref().unwrap() == &o.object_id {
-                    None
-                } else {
-                    Some(o.df_object_id.clone().unwrap())
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let object_refs = self.get_object_refs(dfo_ids).await?;
         let mut df_futures = vec![];
-        for object in objects {
-            let package_resolver_clone = self.package_resolver.clone();
-            df_futures.push(tokio::task::spawn(
-                object.try_into_expectant_dynamic_field_info(package_resolver_clone),
-            ));
+        let indexer_reader_arc = Arc::new(self.clone());
+        for stored_object in stored_objects {
+            let indexer_reader_arc_clone = Arc::clone(&indexer_reader_arc);
+            df_futures.push(tokio::task::spawn(async move {
+                indexer_reader_arc_clone
+                    .try_create_dynamic_field_info(stored_object)
+                    .await
+            }));
         }
-        let mut dynamic_fields = futures::future::join_all(df_futures)
+        let df_infos = futures::future::join_all(df_futures)
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .tap_err(|e| tracing::error!("Error joining DF futures: {:?}", e))?
+            .tap_err(|e| error!("Error joining DF futures: {:?}", e))?
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
-            .tap_err(|e| tracing::error!("Error calling DF try_into function: {:?}", e))?;
-
-        for df in dynamic_fields.iter_mut() {
-            if let Some(obj_ref) = object_refs.get(&df.object_id) {
-                df.version = obj_ref.1;
-                df.digest = obj_ref.2;
-            }
-        }
-
-        Ok(dynamic_fields)
+            .tap_err(|e| error!("Error calling try_create_dynamic_field_info: {:?}", e))?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        Ok(df_infos)
     }
 
     pub async fn get_dynamic_fields_raw(
@@ -1219,6 +1168,90 @@ impl IndexerReader {
             .map_err(Into::into)
     }
 
+    async fn try_create_dynamic_field_info(
+        &self,
+        stored_object: StoredObject,
+    ) -> Result<Option<DynamicFieldInfo>, IndexerError> {
+        if stored_object.df_kind.is_none() {
+            return Ok(None);
+        }
+
+        let object: Object = stored_object.try_into()?;
+        let move_object = match object.data.try_as_move().cloned() {
+            Some(move_object) => move_object,
+            None => {
+                return Err(IndexerError::ResolveMoveStructError(
+                    "Object is not a MoveObject".to_string(),
+                ));
+            }
+        };
+        let struct_tag: StructTag = move_object.type_().clone().into();
+        let move_type_layout = self
+            .package_resolver
+            .type_layout(TypeTag::Struct(Box::new(struct_tag.clone())))
+            .await
+            .map_err(|e| {
+                IndexerError::ResolveMoveStructError(format!(
+                    "Failed to get type layout for type {}: {}",
+                    struct_tag, e
+                ))
+            })?;
+        let MoveTypeLayout::Struct(move_struct_layout) = move_type_layout else {
+            return Err(IndexerError::ResolveMoveStructError(
+                "MoveTypeLayout is not Struct".to_string(),
+            ));
+        };
+
+        let move_struct = move_object.to_move_struct(&move_struct_layout)?;
+        let (move_value, type_, object_id) =
+            DynamicFieldInfo::parse_move_object(&move_struct).tap_err(|e| warn!("{e}"))?;
+        let name_type = move_object.type_().try_extract_field_name(&type_)?;
+        let bcs_name = bcs::to_bytes(&move_value.clone().undecorate()).map_err(|e| {
+            IndexerError::SerdeError(format!(
+                "Failed to serialize dynamic field name {:?}: {e}",
+                move_value
+            ))
+        })?;
+        let name = DynamicFieldName {
+            type_: name_type,
+            value: SuiMoveValue::from(move_value).to_json_value(),
+        };
+
+        Ok(Some(match type_ {
+            DynamicFieldType::DynamicObject => {
+                let object = self.get_object(&object_id, None).await?.ok_or(
+                    IndexerError::UncategorizedError(anyhow::anyhow!(
+                        "Failed to find object_id {:?} when trying to create dynamic field info",
+                        object_id
+                    )),
+                )?;
+
+                let version = object.version();
+                let digest = object.digest();
+                let object_type = object.data.type_().unwrap().clone();
+                DynamicFieldInfo {
+                    name,
+                    bcs_name,
+                    type_,
+                    object_type: object_type.to_canonical_string(/* with_prefix */ true),
+                    object_id,
+                    version,
+                    digest,
+                }
+            }
+            DynamicFieldType::DynamicField => DynamicFieldInfo {
+                name,
+                bcs_name,
+                type_,
+                object_type: move_object.into_type().into_type_params()[1]
+                    .to_canonical_string(/* with_prefix */ true),
+                object_id: object.id(),
+                version: object.version(),
+                digest: object.digest(),
+            },
+        }))
+    }
+
     pub async fn bcs_name_from_dynamic_field_name(
         &self,
         name: &DynamicFieldName,
@@ -1236,45 +1269,6 @@ impl IndexerReader {
         let sui_json_value = sui_json::SuiJsonValue::new(name.value.clone())?;
         let name_bcs_value = sui_json_value.to_bcs_bytes(&move_type_layout)?;
         Ok(name_bcs_value)
-    }
-
-    async fn get_object_refs(
-        &self,
-        object_ids: Vec<Vec<u8>>,
-    ) -> IndexerResult<HashMap<ObjectID, ObjectRef>> {
-        use diesel_async::RunQueryDsl;
-
-        let mut connection = self.pool.get().await?;
-
-        objects::table
-            .filter(objects::object_id.eq_any(object_ids))
-            .select((
-                objects::object_id,
-                objects::object_version,
-                objects::object_digest,
-            ))
-            .load::<ObjectRefColumn>(&mut connection)
-            .await?
-            .into_iter()
-            .map(|object_ref: ObjectRefColumn| {
-                let object_id =
-                    ObjectID::from_bytes(object_ref.object_id.clone()).map_err(|_e| {
-                        IndexerError::PersistentStorageDataCorruptionError(format!(
-                            "Can't convert {:?} to ObjectID",
-                            object_ref.object_id
-                        ))
-                    })?;
-                let seq = SequenceNumber::from_u64(object_ref.object_version as u64);
-                let object_digest = ObjectDigest::try_from(object_ref.object_digest.as_slice())
-                    .map_err(|e| {
-                        IndexerError::PersistentStorageDataCorruptionError(format!(
-                            "object {:?} has incompatible object digest. Error: {e}",
-                            object_ref.object_digest
-                        ))
-                    })?;
-                Ok((object_id, (object_id, seq, object_digest)))
-            })
-            .collect::<IndexerResult<HashMap<_, _>>>()
     }
 
     async fn get_display_object_by_type(
@@ -1367,8 +1361,7 @@ impl IndexerReader {
             coin_type_filter,
         );
 
-        tracing::debug!("get coin balances query: {query}");
-
+        debug!("get coin balances query: {query}");
         diesel::sql_query(query)
             .load::<CoinBalance>(&mut connection)
             .await?
@@ -1410,6 +1403,9 @@ impl IndexerReader {
         let mut connection = self.pool.get().await?;
 
         let object = match objects::table
+            .filter(objects::object_type_package.eq(type_.address.to_vec()))
+            .filter(objects::object_type_module.eq(type_.module.to_string()))
+            .filter(objects::object_type_name.eq(type_.name.to_string()))
             .filter(objects::object_type.eq(type_.to_canonical_string(/* with_prefix */ true)))
             .first::<StoredObject>(&mut connection)
             .await

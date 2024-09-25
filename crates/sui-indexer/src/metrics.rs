@@ -501,20 +501,6 @@ impl IndexerMetrics {
                 registry,
             )
             .unwrap(),
-            checkpoint_db_commit_latency_event_indices: register_histogram_with_registry!(
-                "checkpoint_db_commit_latency_event_indices",
-                "Time spent commiting event indices",
-                DATA_INGESTION_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            checkpoint_db_commit_latency_event_indices_chunks: register_histogram_with_registry!(
-                "checkpoint_db_commit_latency_event_indices_chunks",
-                "Time spent commiting event indices chunks",
-                DATA_INGESTION_LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
             checkpoint_db_commit_latency_packages: register_histogram_with_registry!(
                 "checkpoint_db_commit_latency_packages",
                 "Time spent committing packages",
@@ -788,7 +774,7 @@ impl IndexerMetrics {
 
 pub fn spawn_connection_pool_metric_collector(
     metrics: IndexerMetrics,
-    connection_pool: crate::db::ConnectionPool,
+    connection_pool: crate::database::ConnectionPool,
 ) {
     tokio::spawn(async move {
         loop {
