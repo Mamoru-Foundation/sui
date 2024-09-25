@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use sui_config::node::{ConsensusProtocol, ExpensiveSafetyCheckConfig};
+use sui_config::node::ExpensiveSafetyCheckConfig;
 use sui_macros::fail_point_arg;
 use sui_types::accumulator::Accumulator;
 use sui_types::authenticator_state::{get_authenticator_state, ActiveJwk};
@@ -65,7 +65,6 @@ use crate::consensus_handler::{
     ConsensusCommitInfo, SequencedConsensusTransaction, SequencedConsensusTransactionKey,
     SequencedConsensusTransactionKind, VerifiedSequencedConsensusTransaction,
 };
-use crate::consensus_manager::ConsensusManager;
 use crate::epoch::epoch_metrics::EpochMetrics;
 use crate::epoch::randomness::{
     DkgStatus, RandomnessManager, RandomnessReporter, VersionedProcessedMessage,
@@ -340,7 +339,7 @@ pub struct AuthorityPerEpochStore {
     /// We need to keep track of those in order to know when to send EndOfPublish message.
     /// Lock ordering: this is a 'leaf' lock, no other locks should be acquired in the scope of this lock
     /// In particular, this lock is always acquired after taking read or write lock on reconfig state
-    pending_consensus_certificates: Mutex<HashSet<TransactionDigest>>,
+    pending_consensus_certificates: RwLock<HashSet<TransactionDigest>>,
 
     /// MutexTable for transaction locks (prevent concurrent execution of same transaction)
     mutex_table: MutexTable<TransactionDigest>,
@@ -877,7 +876,7 @@ impl AuthorityPerEpochStore {
             running_root_notify_read: NotifyRead::new(),
             executed_digests_notify_read: NotifyRead::new(),
             end_of_publish: Mutex::new(end_of_publish),
-            pending_consensus_certificates: Mutex::new(pending_consensus_certificates),
+            pending_consensus_certificates: RwLock::new(pending_consensus_certificates),
             mutex_table: MutexTable::new(MUTEX_TABLE_SIZE),
             epoch_open_time: current_time,
             epoch_close_time: Default::default(),
@@ -1890,7 +1889,7 @@ impl AuthorityPerEpochStore {
                     "Reconfiguration state should allow accepting user transactions"
                 );
                 self.pending_consensus_certificates
-                    .lock()
+                    .write()
                     .insert(*cert.digest());
             }
         }
@@ -1907,22 +1906,28 @@ impl AuthorityPerEpochStore {
         // TODO: lock once for all remove() calls.
         for key in keys {
             if let ConsensusTransactionKey::Certificate(cert) = key {
-                self.pending_consensus_certificates.lock().remove(cert);
+                self.pending_consensus_certificates.write().remove(cert);
             }
         }
         Ok(())
     }
 
     pub fn pending_consensus_certificates_count(&self) -> usize {
-        self.pending_consensus_certificates.lock().len()
+        self.pending_consensus_certificates.read().len()
     }
 
     pub fn pending_consensus_certificates_empty(&self) -> bool {
-        self.pending_consensus_certificates.lock().is_empty()
+        self.pending_consensus_certificates.read().is_empty()
     }
 
     pub fn pending_consensus_certificates(&self) -> HashSet<TransactionDigest> {
-        self.pending_consensus_certificates.lock().clone()
+        self.pending_consensus_certificates.read().clone()
+    }
+
+    pub fn is_pending_consensus_certificate(&self, tx_digest: &TransactionDigest) -> bool {
+        self.pending_consensus_certificates
+            .read()
+            .contains(tx_digest)
     }
 
     pub fn deferred_transactions_empty(&self) -> bool {
@@ -2465,6 +2470,10 @@ impl AuthorityPerEpochStore {
         match &transaction.transaction {
             SequencedConsensusTransactionKind::External(ConsensusTransaction {
                 kind: ConsensusTransactionKind::CertifiedTransaction(_certificate),
+                ..
+            }) => {}
+            SequencedConsensusTransactionKind::External(ConsensusTransaction {
+                kind: ConsensusTransactionKind::UserTransaction(_tx),
                 ..
             }) => {}
             SequencedConsensusTransactionKind::External(ConsensusTransaction {
@@ -3684,6 +3693,14 @@ impl AuthorityPerEpochStore {
                     );
                 }
                 Ok(ConsensusCertificateResult::RandomnessConsensusMessage)
+            }
+
+            SequencedConsensusTransactionKind::External(ConsensusTransaction {
+                kind: ConsensusTransactionKind::UserTransaction(_tx),
+                ..
+            }) => {
+                // TODO: implement handling of unsigned user transactions.
+                Ok(ConsensusCertificateResult::Ignored)
             }
             SequencedConsensusTransactionKind::System(system_transaction) => {
                 Ok(self.process_consensus_system_transaction(system_transaction))
