@@ -3437,7 +3437,7 @@ impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveTypeLayout, ValueIm
 
             (MoveTypeLayout::Struct(struct_layout), ValueImpl::Container(Container::Struct(r))) => {
                 (AnnotatedValue {
-                    layout: struct_layout,
+                    layout: &**struct_layout,
                     val: &*r.borrow(),
                 })
                 .serialize(serializer)
@@ -3445,7 +3445,7 @@ impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveTypeLayout, ValueIm
 
             (MoveTypeLayout::Enum(enum_layout), ValueImpl::Container(Container::Variant(r))) => {
                 (AnnotatedValue {
-                    layout: enum_layout,
+                    layout: &**enum_layout,
                     val: &*r.borrow(),
                 })
                 .serialize(serializer)
@@ -3614,12 +3614,12 @@ impl<'d> serde::de::DeserializeSeed<'d> for SeedWrapper<&MoveTypeLayout> {
             L::Signer => AccountAddress::deserialize(deserializer).map(Value::signer),
 
             L::Struct(struct_layout) => Ok(SeedWrapper {
-                layout: struct_layout,
+                layout: &**struct_layout,
             }
             .deserialize(deserializer)?),
 
             L::Enum(enum_layout) => Ok(SeedWrapper {
-                layout: enum_layout,
+                layout: &**enum_layout,
             }
             .deserialize(deserializer)?),
 
@@ -4272,10 +4272,11 @@ impl ValueImpl {
             (L::Bool, ValueImpl::Bool(x)) => MoveValue::Bool(*x),
             (L::Address, ValueImpl::Address(x)) => MoveValue::Address(*x),
 
-            (L::Enum(MoveEnumLayout(variants)), ValueImpl::Container(Container::Variant(r))) => {
+            (L::Enum(enum_layout), ValueImpl::Container(Container::Variant(r))) => {
+                let MoveEnumLayout(variants) = &**enum_layout;
                 let (tag, values) = &*r.borrow();
                 let tag = *tag;
-                let field_layouts = &variants[tag as usize];
+                let field_layouts = &variants.as_slice()[tag as usize];
                 let mut fields = vec![];
                 for (v, field_layout) in values.iter().zip(field_layouts) {
                     fields.push(v.as_move_value(field_layout));

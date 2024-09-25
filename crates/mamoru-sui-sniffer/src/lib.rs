@@ -51,6 +51,7 @@ use sui_types::{
     executable_transaction::VerifiedExecutableTransaction,
     transaction::{Command, ProgrammableTransaction, TransactionDataAPI, TransactionKind},
 };
+use sui_types::type_input::TypeInput;
 
 mod error;
 
@@ -408,7 +409,7 @@ impl SuiTransactionBuilder {
                         type_arguments: boxed_progr_move_call
                             .type_arguments
                             .iter()
-                            .map(|elem: &TypeTag| elem.to_string())
+                            .map(|elem: &TypeInput| elem.to_string())
                             .collect::<Vec<String>>(),
                     })
                 }

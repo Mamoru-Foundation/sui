@@ -57,7 +57,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{any::Any, net::SocketAddr, time::Instant};
 use sui_graphql_rpc_headers::LIMITS_HEADER;
-use sui_indexer::db::{check_db_migration_consistency, get_pool_connection};
+use sui_indexer::db::check_db_migration_consistency;
 use sui_package_resolver::{PackageStoreWithLruCache, Resolver};
 use sui_sdk::SuiClientBuilder;
 use tokio::join;
@@ -88,8 +88,14 @@ impl Server {
     pub async fn run(mut self) -> Result<(), Error> {
         get_or_init_server_start_time().await;
 
-        let mut connection = get_pool_connection(&self.db_reader.inner.get_pool())?;
-        check_db_migration_consistency(&mut connection)?;
+        let mut connection = self
+            .db_reader
+            .inner
+            .pool()
+            .get()
+            .await
+            .map_err(|e| Error::Internal(e.to_string()))?;
+        check_db_migration_consistency(&mut connection).await?;
 
         // A handle that spawns a background task to periodically update the `Watermark`, which
         // consists of the checkpoint upper bound and current epoch.
@@ -222,7 +228,7 @@ impl ServerBuilder {
         self
     }
 
-    #[cfg(all(test, feature = "pg_integration"))]
+    #[cfg(test)]
     fn build_schema(self) -> Schema<Query, Mutation, EmptySubscription> {
         self.schema.finish()
     }
@@ -259,12 +265,9 @@ impl ServerBuilder {
         if self.router.is_none() {
             let router: Router = Router::new()
                 .route("/", post(graphql_handler))
-                .route("/:version", post(graphql_handler))
                 .route("/graphql", post(graphql_handler))
-                .route("/graphql/:version", post(graphql_handler))
                 .route("/health", get(health_check))
                 .route("/graphql/health", get(health_check))
-                .route("/graphql/:version/health", get(health_check))
                 .with_state(self.state.clone())
                 .route_layer(CallbackLayer::new(MetricsMakeCallbackHandler {
                     metrics: self.state.metrics.clone(),
@@ -672,7 +675,7 @@ async fn get_or_init_server_start_time() -> &'static Instant {
     ONCE.get_or_init(|| async move { Instant::now() }).await
 }
 
-#[cfg(all(test, feature = "pg_integration"))]
+#[cfg(test)]
 pub mod tests {
     use super::*;
     use crate::test_infra::cluster::{prep_executor_cluster, start_cluster};

@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use crate::errors::IndexerError;
 use crate::handlers::{EpochToCommit, TransactionObjectChangesToCommit};
 use crate::models::display::StoredDisplay;
+use crate::models::obj_indices::StoredObjectVersion;
 use crate::models::objects::{StoredDeletedObject, StoredObject};
 use crate::types::{
     EventIndex, IndexedCheckpoint, IndexedEvent, IndexedPackage, IndexedTransaction, TxIndex,
@@ -33,7 +34,7 @@ pub trait IndexerStore: Clone + Sync + Send + 'static {
 
     async fn get_chain_identifier(&self) -> Result<Option<Vec<u8>>, IndexerError>;
 
-    fn persist_protocol_configs_and_feature_flags(
+    async fn persist_protocol_configs_and_feature_flags(
         &self,
         chain_id: Vec<u8>,
     ) -> Result<(), IndexerError>;
@@ -53,6 +54,11 @@ pub trait IndexerStore: Clone + Sync + Send + 'static {
         object_changes: Vec<TransactionObjectChangesToCommit>,
     ) -> Result<(), IndexerError>;
 
+    async fn persist_object_versions(
+        &self,
+        object_versions: Vec<StoredObjectVersion>,
+    ) -> Result<(), IndexerError>;
+
     async fn persist_objects_snapshot(
         &self,
         object_changes: Vec<TransactionObjectChangesToCommit>,
@@ -61,6 +67,11 @@ pub trait IndexerStore: Clone + Sync + Send + 'static {
     async fn persist_checkpoints(
         &self,
         checkpoints: Vec<IndexedCheckpoint>,
+    ) -> Result<(), IndexerError>;
+
+    async fn persist_chain_identifier(
+        &self,
+        checkpoint_digest: Vec<u8>,
     ) -> Result<(), IndexerError>;
 
     async fn persist_transactions(
@@ -93,4 +104,7 @@ pub trait IndexerStore: Clone + Sync + Send + 'static {
         &self,
         epoch: u64,
     ) -> Result<u64, IndexerError>;
+
+    async fn upload_display(&self, epoch: u64) -> Result<(), IndexerError>;
+    async fn restore_display(&self, bytes: bytes::Bytes) -> Result<(), IndexerError>;
 }
