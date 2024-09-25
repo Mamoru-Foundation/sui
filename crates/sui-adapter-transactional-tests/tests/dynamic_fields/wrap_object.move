@@ -10,17 +10,15 @@ module a::m {
 
 use sui::dynamic_field;
 use sui::dynamic_object_field;
-use sui::object;
-use sui::tx_context::{sender, TxContext};
 
-struct Obj has key, store {
+public struct Obj has key, store {
     id: object::UID,
 }
 
 entry fun mint(ctx: &mut TxContext) {
-    let parent = object::new(ctx);
+    let mut parent = object::new(ctx);
     dynamic_object_field::add(&mut parent, 0, Obj { id: object::new(ctx) });
-    sui::transfer::transfer(Obj { id: parent }, sender(ctx))
+    sui::transfer::public_transfer(Obj { id: parent }, ctx.sender())
 }
 
 entry fun take_and_wrap(obj: &mut Obj) {
@@ -35,29 +33,29 @@ entry fun take_and_destroy(obj: &mut Obj) {
 
 entry fun take_and_take(obj: &mut Obj, ctx: &mut TxContext) {
     let v = dynamic_object_field::remove<u64, Obj>(&mut obj.id, 0);
-    sui::transfer::transfer(v, sender(ctx))
+    sui::transfer::public_transfer(v, ctx.sender())
 }
 
 }
 
 //# run a::m::mint --sender A
 
-//# view-object 107
+//# view-object 2,1
 
-//# run a::m::take_and_wrap --sender A --args object(106)
-
-
-//# run a::m::mint --sender A
-
-//# view-object 112
-
-//# run a::m::take_and_destroy --sender A --args object(113)
+//# run a::m::take_and_wrap --sender A --args object(2,0)
 
 
 //# run a::m::mint --sender A
 
-//# view-object 118
+//# view-object 5,2
 
-//# run a::m::take_and_take --sender A --args object(117)
+//# run a::m::take_and_destroy --sender A --args object(5,1)
 
-//# view-object 118
+
+//# run a::m::mint --sender A
+
+//# view-object 8,2
+
+//# run a::m::take_and_take --sender A --args object(8,0)
+
+//# view-object 8,2

@@ -1,29 +1,30 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use crate::{temp_dir, CommitteeFixture};
-use arc_swap::ArcSwap;
-use config::{Parameters, SharedCommittee, SharedWorkerCache, WorkerId};
+use crate::{latest_protocol_version, temp_dir, CommitteeFixture};
+use config::{AuthorityIdentifier, Committee, Parameters, WorkerCache, WorkerId};
 use crypto::{KeyPair, NetworkKeyPair, PublicKey};
 use executor::SerializedTransaction;
 use fastcrypto::traits::KeyPair as _;
 use itertools::Itertools;
-use multiaddr::Multiaddr;
-use node::{
-    execution_state::SimpleExecutionState,
-    metrics::{primary_metrics_registry, worker_metrics_registry},
-    Node,
-};
+use mysten_metrics::RegistryService;
+use mysten_network::multiaddr::Multiaddr;
+use network::client::NetworkClient;
+use node::primary_node::PrimaryNode;
+use node::worker_node::WorkerNode;
+use node::{execution_state::SimpleExecutionState, metrics::worker_metrics_registry};
 use prometheus::{proto::Metric, Registry};
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 use storage::NodeStorage;
 use telemetry_subscribers::TelemetryGuards;
+use tokio::sync::RwLockWriteGuard;
 use tokio::{
     sync::{broadcast::Sender, mpsc::channel, RwLock},
     task::JoinHandle,
 };
 use tonic::transport::Channel;
 use tracing::info;
-use types::{ConfigurationClient, ProposerClient, TransactionsClient};
+use types::TransactionsClient;
+use worker::TrivialTransactionValidator;
 
 #[cfg(test)]
 #[path = "tests/cluster_tests.rs"]
@@ -33,8 +34,8 @@ pub struct Cluster {
     #[allow(unused)]
     fixture: CommitteeFixture,
     authorities: HashMap<usize, AuthorityDetails>,
-    pub committee_shared: SharedCommittee,
-    pub worker_cache_shared: SharedWorkerCache,
+    pub committee: Committee,
+    pub worker_cache: WorkerCache,
     #[allow(dead_code)]
     parameters: Parameters,
 }
@@ -44,15 +45,12 @@ impl Cluster {
     /// create all the authorities (primaries & workers) that are defined under
     /// the committee structure, but none of them will be started.
     ///
-    /// When the `internal_consensus_enabled` is true then the standard internal
-    /// consensus engine will be enabled. If false, then the internal consensus will
-    /// be disabled and the gRPC server will be enabled to manage the Collections & the
-    /// DAG externally.
-    pub fn new(parameters: Option<Parameters>, internal_consensus_enabled: bool) -> Self {
+    /// Fields passed in via Parameters will be used, expect specified ports which have to be
+    /// different for each instance. If None, the default Parameters will be used.
+    pub fn new(parameters: Option<Parameters>) -> Self {
         let fixture = CommitteeFixture::builder().randomize_ports(true).build();
-        let c = fixture.committee();
-        let shared_worker_cache = fixture.shared_worker_cache();
-        let shared_committee = Arc::new(ArcSwap::from_pointee(c));
+        let committee = fixture.committee();
+        let worker_cache = fixture.worker_cache();
         let params = parameters.unwrap_or_else(Self::parameters);
 
         info!("###### Creating new cluster ######");
@@ -64,13 +62,13 @@ impl Cluster {
 
             let authority = AuthorityDetails::new(
                 id,
+                authority_fixture.id(),
                 authority_fixture.keypair().copy(),
                 authority_fixture.network_keypair().copy(),
                 authority_fixture.worker_keypairs(),
-                params.clone(),
-                shared_committee.clone(),
-                shared_worker_cache.clone(),
-                internal_consensus_enabled,
+                params.with_available_ports(),
+                committee.clone(),
+                worker_cache.clone(),
             );
             nodes.insert(id, authority);
         }
@@ -78,8 +76,8 @@ impl Cluster {
         Self {
             fixture,
             authorities: nodes,
-            committee_shared: shared_committee,
-            worker_cache_shared: shared_worker_cache,
+            committee,
+            worker_cache,
             parameters: params,
         }
     }
@@ -103,7 +101,7 @@ impl Cluster {
         workers_per_authority: Option<usize>,
         boot_wait_time: Option<Duration>,
     ) {
-        let max_authorities = self.committee_shared.load().authorities.len();
+        let max_authorities = self.committee.size();
         let authorities = authorities_number.unwrap_or(max_authorities);
 
         if authorities > max_authorities {
@@ -180,6 +178,7 @@ impl Cluster {
     /// Returns all the running authorities. Any authority that:
     /// * has been started ever
     /// * or has been stopped
+    ///
     /// will not be returned by this method.
     pub async fn authorities(&self) -> Vec<AuthorityDetails> {
         let mut result = Vec::new();
@@ -230,7 +229,7 @@ impl Cluster {
             return HashMap::new();
         }
 
-        let (min, max) = rounds.values().into_iter().minmax().into_option().unwrap();
+        let (min, max) = rounds.values().minmax().into_option().unwrap();
         assert!(
             max - min <= commit_threshold,
             "Nodes shouldn't be that behind"
@@ -244,7 +243,7 @@ impl Cluster {
 
         for authority in self.authorities().await {
             let primary = authority.primary().await;
-            if let Some(metric) = primary.metric("narwhal_primary_last_committed_round") {
+            if let Some(metric) = primary.metric("last_committed_round").await {
                 let value = metric.get_gauge().get_value();
 
                 authorities_latest_commit.insert(primary.id, value);
@@ -262,7 +261,6 @@ impl Cluster {
     fn parameters() -> Parameters {
         Parameters {
             batch_size: 200,
-            max_header_delay: Duration::from_secs(2),
             ..Parameters::default()
         }
     }
@@ -271,61 +269,64 @@ impl Cluster {
 #[derive(Clone)]
 pub struct PrimaryNodeDetails {
     pub id: usize,
+    pub name: AuthorityIdentifier,
     pub key_pair: Arc<KeyPair>,
     pub network_key_pair: Arc<NetworkKeyPair>,
     pub tx_transaction_confirmation: Sender<SerializedTransaction>,
-    registry: Registry,
+    node: PrimaryNode,
     store_path: PathBuf,
-    committee: SharedCommittee,
-    worker_cache: SharedWorkerCache,
-    parameters: Parameters,
+    _parameters: Parameters,
+    committee: Committee,
+    worker_cache: WorkerCache,
     handlers: Rc<RefCell<Vec<JoinHandle<()>>>>,
-    internal_consensus_enabled: bool,
 }
 
 impl PrimaryNodeDetails {
     fn new(
         id: usize,
+        name: AuthorityIdentifier,
         key_pair: KeyPair,
         network_key_pair: NetworkKeyPair,
         parameters: Parameters,
-        committee: SharedCommittee,
-        worker_cache: SharedWorkerCache,
-        internal_consensus_enabled: bool,
+        committee: Committee,
+        worker_cache: WorkerCache,
     ) -> Self {
         // used just to initialise the struct value
         let (tx, _) = tokio::sync::broadcast::channel(1);
 
+        let registry_service = RegistryService::new(Registry::new());
+
+        let node = PrimaryNode::new(parameters.clone(), registry_service);
+
         Self {
             id,
+            name,
             key_pair: Arc::new(key_pair),
             network_key_pair: Arc::new(network_key_pair),
-            registry: Registry::new(),
-            store_path: temp_dir(),
             tx_transaction_confirmation: tx,
+            node,
+            store_path: temp_dir(),
+            _parameters: parameters,
             committee,
             worker_cache,
-            parameters,
             handlers: Rc::new(RefCell::new(Vec::new())),
-            internal_consensus_enabled,
         }
     }
 
     /// Returns the metric - if exists - identified by the provided name.
     /// If metric has not been found then None is returned instead.
-    pub fn metric(&self, name: &str) -> Option<Metric> {
-        let metrics = self.registry.gather();
+    pub async fn metric(&self, name: &str) -> Option<Metric> {
+        let (_registry_id, registry) = self.node.registry().await.unwrap();
+        let metrics = registry.gather();
 
         let metric = metrics.into_iter().find(|m| m.get_name() == name);
         metric.map(|m| m.get_metric().first().unwrap().clone())
     }
 
-    async fn start(&mut self, preserve_store: bool) {
-        if self.is_running() {
+    async fn start(&mut self, client: NetworkClient, preserve_store: bool) {
+        if self.is_running().await {
             panic!("Tried to start a node that is already running");
         }
-
-        let registry = primary_metrics_registry(self.key_pair.public().clone());
 
         // Make the data store.
         let store_path = if preserve_store {
@@ -341,25 +342,24 @@ impl PrimaryNodeDetails {
         );
 
         // The channel returning the result for each transaction's execution.
-        let (tx_transaction_confirmation, mut rx_transaction_confirmation) =
-            channel(Node::CHANNEL_CAPACITY);
+        let (tx_transaction_confirmation, mut rx_transaction_confirmation) = channel(100);
 
         // Primary node
-        let primary_store: NodeStorage = NodeStorage::reopen(store_path.clone());
-        let mut primary_handlers = Node::spawn_primary(
-            self.key_pair.copy(),
-            self.network_key_pair.copy(),
-            self.committee.clone(),
-            self.worker_cache.clone(),
-            &primary_store,
-            self.parameters.clone(),
-            /* consensus */ self.internal_consensus_enabled,
-            /* execution_state */
-            Arc::new(SimpleExecutionState::new(tx_transaction_confirmation)),
-            &registry,
-        )
-        .await
-        .unwrap();
+        let primary_store: NodeStorage = NodeStorage::reopen(store_path.clone(), None);
+
+        self.node
+            .start(
+                self.key_pair.copy(),
+                self.network_key_pair.copy(),
+                self.committee.clone(),
+                latest_protocol_version(),
+                self.worker_cache.clone(),
+                client,
+                &primary_store,
+                SimpleExecutionState::new(tx_transaction_confirmation),
+            )
+            .await
+            .unwrap();
 
         let (tx, _) = tokio::sync::broadcast::channel(primary::CHANNEL_CAPACITY);
         let transactions_sender = tx.clone();
@@ -374,15 +374,13 @@ impl PrimaryNodeDetails {
 
         // add the tasks's handle to the primary's handle so can be shutdown
         // with the others.
-        primary_handlers.push(h);
-
-        self.handlers.replace(primary_handlers);
+        self.handlers.replace(vec![h]);
         self.store_path = store_path;
-        self.registry = registry;
         self.tx_transaction_confirmation = tx;
     }
 
-    fn stop(&self) {
+    async fn stop(&self) {
+        self.node.shutdown().await;
         self.handlers.borrow().iter().for_each(|h| h.abort());
         info!("Aborted primary node for id {}", self.id);
     }
@@ -391,12 +389,8 @@ impl PrimaryNodeDetails {
     /// iterate over all the handlers and check whether there is still any
     /// that is not finished. If we find at least one, then we report the
     /// node as still running.
-    pub fn is_running(&self) -> bool {
-        if self.handlers.borrow().is_empty() {
-            return false;
-        }
-
-        self.handlers.borrow().iter().any(|h| !h.is_finished())
+    pub async fn is_running(&self) -> bool {
+        self.node.is_running().await
     }
 }
 
@@ -405,46 +399,55 @@ pub struct WorkerNodeDetails {
     pub id: WorkerId,
     pub transactions_address: Multiaddr,
     pub registry: Registry,
-    name: PublicKey,
-    committee: SharedCommittee,
-    worker_cache: SharedWorkerCache,
-    parameters: Parameters,
+    name: AuthorityIdentifier,
+    primary_key: PublicKey,
+    node: WorkerNode,
+    committee: Committee,
+    worker_cache: WorkerCache,
     store_path: PathBuf,
-    handlers: Arc<ArcSwap<Vec<JoinHandle<()>>>>,
 }
 
 impl WorkerNodeDetails {
     fn new(
         id: WorkerId,
-        name: PublicKey,
+        name: AuthorityIdentifier,
+        primary_key: PublicKey,
         parameters: Parameters,
         transactions_address: Multiaddr,
-        committee: SharedCommittee,
-        worker_cache: SharedWorkerCache,
+        committee: Committee,
+        worker_cache: WorkerCache,
     ) -> Self {
+        let registry_service = RegistryService::new(Registry::new());
+        let node = WorkerNode::new(id, latest_protocol_version(), parameters, registry_service);
+
         Self {
             id,
             name,
+            primary_key,
             registry: Registry::new(),
             store_path: temp_dir(),
             transactions_address,
             committee,
             worker_cache,
-            parameters,
-            handlers: Arc::new(ArcSwap::from_pointee(Vec::new())),
+            node,
         }
     }
 
     /// Starts the node. When preserve_store is true then the last used
-    async fn start(&mut self, keypair: NetworkKeyPair, preserve_store: bool) {
-        if self.is_running() {
+    async fn start(
+        &mut self,
+        keypair: NetworkKeyPair,
+        client: NetworkClient,
+        preserve_store: bool,
+    ) {
+        if self.is_running().await {
             panic!(
                 "Worker with id {} is already running, can't start again",
                 self.id
             );
         }
 
-        let registry = worker_metrics_registry(self.id, self.name.clone());
+        let registry = worker_metrics_registry(self.id, self.name);
 
         // Make the data store.
         let store_path = if preserve_store {
@@ -453,24 +456,28 @@ impl WorkerNodeDetails {
             temp_dir()
         };
 
-        let worker_store = NodeStorage::reopen(store_path.clone());
-        let worker_handlers = Node::spawn_workers(
-            self.name.clone(),
-            vec![(self.id, keypair)],
-            self.committee.clone(),
-            self.worker_cache.clone(),
-            &worker_store,
-            self.parameters.clone(),
-            &registry,
-        );
+        let worker_store = NodeStorage::reopen(store_path.clone(), None);
 
-        self.handlers.swap(Arc::new(worker_handlers));
+        self.node
+            .start(
+                self.primary_key.clone(),
+                keypair,
+                self.committee.clone(),
+                self.worker_cache.clone(),
+                client,
+                &worker_store,
+                TrivialTransactionValidator,
+                None,
+            )
+            .await
+            .unwrap();
+
         self.store_path = store_path;
         self.registry = registry;
     }
 
-    fn stop(&self) {
-        self.handlers.load().iter().for_each(|h| h.abort());
+    async fn stop(&self) {
+        self.node.shutdown().await;
         info!("Aborted worker node for id {}", self.id);
     }
 
@@ -478,8 +485,8 @@ impl WorkerNodeDetails {
     /// iterate over all the handlers and check whether there is still any
     /// that is not finished. If we find at least one, then we report the
     /// node as still running.
-    pub fn is_running(&self) -> bool {
-        self.handlers.load().iter().any(|h| !h.is_finished())
+    pub async fn is_running(&self) -> bool {
+        self.node.is_running().await
     }
 }
 
@@ -494,47 +501,51 @@ impl WorkerNodeDetails {
 #[derive(Clone)]
 pub struct AuthorityDetails {
     pub id: usize,
-    pub name: PublicKey,
+    pub name: AuthorityIdentifier,
+    pub public_key: PublicKey,
     internal: Arc<RwLock<AuthorityDetailsInternal>>,
 }
 
 struct AuthorityDetailsInternal {
+    client: Option<NetworkClient>,
     primary: PrimaryNodeDetails,
     worker_keypairs: Vec<NetworkKeyPair>,
     workers: HashMap<WorkerId, WorkerNodeDetails>,
 }
 
+#[allow(clippy::arc_with_non_send_sync)]
 impl AuthorityDetails {
     pub fn new(
         id: usize,
+        name: AuthorityIdentifier,
         key_pair: KeyPair,
         network_key_pair: NetworkKeyPair,
         worker_keypairs: Vec<NetworkKeyPair>,
         parameters: Parameters,
-        committee: SharedCommittee,
-        worker_cache: SharedWorkerCache,
-        internal_consensus_enabled: bool,
+        committee: Committee,
+        worker_cache: WorkerCache,
     ) -> Self {
         // Create all the nodes we have in the committee
-        let name = key_pair.public().clone();
+        let public_key = key_pair.public().clone();
         let primary = PrimaryNodeDetails::new(
             id,
+            name,
             key_pair,
             network_key_pair,
             parameters.clone(),
             committee.clone(),
             worker_cache.clone(),
-            internal_consensus_enabled,
         );
 
         // Create all the workers - even if we don't intend to start them all. Those
         // act as place holder setups. That gives us the power in a clear way manage
         // the nodes independently.
         let mut workers = HashMap::new();
-        for (worker_id, addresses) in worker_cache.load().workers.get(&name).unwrap().0.clone() {
+        for (worker_id, addresses) in worker_cache.workers.get(&public_key).unwrap().0.clone() {
             let worker = WorkerNodeDetails::new(
                 worker_id,
-                name.clone(),
+                name,
+                public_key.clone(),
                 parameters.clone(),
                 addresses.transactions.clone(),
                 committee.clone(),
@@ -544,6 +555,7 @@ impl AuthorityDetails {
         }
 
         let internal = AuthorityDetailsInternal {
+            client: None,
             primary,
             worker_keypairs,
             workers,
@@ -551,9 +563,19 @@ impl AuthorityDetails {
 
         Self {
             id,
+            public_key,
             name,
             internal: Arc::new(RwLock::new(internal)),
         }
+    }
+
+    pub async fn client(&self) -> NetworkClient {
+        let internal = self.internal.read().await;
+        internal
+            .client
+            .as_ref()
+            .expect("Requested network client which has not been initialised yet")
+            .clone()
     }
 
     /// Starts the node's primary and workers. If the num_of_workers is provided
@@ -581,18 +603,21 @@ impl AuthorityDetails {
     /// start with a fresh (empty) storage.
     pub async fn start_primary(&self, preserve_store: bool) {
         let mut internal = self.internal.write().await;
+        let client = self.create_client(&mut internal).await;
 
-        internal.primary.start(preserve_store).await;
+        internal.primary.start(client, preserve_store).await;
     }
 
     pub async fn stop_primary(&self) {
         let internal = self.internal.read().await;
 
-        internal.primary.stop();
+        internal.primary.stop().await;
     }
 
     pub async fn start_all_workers(&self, preserve_store: bool) {
         let mut internal = self.internal.write().await;
+        let client = self.create_client(&mut internal).await;
+
         let worker_keypairs = internal
             .worker_keypairs
             .iter()
@@ -601,7 +626,7 @@ impl AuthorityDetails {
 
         for (id, worker) in internal.workers.iter_mut() {
             let keypair = worker_keypairs.get(*id as usize).unwrap().copy();
-            worker.start(keypair, preserve_store).await;
+            worker.start(keypair, client.clone(), preserve_store).await;
         }
     }
 
@@ -611,13 +636,15 @@ impl AuthorityDetails {
     /// start with a fresh (empty) storage.
     pub async fn start_worker(&self, id: WorkerId, preserve_store: bool) {
         let mut internal = self.internal.write().await;
+        let client = self.create_client(&mut internal).await;
+
         let keypair = internal.worker_keypairs.get(id as usize).unwrap().copy();
         let worker = internal
             .workers
             .get_mut(&id)
             .unwrap_or_else(|| panic!("Worker with id {} not found ", id));
 
-        worker.start(keypair, preserve_store).await;
+        worker.start(keypair, client, preserve_store).await;
     }
 
     pub async fn stop_worker(&self, id: WorkerId) {
@@ -627,17 +654,21 @@ impl AuthorityDetails {
             .workers
             .get(&id)
             .unwrap_or_else(|| panic!("Worker with id {} not found ", id))
-            .stop();
+            .stop()
+            .await;
     }
 
     /// Stops all the nodes (primary & workers).
     pub async fn stop_all(&self) {
-        let internal = self.internal.read().await;
+        let mut internal = self.internal.write().await;
+        if let Some(client) = internal.client.as_ref() {
+            client.shutdown();
+        }
+        internal.client = None;
 
-        internal.primary.stop();
-
+        internal.primary.stop().await;
         for (_, worker) in internal.workers.iter() {
-            worker.stop();
+            worker.stop().await;
         }
     }
 
@@ -659,7 +690,7 @@ impl AuthorityDetails {
     }
 
     /// Returns the current primary node running as a clone. If the primary
-    ///node stops and starts again and it's needed by the user then this
+    /// node stops and starts again and it's needed by the user then this
     /// method should be called again to get the latest one.
     pub async fn primary(&self) -> PrimaryNodeDetails {
         let internal = self.internal.read().await;
@@ -695,36 +726,15 @@ impl AuthorityDetails {
     /// Returns all the running workers
     async fn workers(&self) -> Vec<WorkerNodeDetails> {
         let internal = self.internal.read().await;
+        let mut workers = Vec::new();
 
-        internal
-            .workers
-            .iter()
-            .filter_map(|(_, worker)| {
-                if worker.is_running() {
-                    Some(worker.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Creates a new proposer client that connects to the corresponding client.
-    /// This should be available only if the internal consensus is disabled. If
-    /// the internal consensus is enabled then a panic will be thrown instead.
-    pub async fn new_proposer_client(&self) -> ProposerClient<Channel> {
-        let internal = self.internal.read().await;
-
-        if internal.primary.internal_consensus_enabled {
-            panic!("External consensus is disabled, won't create a proposer client");
+        for worker in internal.workers.values() {
+            if worker.is_running().await {
+                workers.push(worker.clone());
+            }
         }
 
-        let config = mysten_network::config::Config::new();
-        let channel = config
-            .connect_lazy(&internal.primary.parameters.consensus_api_grpc.socket_addr)
-            .unwrap();
-
-        ProposerClient::new(channel)
+        workers
     }
 
     /// This method returns a new client to send transactions to the dictated
@@ -750,24 +760,6 @@ impl AuthorityDetails {
         TransactionsClient::new(channel)
     }
 
-    /// Creates a new configuration client that connects to the corresponding client.
-    /// This should be available only if the internal consensus is disabled. If
-    /// the internal consensus is enabled then a panic will be thrown instead.
-    pub async fn new_configuration_client(&self) -> ConfigurationClient<Channel> {
-        let internal = self.internal.read().await;
-
-        if internal.primary.internal_consensus_enabled {
-            panic!("External consensus is disabled, won't create a configuration client");
-        }
-
-        let config = mysten_network::config::Config::new();
-        let channel = config
-            .connect_lazy(&internal.primary.parameters.consensus_api_grpc.socket_addr)
-            .unwrap();
-
-        ConfigurationClient::new(channel)
-    }
-
     /// This method will return true either when the primary or any of
     /// the workers is running. In order to make sure that we don't end up
     /// in intermediate states we want to make sure that everything has
@@ -776,16 +768,28 @@ impl AuthorityDetails {
     async fn is_running(&self) -> bool {
         let internal = self.internal.read().await;
 
-        if internal.primary.is_running() {
+        if internal.primary.is_running().await {
             return true;
         }
 
         for (_, worker) in internal.workers.iter() {
-            if worker.is_running() {
+            if worker.is_running().await {
                 return true;
             }
         }
         false
+    }
+
+    // Creates a new network client if there isn't one yet initialised.
+    async fn create_client(
+        &self,
+        internal: &mut RwLockWriteGuard<'_, AuthorityDetailsInternal>,
+    ) -> NetworkClient {
+        if internal.client.is_none() {
+            let client = NetworkClient::new_from_keypair(&internal.primary.network_key_pair);
+            internal.client = Some(client);
+        }
+        internal.client.as_ref().unwrap().clone()
     }
 }
 
@@ -796,7 +800,7 @@ pub fn setup_tracing() -> TelemetryGuards {
 
     let log_filter = format!("{tracing_level},h2={network_tracing_level},tower={network_tracing_level},hyper={network_tracing_level},tonic::transport={network_tracing_level},quinn={network_tracing_level}");
 
-    telemetry_subscribers::TelemetryConfig::new("narwhal")
+    telemetry_subscribers::TelemetryConfig::new()
         // load env variables
         .with_env()
         // load special log filter

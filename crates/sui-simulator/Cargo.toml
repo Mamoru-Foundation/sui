@@ -6,14 +6,27 @@ license = "Apache-2.0"
 publish = false
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
-workspace-hack.workspace = true
-sui-framework = { path = "../sui-framework" }
-sui-types = { path = "../sui-types" }
-tracing = "0.1"
+move-package.workspace = true
+
+sui-framework.workspace = true
+sui-move-build.workspace = true
+sui-types.workspace = true
+tempfile.workspace = true
+tracing.workspace = true
 anemo.workspace = true
+anemo-tower.workspace = true
+narwhal-network.workspace = true
 fastcrypto = { workspace = true, features = ["copy_key"] }
 telemetry-subscribers.workspace = true
+tower.workspace = true
+lru.workspace = true
+rand.workspace = true
+serde.workspace = true
+bcs.workspace = true
 
 [target.'cfg(msim)'.dependencies]
-msim = { git = "https://github.com/MystenLabs/mysten-sim.git", rev = "89fb343539fd4f160eaa535560b295cec2c41a1a", package = "msim" }
+msim.workspace = true

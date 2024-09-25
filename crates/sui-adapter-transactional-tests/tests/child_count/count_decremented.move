@@ -9,21 +9,20 @@
 //# publish
 
 module test::m {
-    use sui::tx_context::{Self, TxContext};
     use sui::dynamic_object_field as ofield;
 
-    struct S has key, store {
+    public struct S has key, store {
         id: sui::object::UID,
     }
 
-    struct R has key, store {
+    public struct R has key, store {
         id: sui::object::UID,
         s: S,
     }
 
     public entry fun mint(ctx: &mut TxContext) {
         let id = sui::object::new(ctx);
-        sui::transfer::transfer(S { id }, tx_context::sender(ctx))
+        sui::transfer::public_transfer(S { id }, tx_context::sender(ctx))
     }
 
     public entry fun add(parent: &mut S, idx: u64, ctx: &mut TxContext) {
@@ -53,13 +52,13 @@ module test::m {
 
 //# run test::m::mint --sender A
 
-//# view-object 107
+//# view-object 2,0
 
-//# run test::m::add --sender A --args object(107) 1
+//# run test::m::add --sender A --args object(2,0) 1
 
-//# run test::m::remove --sender A --args object(107) 1
+//# run test::m::remove --sender A --args object(2,0) 1
 
-//# view-object 107
+//# view-object 2,0
 
 //
 // Test remove and add
@@ -67,13 +66,13 @@ module test::m {
 
 //# run test::m::mint --sender A
 
-//# view-object 113
+//# view-object 7,0
 
-//# run test::m::add --sender A --args object(113) 1
+//# run test::m::add --sender A --args object(7,0) 1
 
-//# run test::m::remove_and_add --sender A --args object(113) 1
+//# run test::m::remove_and_add --sender A --args object(7,0) 1
 
-//# view-object 113
+//# view-object 7,0
 
 //
 // Test remove and wrap
@@ -81,10 +80,10 @@ module test::m {
 
 //# run test::m::mint --sender A
 
-//# view-object 119
+//# view-object 12,0
 
-//# run test::m::add --sender A --args object(119) 1
+//# run test::m::add --sender A --args object(12,0) 1
 
-//# run test::m::remove_and_wrap --sender A --args object(119) 1
+//# run test::m::remove_and_wrap --sender A --args object(12,0) 1
 
-//# view-object 119
+//# view-object 12,0

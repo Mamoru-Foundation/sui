@@ -8,12 +8,8 @@
 //# publish
 
 module test::m {
-    use sui::transfer;
-    use sui::tx_context::TxContext;
-    use sui::object::{Self, UID};
-
-    struct S has key { id: UID }
-    struct Child has key, store { id: UID }
+    public struct S has key { id: UID }
+    public struct Child has key, store { id: UID }
 
     public entry fun mint_s(ctx: &mut TxContext) {
         let id = object::new(ctx);
@@ -28,10 +24,10 @@ module test::m {
 
 //# run test::m::mint_s
 
-//# run test::m::mint_child --args object(107)
+//# run test::m::mint_child --args object(2,0)
 
-//# view-object 109
+//# view-object 3,0
 
-//# transfer-object 109 --sender A --recipient B
+//# transfer-object 3,0 --sender A --recipient B
 
-//# view-object 109
+//# view-object 3,0

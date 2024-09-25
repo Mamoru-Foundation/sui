@@ -6,25 +6,30 @@ license = "Apache-2.0"
 publish = false
 edition = "2021"
 
-[dependencies]
-anyhow = { version = "1.0.64", features = ["backtrace"] }
-rand = "0.8.5"
-tracing = "0.1.36"
-tokio = { version = "1.20.1", features = ["full"] }
-futures = "0.3.23"
-tempfile = "3.3.0"
-tonic-health = "0.7.0"
-tap = "1.0.1"
-prometheus = "0.13.3"
+[lints]
+workspace = true
 
-sui-config = { path = "../sui-config" }
-sui-node = { path = "../sui-node" }
-sui-types = { path = "../sui-types" }
+[dependencies]
+anyhow.workspace = true
+rand.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["full"] }
+futures.workspace = true
+tempfile.workspace = true
+tonic-health.workspace = true
+tap.workspace = true
+prometheus.workspace = true
+
+sui-config.workspace = true
+sui-swarm-config.workspace = true
+sui-macros.workspace = true
+sui-node.workspace = true
+sui-protocol-config.workspace = true
+sui-types.workspace = true
+mysten-metrics.workspace = true
 mysten-network.workspace = true
 telemetry-subscribers.workspace = true
 
-workspace-hack.workspace = true
-
 [target.'cfg(msim)'.dependencies]
-sui-simulator = { path = "../sui-simulator" }
+sui-simulator.workspace = true
 

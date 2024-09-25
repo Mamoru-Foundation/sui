@@ -3,43 +3,40 @@
 
 // test that freezing prevents transfers/mutations
 
-//# init --addresses test=0x0 --accounts A
+//# init --addresses test=0x0 --accounts A --shared-object-deletion true
 
 //# publish
 
 module test::object_basics {
     use sui::event;
-    use sui::object::{Self, UID};
-    use sui::tx_context::{Self, TxContext};
-    use sui::transfer;
 
-    struct Object has key, store {
+    public struct Object has key, store {
         id: UID,
         value: u64,
     }
 
-    struct Wrapper has key {
+    public struct Wrapper has key {
         id: UID,
         o: Object
     }
 
-    struct NewValueEvent has copy, drop {
+    public struct NewValueEvent has copy, drop {
         new_value: u64
     }
 
     public entry fun create(value: u64, recipient: address, ctx: &mut TxContext) {
-        transfer::transfer(
+        transfer::public_transfer(
             Object { id: object::new(ctx), value },
             recipient
         )
     }
 
-    public entry fun transfer(o: Object, recipient: address) {
-        transfer::transfer(o, recipient)
+    public entry fun transfer_(o: Object, recipient: address) {
+        transfer::public_transfer(o, recipient)
     }
 
     public entry fun freeze_object(o: Object) {
-        transfer::freeze_object(o)
+        transfer::public_freeze_object(o)
     }
 
     public entry fun set_value(o: &mut Object, value: u64) {
@@ -65,14 +62,14 @@ module test::object_basics {
     public entry fun unwrap(w: Wrapper, ctx: &mut TxContext) {
         let Wrapper { id, o } = w;
         object::delete(id);
-        transfer::transfer(o, tx_context::sender(ctx))
+        transfer::public_transfer(o, tx_context::sender(ctx))
     }
 }
 
-//# run test::object_basics::create --args 10 @A
+//# run test::object_basics::create --args 10 @A --sender A
 
-//# run test::object_basics::freeze_object --args object(106)
+//# run test::object_basics::freeze_object --args object(2,0) --sender A
 
-//# run test::object_basics::transfer --args object(106) @A
+//# run test::object_basics::transfer_ --args object(2,0) @A --sender A
 
-//# run test::object_basics::set_value --args object(106) 1
+//# run test::object_basics::set_value --args object(2,0) 1 --sender A

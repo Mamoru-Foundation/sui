@@ -5,11 +5,7 @@
 
 //# publish
 module Test::M1 {
-    use sui::object::{Self, UID};
-    use sui::tx_context::{Self, TxContext};
-    use sui::transfer;
-
-    struct Object has key, store {
+    public struct Object has key, store {
         id: UID,
         value: u64,
     }
@@ -18,10 +14,10 @@ module Test::M1 {
     fun init(ctx: &mut TxContext) {
         let value = 42;
         let singleton = Object { id: object::new(ctx), value };
-        transfer::transfer(singleton, tx_context::sender(ctx))
+        transfer::public_transfer(singleton, tx_context::sender(ctx))
     }
 }
 
-//# view-object 104
+//# view-object 1,1
 
-//# view-object 103
+//# view-object 1,0

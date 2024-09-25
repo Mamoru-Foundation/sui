@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export enum ExplorerLinkType {
-    address,
-    object,
-    transaction,
+	address = 'address',
+	object = 'object',
+	transaction = 'transaction',
+	validator = 'validator',
 }
