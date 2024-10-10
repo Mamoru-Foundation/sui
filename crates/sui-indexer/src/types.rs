@@ -12,12 +12,12 @@ use sui_types::base_types::{ObjectDigest, SequenceNumber};
 use sui_types::base_types::{ObjectID, SuiAddress};
 use sui_types::crypto::AggregateAuthoritySignature;
 use sui_types::digests::TransactionDigest;
-use sui_types::dynamic_field::DynamicFieldInfo;
+use sui_types::dynamic_field::DynamicFieldType;
 use sui_types::effects::TransactionEffects;
 use sui_types::event::SystemEpochInfoEvent;
 use sui_types::messages_checkpoint::{
-    CertifiedCheckpointSummary, CheckpointCommitment, CheckpointDigest, CheckpointSequenceNumber,
-    EndOfEpochData,
+    CertifiedCheckpointSummary, CheckpointCommitment, CheckpointContents, CheckpointDigest,
+    CheckpointSequenceNumber, EndOfEpochData,
 };
 use sui_types::move_package::MovePackage;
 use sui_types::object::{Object, Owner};
@@ -29,6 +29,7 @@ pub type IndexerResult<T> = Result<T, IndexerError>;
 
 #[derive(Debug, Default)]
 pub struct IndexedCheckpoint {
+    // TODO: A lot of fields are now redundant with certified_checkpoint and checkpoint_contents.
     pub sequence_number: u64,
     pub checkpoint_digest: CheckpointDigest,
     pub epoch: u64,
@@ -48,12 +49,15 @@ pub struct IndexedCheckpoint {
     pub end_of_epoch: bool,
     pub min_tx_sequence_number: u64,
     pub max_tx_sequence_number: u64,
+    // FIXME: Remove the Default derive and make these fields mandatory.
+    pub certified_checkpoint: Option<CertifiedCheckpointSummary>,
+    pub checkpoint_contents: Option<CheckpointContents>,
 }
 
 impl IndexedCheckpoint {
     pub fn from_sui_checkpoint(
-        checkpoint: &sui_types::messages_checkpoint::CertifiedCheckpointSummary,
-        contents: &sui_types::messages_checkpoint::CheckpointContents,
+        checkpoint: &CertifiedCheckpointSummary,
+        contents: &CheckpointContents,
         successful_tx_num: usize,
     ) -> Self {
         let total_gas_cost = checkpoint.epoch_rolling_gas_cost_summary.computation_cost as i64
@@ -86,6 +90,8 @@ impl IndexedCheckpoint {
             checkpoint_commitments: checkpoint.checkpoint_commitments.clone(),
             min_tx_sequence_number,
             max_tx_sequence_number,
+            certified_checkpoint: Some(checkpoint.clone()),
+            checkpoint_contents: Some(contents.clone()),
         }
     }
 }
@@ -194,7 +200,7 @@ pub struct IndexedEvent {
     pub event_sequence_number: u64,
     pub checkpoint_sequence_number: u64,
     pub transaction_digest: TransactionDigest,
-    pub senders: Vec<SuiAddress>,
+    pub sender: SuiAddress,
     pub package: ObjectID,
     pub module: String,
     pub event_type: String,
@@ -220,7 +226,7 @@ impl IndexedEvent {
             event_sequence_number,
             checkpoint_sequence_number,
             transaction_digest,
-            senders: vec![event.sender],
+            sender: event.sender,
             package: event.package_id,
             module: event.transaction_module.to_string(),
             event_type: event.type_.to_canonical_string(/* with_prefix */ true),
@@ -341,19 +347,19 @@ pub enum DynamicFieldKind {
 pub struct IndexedObject {
     pub checkpoint_sequence_number: CheckpointSequenceNumber,
     pub object: Object,
-    pub df_info: Option<DynamicFieldInfo>,
+    pub df_kind: Option<DynamicFieldType>,
 }
 
 impl IndexedObject {
     pub fn from_object(
         checkpoint_sequence_number: CheckpointSequenceNumber,
         object: Object,
-        df_info: Option<DynamicFieldInfo>,
+        df_kind: Option<DynamicFieldType>,
     ) -> Self {
         Self {
             checkpoint_sequence_number,
             object,
-            df_info,
+            df_kind,
         }
     }
 }

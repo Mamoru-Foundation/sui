@@ -206,14 +206,23 @@ pub struct NodeConfig {
     pub enable_db_write_stall: Option<bool>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ExecutionCacheConfig {
-    #[default]
     PassthroughCache,
     WritebackCache {
+        /// Maximum number of entries in each cache. (There are several different caches).
+        /// If None, the default of 10000 is used.
         max_cache_size: Option<usize>,
     },
+}
+
+impl Default for ExecutionCacheConfig {
+    fn default() -> Self {
+        ExecutionCacheConfig::WritebackCache {
+            max_cache_size: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -276,6 +285,8 @@ pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
         "FanTV".to_string(),
         "AwsTenant-region:us-east-1-tenant_id:us-east-1_LPSLCkC3A".to_string(), // test tenant in mysten aws
         "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8".to_string(), // ambrus, external partner
+        "Arden".to_string(),                                                    // Arden partner
+        "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es".to_string(), // Trace, external partner
     ]);
 
     // providers that are available for mainnet and testnet.
@@ -718,6 +729,10 @@ impl Default for AuthorityStorePruningConfig {
 }
 
 impl AuthorityStorePruningConfig {
+    pub fn set_num_epochs_to_retain(&mut self, num_epochs_to_retain: u64) {
+        self.num_epochs_to_retain = num_epochs_to_retain;
+    }
+
     pub fn set_num_epochs_to_retain_for_checkpoints(&mut self, num_epochs_to_retain: Option<u64>) {
         self.num_epochs_to_retain_for_checkpoints = num_epochs_to_retain;
     }

@@ -365,7 +365,7 @@ impl NodeMetrics {
             invalid_blocks: register_int_counter_vec_with_registry!(
                 "invalid_blocks",
                 "Number of invalid blocks per peer authority",
-                &["authority", "source"],
+                &["authority", "source", "error"],
                 registry,
             ).unwrap(),
             rejected_blocks: register_int_counter_vec_with_registry!(
@@ -602,7 +602,7 @@ impl NodeMetrics {
             commit_sync_fetch_once_errors: register_int_counter_vec_with_registry!(
                 "commit_sync_fetch_once_errors",
                 "Number of errors when attempting to fetch commits and blocks from single authority during commit sync.",
-                &["error"],
+                &["authority", "error"],
                 registry
             ).unwrap(),
             round_prober_quorum_round_gaps: register_int_gauge_vec_with_registry!(
