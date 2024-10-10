@@ -2,7 +2,7 @@
 #
 # Copy in all crates, Cargo.toml and Cargo.lock unmodified,
 # and build the application.
-FROM rust:1.80.1-bullseye AS builder
+FROM rust:1.81-bullseye AS builder
 ARG PROFILE=release
 ARG GIT_REVISION
 ENV GIT_REVISION=$GIT_REVISION
@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y cmake clang protobuf-compiler
 
 COPY root-config /root/
 RUN sed 's|/home/runner|/root|g' -i.bak /root/.ssh/config
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true   
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 
 
 COPY Cargo.toml Cargo.lock ./

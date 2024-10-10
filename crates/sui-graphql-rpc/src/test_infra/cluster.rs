@@ -16,7 +16,6 @@ use std::time::Duration;
 use sui_graphql_rpc_client::simple_client::SimpleClient;
 pub use sui_indexer::config::SnapshotLagConfig;
 use sui_indexer::errors::IndexerError;
-use sui_indexer::store::indexer_store::IndexerStore;
 use sui_indexer::store::PgIndexerStore;
 use sui_indexer::tempdb::get_available_port;
 use sui_indexer::tempdb::TempDb;
@@ -115,8 +114,9 @@ pub async fn start_network_cluster() -> NetworkCluster {
         host: "127.0.0.1".to_owned(),
         db_url: database.database().url().as_str().to_owned(),
         db_pool_size: 5,
-        prom_url: "127.0.0.1".to_owned(),
+        prom_host: "127.0.0.1".to_owned(),
         prom_port: get_available_port(),
+        skip_migration_consistency_check: false,
     };
     let data_ingestion_path = tempfile::tempdir().unwrap();
     let db_url = graphql_connection_config.db_url.clone();
@@ -160,8 +160,9 @@ pub async fn serve_executor(
         host: "127.0.0.1".to_owned(),
         db_url: database.database().url().as_str().to_owned(),
         db_pool_size: 5,
-        prom_url: "127.0.0.1".to_owned(),
+        prom_host: "127.0.0.1".to_owned(),
         prom_port: get_available_port(),
+        skip_migration_consistency_check: false,
     };
     let db_url = graphql_connection_config.db_url.clone();
     // Creates a cancellation token and adds this to the ExecutorCluster, so that we can send a
@@ -306,9 +307,9 @@ async fn start_validator_with_fullnode(data_ingestion_dir: PathBuf) -> TestClust
         .await
 }
 
-/// Repeatedly ping the GraphQL server for 10s, until it responds
+/// Repeatedly ping the GraphQL server for 60s, until it responds
 pub async fn wait_for_graphql_server(client: &SimpleClient) {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    tokio::time::timeout(Duration::from_secs(60), async {
         while client.ping().await.is_err() {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
