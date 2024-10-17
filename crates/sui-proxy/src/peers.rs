@@ -640,6 +640,159 @@ fn fallback_to_cached_key(
     }
 }
 
+async fn extract_bridge(
+    summary: BridgeSummary,
+    metrics_keys: MetricsPubKeys,
+) -> Vec<(Ed25519PublicKey, AllowedPeer)> {
+    {
+        // Clean up the cache: retain only the metrics keys of the up-to-date bridge validator set
+        let mut metrics_keys_write = metrics_keys.write().unwrap();
+        metrics_keys_write.retain(|url, _| {
+            summary.committee.members.iter().any(|(_, cm)| {
+                String::from_utf8(cm.http_rest_url.clone()).ok().as_ref() == Some(url)
+            })
+        });
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .unwrap();
+    let committee_members = summary.committee.members.clone();
+    let results: Vec<_> = stream::iter(committee_members)
+        .filter_map(|(_, cm)| {
+            let client = client.clone();
+            let metrics_keys = metrics_keys.clone();
+            async move {
+                debug!(
+                    address =% cm.sui_address,
+                    "Extracting metrics public key for bridge node",
+                );
+
+                // Convert the Vec<u8> to a String and handle errors properly
+                let url_str = match String::from_utf8(cm.http_rest_url) {
+                    Ok(url) => url,
+                    Err(_) => {
+                        warn!(
+                            address =% cm.sui_address,
+                            "Invalid UTF-8 sequence in http_rest_url for bridge node ",
+                        );
+                        return None;
+                    }
+                };
+                // Parse the URL
+                let mut bridge_url = match Url::parse(&url_str) {
+                    Ok(url) => url,
+                    Err(_) => {
+                        warn!(url_str, "Unable to parse http_rest_url");
+                        return None;
+                    }
+                };
+                bridge_url.set_path("/metrics_pub_key");
+
+                // Use the host portion of the http_rest_url as the "name"
+                let bridge_host = match bridge_url.host_str() {
+                    Some(host) => host,
+                    None => {
+                        warn!(url_str, "Hostname is missing from http_rest_url");
+                        return None;
+                    }
+                };
+                let bridge_name = String::from(bridge_host);
+                let bridge_request_url = bridge_url.as_str();
+
+                let metrics_pub_key = match client.get(bridge_request_url).send().await {
+                    Ok(response) => {
+                        let raw = response.bytes().await.ok()?;
+                        let metrics_pub_key: String = match serde_json::from_slice(&raw) {
+                            Ok(key) => key,
+                            Err(error) => {
+                                warn!(?error, url_str, "Failed to deserialize response");
+                                return fallback_to_cached_key(
+                                    &metrics_keys,
+                                    &url_str,
+                                    &bridge_name,
+                                );
+                            }
+                        };
+                        let metrics_bytes = match Base64::decode(&metrics_pub_key) {
+                            Ok(pubkey_bytes) => pubkey_bytes,
+                            Err(error) => {
+                                warn!(
+                                    ?error,
+                                    bridge_name, "unable to decode public key for bridge node",
+                                );
+                                return None;
+                            }
+                        };
+                        match Ed25519PublicKey::from_bytes(&metrics_bytes) {
+                            Ok(pubkey) => {
+                                // Successfully fetched the key, update the cache
+                                let mut metrics_keys_write = metrics_keys.write().unwrap();
+                                metrics_keys_write.insert(url_str.clone(), pubkey.clone());
+                                debug!(
+                                    url_str,
+                                    public_key = ?pubkey,
+                                    "Successfully added bridge peer to metrics_keys"
+                                );
+                                pubkey
+                            }
+                            Err(error) => {
+                                warn!(
+                                    ?error,
+                                    bridge_request_url,
+                                    "unable to decode public key for bridge node",
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        return fallback_to_cached_key(&metrics_keys, &url_str, &bridge_name);
+                    }
+                };
+                Some((
+                    metrics_pub_key.clone(),
+                    AllowedPeer {
+                        public_key: metrics_pub_key,
+                        name: bridge_name,
+                    },
+                ))
+            }
+        })
+        .collect()
+        .await;
+
+    results
+}
+
+fn fallback_to_cached_key(
+    metrics_keys: &MetricsPubKeys,
+    url_str: &str,
+    bridge_name: &str,
+) -> Option<(Ed25519PublicKey, AllowedPeer)> {
+    let metrics_keys_read = metrics_keys.read().unwrap();
+    if let Some(cached_key) = metrics_keys_read.get(url_str) {
+        debug!(
+            url_str,
+            "Using cached metrics public key after request failure"
+        );
+        Some((
+            cached_key.clone(),
+            AllowedPeer {
+                public_key: cached_key.clone(),
+                name: bridge_name.to_string(),
+            },
+        ))
+    } else {
+        warn!(
+            url_str,
+            "Failed to fetch public key and no cached key available"
+        );
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
