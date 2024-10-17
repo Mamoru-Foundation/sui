@@ -10,15 +10,16 @@ use clap::CommandFactory;
 use clap::FromArgMatches;
 use clap::Parser;
 use colored::Colorize;
+use sui_sdk::wallet_context::WalletContext;
 
 use crate::client_commands::SwitchResponse;
-use crate::client_commands::{SuiClientCommandResult, SuiClientCommands, WalletContext};
+use crate::client_commands::{SuiClientCommandResult, SuiClientCommands};
 use crate::shell::{
     install_shell_plugins, AsyncHandler, CacheKey, CommandStructure, CompletionCache, Shell,
 };
 
-const SUI: &str = "   _____       _    ______                       __   
-  / ___/__  __(_)  / ____/___  ____  _________  / /__ 
+const SUI: &str = "   _____       _    ______                       __
+  / ___/__  __(_)  / ____/___  ____  _________  / /__
   \\__ \\/ / / / /  / /   / __ \\/ __ \\/ ___/ __ \\/ / _ \\
  ___/ / /_/ / /  / /___/ /_/ / / / (__  ) /_/ / /  __/
 /____/\\__,_/_/   \\____/\\____/_/ /_/____/\\____/_/\\___/";
@@ -49,37 +50,33 @@ pub async fn start_console(
     writeln!(out)?;
     writeln!(out, "{}", context.config.deref())?;
 
+    let client = context.get_client().await?;
     writeln!(
         out,
         "Connecting to Sui full node. API version {}",
-        context.client.api_version()
+        client.api_version()
     )?;
 
-    if !context.client.available_rpc_methods().is_empty() {
+    if !client.available_rpc_methods().is_empty() {
         writeln!(out)?;
         writeln!(
             out,
             "Available RPC methods: {:?}",
-            context.client.available_rpc_methods()
+            client.available_rpc_methods()
         )?;
     }
-    if !context.client.available_subscriptions().is_empty() {
+    if !client.available_subscriptions().is_empty() {
         writeln!(out)?;
         writeln!(
             out,
             "Available Subscriptions: {:?}",
-            context.client.available_subscriptions()
+            client.available_subscriptions()
         )?;
     }
 
     writeln!(out)?;
     writeln!(out, "Welcome to the Sui interactive console.")?;
     writeln!(out)?;
-
-    if let Err(e) = context.client.check_api_version() {
-        writeln!(out, "{}", format!("[warn] {e}").yellow().bold())?;
-        writeln!(out)?;
-    };
 
     let mut shell = Shell::new(
         "sui>-$ ",
@@ -132,8 +129,9 @@ async fn handle_command(
         match result {
             SuiClientCommandResult::Addresses(ref addresses) => {
                 let addresses = addresses
+                    .addresses
                     .iter()
-                    .map(|addr| format!("{addr}"))
+                    .map(|addr| format!("{}", addr.1))
                     .collect::<Vec<_>>();
                 cache.insert(CacheKey::flag("--address"), addresses.clone());
                 cache.insert(CacheKey::flag("--to"), addresses);
@@ -141,7 +139,7 @@ async fn handle_command(
             SuiClientCommandResult::Objects(ref objects) => {
                 let objects = objects
                     .iter()
-                    .map(|oref| format!("{}", oref.object_id))
+                    .map(|oref| format!("{}", oref.clone().into_object().unwrap().object_id))
                     .collect::<Vec<_>>();
                 cache.insert(CacheKey::new("object", "--id"), objects.clone());
                 cache.insert(CacheKey::flag("--gas"), objects.clone());
