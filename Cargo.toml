@@ -580,8 +580,8 @@ fastcrypto-vdf = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050
     "experimental",
 ] }
 
-mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "580e55b18a2b66630290ffcedc48187c06953c38" }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "580e55b18a2b66630290ffcedc48187c06953c38"}
+mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "0a6a27c9130961d349481a15dbb3f7c06be317b2" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "0a6a27c9130961d349481a15dbb3f7c06be317b2"}
 
 #mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
 #mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
