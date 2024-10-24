@@ -8,12 +8,8 @@
 //# publish
 
 module test::m {
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
-    use sui::object::{Self, UID};
-
-    struct S has key { id: UID }
-    struct Cup<phantom T> has key { id: UID }
+    public struct S has key { id: UID }
+    public struct Cup<phantom T> has key { id: UID }
 
     public entry fun mint_s(ctx: &mut TxContext) {
         let id = object::new(ctx);
@@ -30,19 +26,19 @@ module test::m {
 
 //# run test::m::mint_s --sender A
 
-//# view-object 107
+//# view-object 2,0
 
-//# transfer-object 107 --sender A --recipient B
+//# transfer-object 2,0 --sender A --recipient B
 
-//# view-object 107
+//# view-object 2,0
 
 
 // Mint Cup<S> to A. Fail to transfer Cup<S> from A to B
 
 //# run test::m::mint_cup --type-args test::m::S --sender A
 
-//# view-object 110
+//# view-object 6,0
 
-//# transfer-object 110 --sender A --recipient B
+//# transfer-object 6,0 --sender A --recipient B
 
-//# view-object 110
+//# view-object 6,0

@@ -9,34 +9,33 @@
 //# publish
 
 module test::m {
-    use sui::tx_context::{Self, TxContext};
     use sui::dynamic_object_field as ofield;
 
-    struct S has key, store {
+    public struct S has key, store {
         id: sui::object::UID,
     }
 
-    struct R has key, store {
+    public struct R has key, store {
         id: sui::object::UID,
         s: S,
     }
 
     public entry fun mint(ctx: &mut TxContext) {
-        let id = sui::object::new(ctx);
+        let mut id = sui::object::new(ctx);
         let child = S { id: sui::object::new(ctx) };
         ofield::add(&mut id, 0, child);
-        sui::transfer::transfer(S { id }, tx_context::sender(ctx))
+        sui::transfer::public_transfer(S { id }, tx_context::sender(ctx))
     }
 
     public entry fun mint_and_share(ctx: &mut TxContext) {
-        let id = sui::object::new(ctx);
+        let mut id = sui::object::new(ctx);
         let child = S { id: sui::object::new(ctx) };
         ofield::add(&mut id, 0, child);
-        sui::transfer::share_object(S { id })
+        sui::transfer::public_share_object(S { id })
     }
 
     public entry fun transfer(s: S, recipient: address) {
-        sui::transfer::transfer(s, recipient)
+        sui::transfer::public_transfer(s, recipient)
     }
 
 }
@@ -47,7 +46,7 @@ module test::m {
 
 //# run test::m::mint_and_share --sender A
 
-//# view-object 108
+//# view-object 2,1
 
 //
 // Test transfer allows non-zero child count
@@ -55,9 +54,9 @@ module test::m {
 
 //# run test::m::mint --sender A
 
-//# run test::m::transfer --sender A --args object(112) @B
+//# run test::m::transfer --sender A --args object(4,2) @B
 
-//# view-object 112
+//# view-object 4,2
 
 //
 // Test TransferObject allows non-zero child count
@@ -65,6 +64,6 @@ module test::m {
 
 //# run test::m::mint --sender A
 
-//# transfer-object 117 --sender A --recipient B
+//# transfer-object 7,1 --sender A --recipient B
 
-//# view-object 117
+//# view-object 7,1

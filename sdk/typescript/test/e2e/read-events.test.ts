@@ -1,36 +1,41 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+
 import { setup, TestToolbox } from './utils/setup';
 
 describe('Event Reading API', () => {
-  let toolbox: TestToolbox;
+	let toolbox: TestToolbox;
 
-  beforeAll(async () => {
-    toolbox = await setup();
-  });
+	beforeAll(async () => {
+		toolbox = await setup();
 
-  it('Get All Events', async () => {
-    const allEvents = await toolbox.provider.getEvents("All", null, null);
-    expect(allEvents.data.length).to.greaterThan(0);
-    expect(allEvents.nextCursor).toEqual(null);
-  });
+		// Wait for next epoch to ensure there are events
+		await new Promise((resolve) => setTimeout(resolve, 60_000));
+	});
 
-  it('Get all event paged', async () => {
-    const page1 = await toolbox.provider.getEvents("All", null, 2);
-    expect(page1.nextCursor).to.not.equal(null);
-    const page2 = await toolbox.provider.getEvents("All", page1.nextCursor, 1000);
-    expect(page2.nextCursor).toEqual(null);
-  });
+	it('Get All Events', async () => {
+		// TODO: refactor so that we can provide None here to signify there's no filter
+		const allEvents = await toolbox.client.queryEvents({
+			query: { TimeRange: { startTime: '0', endTime: Date.now().toString() } },
+		});
+		expect(allEvents.data.length).to.greaterThan(0);
+	});
 
-  it('Get events by sender paginated', async () => {
-    const query1 = await toolbox.provider.getEvents({Sender: toolbox.address()}, null, 2);
-    expect(query1.data.length).toEqual(0);
-  });
+	it('Get all event paged', async () => {
+		const page1 = await toolbox.client.queryEvents({
+			query: { TimeRange: { startTime: '0', endTime: Date.now().toString() } },
+			limit: 2,
+		});
+		expect(page1.nextCursor).to.not.equal(null);
+	});
 
-  it('Get events by recipient paginated', async () => {
-    const query2 = await toolbox.provider.getEvents({Recipient: {AddressOwner: toolbox.address()}}, null, 2);
-    expect(query2.data.length).toEqual(2);
-  });
+	it('Get events by sender paginated', async () => {
+		const query1 = await toolbox.client.queryEvents({
+			query: { Sender: toolbox.address() },
+			limit: 2,
+		});
+		expect(query1.data.length).toEqual(0);
+	});
 });

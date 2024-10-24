@@ -1,100 +1,93 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-import { useMemo, useEffect, useCallback, useState } from 'react';
-import { Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 
-import { SuiIcons } from '_components/icon';
+import Alert from '_components/alert';
 import Loading from '_components/loading';
 import Overlay from '_components/overlay';
-import ReceiptCard from '_components/receipt-card';
-import { useAppSelector, useAppDispatch } from '_hooks';
-import { getTransactionsByAddress } from '_redux/slices/txresults';
+import { ReceiptCard } from '_src/ui/app/components/receipt-card';
+import { useActiveAddress } from '_src/ui/app/hooks/useActiveAddress';
+import { useUnlockedGuard } from '_src/ui/app/hooks/useUnlockedGuard';
+import { useSuiClient } from '@mysten/dapp-kit';
+import { Check32 } from '@mysten/icons';
+import { type SuiTransactionBlockResponse } from '@mysten/sui/client';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback, useMemo, useState } from 'react';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import type { TxResultState } from '_redux/slices/txresults';
-
-import st from './ReceiptPage.module.scss';
-
-// Response pages for all transactions
-// use txDigest for the transaction result
 function ReceiptPage() {
-    const [searchParams] = useSearchParams();
-    const [showModal, setShowModal] = useState(true);
-    const dispatch = useAppDispatch();
-    // get tx results from url params
-    const txDigest = searchParams.get('txdigest');
+	const location = useLocation();
+	const [searchParams] = useSearchParams();
+	const [showModal, setShowModal] = useState(true);
+	const activeAddress = useActiveAddress();
 
-    const transferType = searchParams.get('transfer') as 'nft' | 'coin';
+	// get tx results from url params
+	const transactionId = searchParams.get('txdigest');
+	const fromParam = searchParams.get('from');
+	const client = useSuiClient();
 
-    const txResults: TxResultState[] = useAppSelector(
-        ({ txresults }) => txresults.latestTx
-    );
+	const { data, isPending, isError } = useQuery<SuiTransactionBlockResponse>({
+		queryKey: ['transactions-by-id', transactionId],
+		queryFn: async () => {
+			return client.getTransactionBlock({
+				digest: transactionId!,
+				options: {
+					showBalanceChanges: true,
+					showObjectChanges: true,
+					showInput: true,
+					showEffects: true,
+					showEvents: true,
+				},
+			});
+		},
+		enabled: !!transactionId,
+		retry: 8,
+		initialData: location.state?.response,
+	});
 
-    const loading: boolean = useAppSelector(
-        ({ txresults }) => txresults.loading
-    );
+	const navigate = useNavigate();
+	// return to previous route or from param if available
+	const closeReceipt = useCallback(() => {
+		fromParam ? navigate(`/${fromParam}`) : navigate(-1);
+	}, [fromParam, navigate]);
 
-    useEffect(() => {
-        dispatch(getTransactionsByAddress()).unwrap();
-    }, [dispatch]);
+	const pageTitle = useMemo(() => {
+		if (data) {
+			const executionStatus = data.effects?.status.status;
 
-    const txnItem = useMemo(() => {
-        return txResults.filter((txn) => txn.txId === txDigest)[0];
-    }, [txResults, txDigest]);
+			// TODO: Infer out better name:
+			const transferName = 'Transaction';
 
-    //TODO: redo the CTA links
-    const ctaLinks = transferType === 'nft' ? '/nfts' : '/';
-    const linkTo = transferType ? ctaLinks : '/transactions';
+			return `${executionStatus === 'success' ? transferName : 'Transaction Failed'}`;
+		}
 
-    const navigate = useNavigate();
-    const closeReceipt = useCallback(() => {
-        navigate(linkTo);
-    }, [linkTo, navigate]);
+		return 'Transaction Failed';
+	}, [/*activeAddress,*/ data]);
 
-    if ((!txDigest && !txnItem) || (!loading && !txResults.length)) {
-        return <Navigate to={linkTo} replace={true} />;
-    }
+	const isGuardLoading = useUnlockedGuard();
 
-    const callMeta =
-        txnItem?.name && txnItem?.url ? 'Minted Successfully!' : 'Move Call';
+	if (!transactionId || !activeAddress) {
+		return <Navigate to="/transactions" replace={true} />;
+	}
 
-    const transferLabel =
-        txnItem?.kind === 'Call'
-            ? 'Call'
-            : txnItem?.isSender
-            ? 'Sent'
-            : 'Received';
-    //TODO : add more transfer types and messages
-    const transfersTxt = {
-        Call: callMeta || 'Call',
-        Sent: 'Successfully Sent!',
-        Received: 'Successfully Received!',
-    };
+	return (
+		<Loading loading={isPending || isGuardLoading}>
+			<Overlay
+				showModal={showModal}
+				setShowModal={setShowModal}
+				title={pageTitle}
+				closeOverlay={closeReceipt}
+				closeIcon={<Check32 fill="currentColor" className="text-sui-light w-8 h-8" />}
+			>
+				{isError ? (
+					<div className="mb-2 h-fit">
+						<Alert>Something went wrong</Alert>
+					</div>
+				) : null}
 
-    const kind = txnItem?.kind as keyof typeof transfersTxt | undefined;
-
-    const headerCopy = kind ? transfersTxt[transferLabel] : '';
-
-    const transferStatus =
-        txnItem?.status === 'success'
-            ? headerCopy
-            : txnItem?.status
-            ? 'Transaction Failed'
-            : '';
-
-    return (
-        <Loading loading={loading} className={st.centerLoading}>
-            <Overlay
-                showModal={showModal}
-                setShowModal={setShowModal}
-                title={transferStatus}
-                closeOverlay={closeReceipt}
-                closeIcon={SuiIcons.Check}
-                className={st.receiptOverlay}
-            >
-                {txnItem && <ReceiptCard txDigest={txnItem} />}
-            </Overlay>
-        </Loading>
-    );
+				{data && <ReceiptCard txn={data} activeAddress={activeAddress} />}
+			</Overlay>
+		</Loading>
+	);
 }
 
 export default ReceiptPage;

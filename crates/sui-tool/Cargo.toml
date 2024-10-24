@@ -7,31 +7,44 @@ publish = false
 edition = "2021"
 
 [dependencies]
-anyhow = { version = "1.0.64", features = ["backtrace"] }
-tokio = { version = "1.20.1", features = ["full"] }
-tracing = "0.1.36"
-clap = { version = "3.2.17", features = ["derive"] }
+anyhow.workspace = true
+num_cpus.workspace = true
+bcs.workspace = true
+clap = { version = "4.1.4", features = ["derive"] }
+colored.workspace = true
+comfy-table.workspace = true
+eyre.workspace = true
+futures.workspace = true
+hex.workspace = true
+move-core-types.workspace = true
+itertools.workspace = true
+ron.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+tempfile.workspace = true
+tracing.workspace = true
+prometheus.workspace = true
+object_store.workspace = true
+indicatif.workspace = true
 
-mysten-network = "0.1.0"
-itertools = { version = "0.10.3", features = ["use_alloc"] }
-multiaddr = "0.16.0"
-textwrap = "0.15"
-futures = "0.3.23"
-rocksdb = "0.19.0"
-tempfile = "3.3.0"
-serde_with = { version = "2.0.1", features = ["hex"] }
-strum_macros = "^0.24"
-strum = "0.24.1"
-serde = { version = "1.0.144", features = ["derive"] }
-eyre = "0.6.8"
-
-sui-storage = { path = "../sui-storage" }
-sui-core = { path = "../sui-core" }
-sui-config = { path = "../sui-config" }
-sui-types = { path = "../sui-types" }
-sui-network = { path = "../sui-network" }
-
+anemo-cli.workspace = true
+anemo.workspace = true
 telemetry-subscribers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+typed-store.workspace = true
+fastcrypto.workspace = true
 
-colored = "2.0.0"
-workspace-hack.workspace = true
+sui-config.workspace = true
+sui-core.workspace = true
+sui-network.workspace = true
+sui-snapshot.workspace = true
+sui-protocol-config.workspace = true
+sui-replay.workspace = true
+sui-sdk.workspace = true
+sui-storage.workspace = true
+sui-types.workspace = true
+sui-archival.workspace = true
+sui-package-dump.workspace = true
+bin-version.workspace = true

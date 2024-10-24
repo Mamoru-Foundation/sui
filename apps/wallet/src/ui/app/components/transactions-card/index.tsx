@@ -1,173 +1,109 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import cl from 'classnames';
-import { memo } from 'react';
+import { DateCard } from '_app/shared/date-card';
+import { Text } from '_app/shared/text';
+import { useGetTxnRecipientAddress } from '_hooks';
+import { useRecognizedPackages } from '_src/ui/app/hooks/useRecognizedPackages';
+import { getLabel, useTransactionSummary } from '@mysten/core';
+import type { SuiTransactionBlockResponse } from '@mysten/sui/client';
 import { Link } from 'react-router-dom';
 
-import Icon, { SuiIcons } from '_components/icon';
-import { formatDate } from '_helpers';
-import { useMiddleEllipsis, useFormatCoin } from '_hooks';
-import { GAS_TYPE_ARG } from '_redux/slices/sui-objects/Coin';
+import { TxnTypeLabel } from './TxnActionLabel';
+import { TxnIcon } from './TxnIcon';
 
-import type { TxResultState } from '_redux/slices/txresults';
+export function TransactionCard({
+	txn,
+	address,
+}: {
+	txn: SuiTransactionBlockResponse;
+	address: string;
+}) {
+	const executionStatus = txn.effects?.status.status;
+	const recognizedPackagesList = useRecognizedPackages();
 
-import st from './TransactionsCard.module.scss';
+	const summary = useTransactionSummary({
+		transaction: txn,
+		currentAddress: address,
+		recognizedPackagesList,
+	});
 
-const TRUNCATE_MAX_LENGTH = 8;
-const TRUNCATE_PREFIX_LENGTH = 4;
+	// we only show Sui Transfer amount or the first non-Sui transfer amount
 
-// Truncate text after one line (~ 35 characters)
-const TRUNCATE_MAX_CHAR = 35;
+	const recipientAddress = useGetTxnRecipientAddress({ txn, address });
 
-function TransactionCard({ txn }: { txn: TxResultState }) {
-    const toAddrStr = useMiddleEllipsis(
-        txn.to || '',
-        TRUNCATE_MAX_LENGTH,
-        TRUNCATE_PREFIX_LENGTH
-    );
-    const fromAddrStr = useMiddleEllipsis(
-        txn.from || '',
-        TRUNCATE_MAX_LENGTH,
-        TRUNCATE_PREFIX_LENGTH
-    );
+	const isSender = address === txn.transaction?.data.sender;
 
-    const truncatedNftName = useMiddleEllipsis(
-        txn?.name || '',
-        TRUNCATE_MAX_CHAR,
-        TRUNCATE_MAX_CHAR - 1
-    );
-    const truncatedNftDescription = useMiddleEllipsis(
-        txn?.description || '',
-        TRUNCATE_MAX_CHAR,
-        TRUNCATE_MAX_CHAR - 1
-    );
+	const error = txn.effects?.status.error;
 
-    // TODO: update to account for bought, minted, swapped, etc
-    const transferType =
-        txn.kind === 'Call' ? 'Call' : txn.isSender ? 'Sent' : 'Received';
+	// Transition label - depending on the transaction type and amount
+	// Epoch change without amount is delegation object
+	// Special case for staking and unstaking move call transaction,
+	// For other transaction show Sent or Received
 
-    const amount = txn?.amount || txn?.balance || txn?.txGas || 0;
+	// TODO: Support programmable tx:
+	// Show sui symbol only if transfer transferAmount coinType is SUI_TYPE_ARG, staking or unstaking
+	const showSuiSymbol = false;
 
-    const transferMeta = {
-        Call: {
-            // For NFT with name and image use Mint else use Call (Function Name)
-            txName: txn.name && txn.url ? 'Minted' : 'Call',
-            transfer: false,
-            address: false,
-            icon: SuiIcons.Buy,
-            iconClassName: cl(st.arrowActionIcon, st.buyIcon),
-            amount: amount,
-        },
-        Sent: {
-            txName: 'Sent',
-            transfer: 'To',
-            address: toAddrStr,
-            icon: SuiIcons.ArrowLeft,
-            iconClassName: cl(st.arrowActionIcon, st.angledArrow),
-            amount: amount,
-        },
-        Received: {
-            txName: 'Received',
-            transfer: 'From',
-            address: fromAddrStr,
-            icon: SuiIcons.ArrowLeft,
-            iconClassName: cl(st.arrowActionIcon, st.angledArrow, st.received),
-            amount: amount,
-        },
-    };
+	const timestamp = txn.timestampMs;
 
-    const date = txn?.timestampMs
-        ? formatDate(txn.timestampMs, ['month', 'day', 'hour', 'minute'])
-        : false;
+	return (
+		<Link
+			data-testid="link-to-txn"
+			to={`/receipt?${new URLSearchParams({
+				txdigest: txn.digest,
+			}).toString()}`}
+			className="flex items-center w-full flex-col gap-2 py-4 no-underline"
+		>
+			<div className="flex items-start w-full justify-between gap-3">
+				<div className="w-7.5">
+					<TxnIcon
+						txnFailed={executionStatus !== 'success' || !!error}
+						// TODO: Support programmable transactions variable icons here:
+						variant={getLabel(txn, address)}
+					/>
+				</div>
+				<div className="flex flex-col w-full gap-1.5">
+					{error ? (
+						<div className="flex w-full justify-between">
+							<div className="flex flex-col w-full gap-1.5">
+								<Text color="gray-90" weight="medium">
+									Transaction Failed
+								</Text>
 
-    const transferSuiTxn = txn.kind === 'TransferSui' ? <span>SUI</span> : null;
-    const transferFailed = txn.error ? (
-        <div className={st.transferFailed}>{txn.error}</div>
-    ) : null;
+								<div className="flex break-all">
+									<Text variant="pSubtitle" weight="normal" color="issue-dark">
+										{error}
+									</Text>
+								</div>
+							</div>
+							{/* {transferAmountComponent} */}
+						</div>
+					) : (
+						<>
+							<div className="flex w-full justify-between">
+								<div className="flex gap-1 align-middle items-baseline">
+									<Text color="gray-90" weight="semibold">
+										{summary?.label}
+									</Text>
+									{showSuiSymbol && (
+										<Text color="gray-90" weight="normal" variant="subtitleSmall">
+											SUI
+										</Text>
+									)}
+								</div>
+								{/* {transferAmountComponent} */}
+							</div>
 
-    const txnsAddress = transferMeta[transferType]?.address ? (
-        <div className={st.address}>
-            <div className={st.txTypeName}>
-                {transferMeta[transferType].transfer}
-            </div>
-            <div className={cl(st.txValue, st.txAddress)}>
-                {transferMeta[transferType].address}
-            </div>
-        </div>
-    ) : null;
+							{/* TODO: Support programmable tx: */}
+							<TxnTypeLabel address={recipientAddress!} isSender={isSender} isTransfer={false} />
+							{/* {objectId && <TxnImage id={objectId} />} */}
+						</>
+					)}
 
-    const callFnName = txn?.callFunctionName ? (
-        <span className={st.callFnName}>({txn?.callFunctionName})</span>
-    ) : null;
-
-    const [formattedAmount, symbol] = useFormatCoin(
-        transferMeta[transferType].amount,
-        txn.coinType || GAS_TYPE_ARG
-    );
-
-    return (
-        <Link
-            to={`/receipt?${new URLSearchParams({
-                txdigest: txn.txId,
-            }).toString()}`}
-            className={st.txCard}
-        >
-            <div className={st.card} key={txn.txId}>
-                <div className={st.cardIcon}>
-                    <Icon
-                        icon={transferMeta[transferType].icon}
-                        className={transferMeta[transferType].iconClassName}
-                    />
-                </div>
-                <div className={st.cardContent}>
-                    <div className={st.txResult}>
-                        <div className={cl(st.txTypeName, st.kind)}>
-                            {txn.error
-                                ? 'Transaction failed'
-                                : transferMeta[transferType].txName}{' '}
-                            {callFnName}
-                            {transferSuiTxn}
-                        </div>
-
-                        <div className={st.txTransferred}>
-                            <div className={st.txAmount}>
-                                {formattedAmount} <span>{symbol}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {txnsAddress || transferFailed ? (
-                        <div className={st.txResult}>
-                            {txnsAddress}
-                            {transferFailed}
-                        </div>
-                    ) : null}
-
-                    {txn.url && (
-                        <div className={st.txImage}>
-                            <img
-                                src={txn.url.replace(
-                                    /^ipfs:\/\//,
-                                    'https://ipfs.io/ipfs/'
-                                )}
-                                alt={txn?.name || 'NFT'}
-                            />
-                            <div className={st.nftInfo}>
-                                <div className={st.nftName}>
-                                    {truncatedNftName}
-                                </div>
-                                <div className={st.nftDescription}>
-                                    {truncatedNftDescription}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    {date && <div className={st.txTypeDate}>{date}</div>}
-                </div>
-            </div>
-        </Link>
-    );
+					{timestamp && <DateCard timestamp={Number(timestamp)} size="sm" />}
+				</div>
+			</div>
+		</Link>
+	);
 }
-
-export default memo(TransactionCard);

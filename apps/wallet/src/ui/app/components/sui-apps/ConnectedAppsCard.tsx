@@ -1,91 +1,89 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import cl from 'classnames';
-import { useEffect } from 'react';
-
-import SuiApp, { SuiAppEmpty } from './SuiApp';
-import { notEmpty } from '_helpers';
+import { Heading } from '_app/shared/heading';
+import { Text } from '_app/shared/text';
 import { useAppSelector } from '_hooks';
-import { thunkExtras } from '_store/thunk-extras';
+import { FEATURES } from '_src/shared/experimentation/features';
+import { prepareLinkToCompare } from '_src/shared/utils';
+import { useFeature } from '@growthbook/growthbook-react';
+import { useEffect, useMemo } from 'react';
 
-import st from './Playground.module.scss';
+import { useBackgroundClient } from '../../hooks/useBackgroundClient';
+import { permissionsSelectors } from '../../redux/slices/permissions';
+import Loading from '../loading';
+import { SuiApp, type DAppEntry } from './SuiApp';
+import { SuiAppEmpty } from './SuiAppEmpty';
+
+const emptyArray: DAppEntry[] = [];
 
 function ConnectedDapps() {
-    useEffect(() => {
-        //TODO - move to action
-        thunkExtras.background.sendGetPermissionRequests();
-    }, []);
+	const backgroundClient = useBackgroundClient();
+	useEffect(() => {
+		backgroundClient.sendGetPermissionRequests();
+	}, [backgroundClient]);
+	const ecosystemApps = useFeature<DAppEntry[]>(FEATURES.WALLET_DAPPS).value ?? emptyArray;
+	const loading = useAppSelector(({ permissions }) => !permissions.initialized);
+	const allPermissions = useAppSelector(permissionsSelectors.selectAll);
+	const connectedApps = useMemo(
+		() =>
+			allPermissions
+				.filter(({ allowed }) => allowed)
+				.map((aPermission) => {
+					const matchedEcosystemApp = ecosystemApps.find((anEcosystemApp) => {
+						const originAdj = prepareLinkToCompare(aPermission.origin);
+						const pageLinkAdj = aPermission.pagelink
+							? prepareLinkToCompare(aPermission.pagelink)
+							: null;
+						const anEcosystemAppLinkAdj = prepareLinkToCompare(anEcosystemApp.link);
+						return originAdj === anEcosystemAppLinkAdj || pageLinkAdj === anEcosystemAppLinkAdj;
+					});
+					let appNameFromOrigin = '';
+					try {
+						appNameFromOrigin = new URL(aPermission.origin).hostname
+							.replace('www.', '')
+							.split('.')[0];
+					} catch (e) {
+						// do nothing
+					}
+					return {
+						name: aPermission.name || appNameFromOrigin,
+						description: '',
+						icon: aPermission.favIcon || '',
+						link: aPermission.pagelink || aPermission.origin,
+						tags: [],
+						// override data from ecosystemApps
+						...matchedEcosystemApp,
+						permissionID: aPermission.id,
+					};
+				}),
+		[allPermissions, ecosystemApps],
+	);
+	return (
+		<Loading loading={loading}>
+			<div className="flex justify-center">
+				<Heading variant="heading6" color="gray-90" weight="semibold">
+					Active Connections
+				</Heading>
+			</div>
+			<div className="my-4">
+				<Text variant="pBodySmall" color="gray-80" weight="normal">
+					Apps you have connected to through the Sui Wallet in this browser.
+				</Text>
+			</div>
 
-    const connectedApps = useAppSelector(({ permissions }) => permissions);
-
-    const filteredApps =
-        (connectedApps.initialized &&
-            connectedApps?.ids
-                .map((id) => {
-                    const appData = connectedApps?.entities[id];
-                    // if the app is not allowed, don't show it
-                    if (!appData || appData.allowed !== true) return null;
-
-                    //TODO: add a name and descriptions field to the app data
-                    // use the app name if it exists, otherwise use the origin
-                    // use the first part of the domain name
-                    const origin = new URL(appData.origin).hostname
-                        .replace('www.', '')
-                        .split('.')[0];
-
-                    const name = appData?.name || origin;
-                    return {
-                        name: name,
-                        icon: appData?.favIcon,
-                        link: appData.origin,
-                        pagelink: appData.pagelink,
-                        linkLabel: appData.origin.replace('https://', ''),
-                        description: '',
-                        id: appData.id,
-                        accounts: appData.accounts,
-                        permissions: appData.permissions || [],
-                        createdDate: appData.createdDate,
-                        responseDate: appData.responseDate,
-                    };
-                })
-                .filter(notEmpty)) ||
-        [] ||
-        [];
-
-    return (
-        <>
-            <div className={cl(st.container)}>
-                <div className={st.desc}>
-                    <div className={st.title}>
-                        {filteredApps.length
-                            ? `Connected apps (${filteredApps.length})`
-                            : 'No APPS connected'}
-                    </div>
-                    Apps you connect to through the SUI wallet in this browser
-                    will show up here.
-                </div>
-
-                <div className={cl(st.apps, st.appCards)}>
-                    {filteredApps.length ? (
-                        filteredApps.map((app, index) => (
-                            <SuiApp
-                                key={index}
-                                {...app}
-                                displaytype="card"
-                                disconnect={true}
-                            />
-                        ))
-                    ) : (
-                        <>
-                            <SuiAppEmpty displaytype="card" />
-                            <SuiAppEmpty displaytype="card" />
-                        </>
-                    )}
-                </div>
-            </div>
-        </>
-    );
+			<div className="grid gap-3.75 grid-cols-2">
+				{connectedApps.length ? (
+					connectedApps.map((app) => <SuiApp key={app.permissionID} {...app} displayType="card" />)
+				) : (
+					<>
+						<SuiAppEmpty displayType="card" />
+						<SuiAppEmpty displayType="card" />
+					</>
+				)}
+			</div>
+		</Loading>
+	);
 }
 
 export default ConnectedDapps;

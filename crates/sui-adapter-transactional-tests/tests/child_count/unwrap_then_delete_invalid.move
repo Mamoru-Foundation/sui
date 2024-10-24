@@ -9,14 +9,13 @@
 //# publish
 
 module test::m {
-    use sui::tx_context::{Self, TxContext};
     use sui::dynamic_object_field as ofield;
 
-    struct S has key, store {
+    public struct S has key, store {
         id: sui::object::UID,
     }
 
-    struct R has key {
+    public struct R has key {
         id: sui::object::UID,
         s: S,
     }
@@ -46,6 +45,6 @@ module test::m {
 
 //# run test::m::mint --sender A
 
-//# run test::m::add --sender A --args object(107) 0
+//# run test::m::add --sender A --args object(2,0) 0
 
-//# run test::m::wrap --sender A --args object(107)
+//# run test::m::wrap --sender A --args object(2,0)

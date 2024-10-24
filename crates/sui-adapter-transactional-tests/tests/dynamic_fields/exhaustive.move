@@ -10,16 +10,14 @@
 module a::m {
 
 use sui::dynamic_field::{add, exists_with_type, borrow, borrow_mut, remove};
-use sui::object;
-use sui::tx_context::{sender, TxContext};
 
-struct Obj has key {
+public struct Obj has key {
     id: object::UID,
 }
 
 entry fun t0(ctx: &mut TxContext) {
     let id = object::new(ctx);
-    sui::transfer::transfer(Obj { id }, sender(ctx))
+    sui::transfer::transfer(Obj { id }, ctx.sender())
 }
 
 entry fun t1(obj: &mut Obj) {
@@ -80,18 +78,18 @@ entry fun t8(obj: Obj) {
 
 //# run a::m::t0 --sender A
 
-//# run a::m::t1 --sender A --args object(106)
+//# run a::m::t1 --sender A --args object(2,0)
 
-//# run a::m::t2 --sender A --args object(106)
+//# run a::m::t2 --sender A --args object(2,0)
 
-//# run a::m::t3 --sender A --args object(106)
+//# run a::m::t3 --sender A --args object(2,0)
 
-//# run a::m::t4 --sender A --args object(106)
+//# run a::m::t4 --sender A --args object(2,0)
 
-//# run a::m::t5 --sender A --args object(106)
+//# run a::m::t5 --sender A --args object(2,0)
 
-//# run a::m::t6 --sender A --args object(106)
+//# run a::m::t6 --sender A --args object(2,0)
 
-//# run a::m::t7 --sender A --args object(106)
+//# run a::m::t7 --sender A --args object(2,0)
 
-//# run a::m::t8 --sender A --args object(106)
+//# run a::m::t8 --sender A --args object(2,0)
