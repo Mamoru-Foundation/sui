@@ -391,8 +391,6 @@ mod checked {
             context.take_user_events(runtime_id, index, last_instr)?;
         }
 
-        context.tx_context.call_traces_mut().extend(call_traces);
-
         // save the link context because calls to `make_value` below can set new ones, and we don't want
         // it to be clobbered.
         let saved_linkage = context.linkage_view.steal_linkage();
@@ -689,16 +687,7 @@ mod checked {
             UpgradePolicy::Additive => InclusionCheck::Subset.check(cur_module, new_module),
             UpgradePolicy::DepOnly => InclusionCheck::Equal.check(cur_module, new_module),
             UpgradePolicy::Compatible => {
-                let compatibility = Compatibility {
-                    check_datatype_and_pub_function_linking: true,
-                    check_datatype_layout: true,
-                    check_friend_linking: false,
-                    check_private_entry_linking: false,
-                    disallowed_new_abilities: AbilitySet::ALL,
-                    disallow_change_datatype_type_params: true,
-                    // We disallow adding new variants to enums for now
-                    disallow_new_variants: true,
-                };
+                let compatibility = Compatibility::upgrade_check();
 
                 compatibility.check(cur_module, new_module)
             }
