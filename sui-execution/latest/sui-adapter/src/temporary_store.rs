@@ -1058,9 +1058,9 @@ impl<'backing> BackingPackageStore for TemporaryStore<'backing> {
         if let Some(obj) = self.execution_results.written_objects.get(package_id) {
             Ok(Some(PackageObject::new(obj.clone())))
         } else {
-            self.store.get_package_object(package_id).map(|obj| {
+            self.store.get_package_object(package_id).inspect(|obj| {
                 // Track object but leave unchanged
-                if let Some(v) = &obj {
+                if let Some(v) = obj {
                     if !self
                         .runtime_packages_loaded_from_db
                         .read()
@@ -1075,7 +1075,6 @@ impl<'backing> BackingPackageStore for TemporaryStore<'backing> {
                             .insert(*package_id, v.clone());
                     }
                 }
-                obj
             })
         }
     }

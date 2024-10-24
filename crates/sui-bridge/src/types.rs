@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use shared_crypto::intent::IntentScope;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
+use sui_types::base_types::SuiAddress;
 use sui_types::bridge::{
     BridgeChainId, MoveTypeTokenTransferPayload, APPROVAL_THRESHOLD_ADD_TOKENS_ON_EVM,
     APPROVAL_THRESHOLD_ADD_TOKENS_ON_SUI, BRIDGE_COMMITTEE_MAXIMAL_VOTING_POWER,
@@ -51,6 +52,7 @@ pub const BRIDGE_UNPAUSED: bool = false;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct BridgeAuthority {
+    pub sui_address: SuiAddress,
     pub pubkey: BridgeAuthorityPublicKey,
     pub voting_power: u64,
     pub base_url: String,
@@ -118,6 +120,30 @@ impl BridgeCommittee {
 
     pub fn total_blocklisted_stake(&self) -> StakeUnit {
         self.total_blocklisted_stake
+    }
+
+    pub fn active_stake(&self, member: &BridgeAuthorityPublicKeyBytes) -> StakeUnit {
+        self.members
+            .get(member)
+            .map(|a| if a.is_blocklisted { 0 } else { a.voting_power })
+            .unwrap_or(0)
+    }
+}
+
+impl core::fmt::Display for BridgeCommittee {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
+        for m in self.members.values() {
+            writeln!(
+                f,
+                "pubkey: {:?}, url: {:?}, stake: {:?}, blocklisted: {}, eth address: {:x}",
+                Hex::encode(m.pubkey_bytes().as_bytes()),
+                m.base_url,
+                m.voting_power,
+                m.is_blocklisted,
+                m.pubkey_bytes().to_eth_address(),
+            )?;
+        }
+        Ok(())
     }
 }
 
