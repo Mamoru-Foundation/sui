@@ -5,12 +5,9 @@
 
 //# publish
 module Test::M1 {
-    use sui::object::{Self, UID};
-    use sui::tx_context::TxContext;
-    use sui::transfer;
     use sui::coin::Coin;
 
-    struct Object has key, store {
+    public struct Object has key, store {
         id: UID,
         value: u64,
     }
@@ -20,7 +17,7 @@ module Test::M1 {
     }
 
     public entry fun create(value: u64, recipient: address, ctx: &mut TxContext) {
-        transfer::transfer(
+        transfer::public_transfer(
             Object { id: object::new(ctx), value },
             recipient
         )
@@ -29,4 +26,4 @@ module Test::M1 {
 
 //# run Test::M1::create --args 0 @A
 
-//# view-object 105
+//# view-object 2,0

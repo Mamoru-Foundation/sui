@@ -1,130 +1,159 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import cl from 'classnames';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { type PermissionType } from '_src/shared/messaging/messages/payloads/permissions';
+import { Transaction } from '@mysten/sui/transactions';
+import cn from 'clsx';
+import { useCallback, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useParams } from 'react-router-dom';
 
-import AccountAddress from '_components/account-address';
-import ExternalLink from '_components/external-link';
-import Icon, { SuiIcons } from '_components/icon';
-import LoadingIndicator from '_components/loading/LoadingIndicator';
-
-import type { MouseEventHandler, ReactNode } from 'react';
-
-import st from './UserApproveContainer.module.scss';
+import { useAppSelector } from '../../hooks';
+import { useAccountByAddress } from '../../hooks/useAccountByAddress';
+import { type RootState } from '../../redux/RootReducer';
+import { txRequestsSelectors } from '../../redux/slices/transaction-requests';
+import { Button } from '../../shared/ButtonUI';
+import { UnlockAccountButton } from '../accounts/UnlockAccountButton';
+import { DAppInfoCard } from '../DAppInfoCard';
+import { ScamOverlay } from '../known-scam-overlay';
+import { RequestType } from '../known-scam-overlay/types';
+import { useShowScamWarning } from '../known-scam-overlay/useShowScamWarning';
 
 type UserApproveContainerProps = {
-    children: ReactNode | ReactNode[];
-    origin: string;
-    originFavIcon?: string;
-    rejectTitle: string;
-    approveTitle: string;
-    onSubmit: (approved: boolean) => void;
-    isConnect?: boolean;
-    isWarning?: boolean;
+	children: ReactNode | ReactNode[];
+	origin: string;
+	originFavIcon?: string;
+	rejectTitle: string;
+	approveTitle: string;
+	approveDisabled?: boolean;
+	approveLoading?: boolean;
+	onSubmit: (approved: boolean) => Promise<void>;
+	isWarning?: boolean;
+	addressHidden?: boolean;
+	address?: string | null;
+	scrollable?: boolean;
+	blended?: boolean;
+	permissions?: PermissionType[];
+	checkAccountLock?: boolean;
 };
 
-function UserApproveContainer({
-    origin,
-    originFavIcon,
-    children,
-    rejectTitle,
-    approveTitle,
-    onSubmit,
-    isConnect,
-    isWarning,
+export function UserApproveContainer({
+	origin,
+	originFavIcon,
+	children,
+	rejectTitle,
+	approveTitle,
+	approveDisabled = false,
+	approveLoading = false,
+	onSubmit,
+	isWarning,
+	addressHidden = false,
+	address,
+	permissions,
+	checkAccountLock,
 }: UserApproveContainerProps) {
-    const [submitting, setSubmitting] = useState(false);
-    const handleOnResponse = useCallback<MouseEventHandler<HTMLButtonElement>>(
-        async (e) => {
-            setSubmitting(true);
-            const allowed = e.currentTarget.dataset.allow === 'true';
-            await onSubmit(allowed);
-            setSubmitting(false);
-        },
-        [onSubmit]
-    );
+	const [submitting, setSubmitting] = useState(false);
+	const handleOnResponse = useCallback(
+		async (allowed: boolean) => {
+			setSubmitting(true);
+			await onSubmit(allowed);
+			setSubmitting(false);
+		},
+		[onSubmit],
+	);
 
-    const parsedOrigin = useMemo(() => new URL(origin), [origin]);
+	const { data: selectedAccount } = useAccountByAddress(address);
+	const parsedOrigin = useMemo(() => new URL(origin), [origin]);
+	const { requestID } = useParams();
+	const requestSelector = useMemo(
+		() => (state: RootState) =>
+			requestID ? txRequestsSelectors.selectById(state, requestID) : null,
+		[requestID],
+	);
+	const request = useAppSelector(requestSelector);
 
-    const isSecure = parsedOrigin.protocol === 'https:';
+	const transaction = useMemo(() => {
+		if (request && request.tx && 'data' in request.tx) {
+			const transaction = Transaction.from(request.tx.data);
+			transaction.setSender(request.tx.account);
+			return transaction;
+		}
+	}, [request]);
+	const message = request && request.tx && 'message' in request.tx ? request.tx.message : undefined;
 
-    return (
-        <div className={st.container}>
-            <div className={st.scrollBody}>
-                <div className={st.originContainer}>
-                    {originFavIcon ? (
-                        <img
-                            className={st.favIcon}
-                            src={originFavIcon}
-                            alt="Site favicon"
-                        />
-                    ) : null}
-                    <div className={st.host}>
-                        {parsedOrigin.host.split('.')[0]}
-                    </div>
-                    <ExternalLink
-                        href={origin}
-                        className={cl(st.origin, !isSecure && st.warning)}
-                        showIcon={isSecure}
-                    >
-                        {origin}
-                    </ExternalLink>
-                    <AccountAddress showLink={false} />
-                </div>
-                <div className={st.children}>{children}</div>
-            </div>
-            <div className={st.actionsContainer}>
-                <div className={cl(st.actions, isWarning && st.flipActions)}>
-                    <button
-                        type="button"
-                        data-allow="false"
-                        onClick={handleOnResponse}
-                        className={cl(
-                            st.button,
-                            isWarning
-                                ? st.reject
-                                : isConnect
-                                ? st.cancel
-                                : st.reject
-                        )}
-                        disabled={submitting}
-                    >
-                        <Icon icon={SuiIcons.CloseFill} />
-                        {rejectTitle}
-                    </button>
-                    <button
-                        type="button"
-                        className={cl(
-                            st.button,
-                            isWarning ? st.cancel : st.approve,
-                            submitting && st.loading
-                        )}
-                        data-allow="true"
-                        onClick={handleOnResponse}
-                        disabled={submitting}
-                    >
-                        {!submitting &&
-                            !isWarning &&
-                            (isConnect ? (
-                                <Icon icon="plus" />
-                            ) : (
-                                <Icon icon={SuiIcons.CheckFill} />
-                            ))}
+	const {
+		data,
+		isOpen,
+		isPending: isDomainCheckLoading,
+		isError,
+	} = useShowScamWarning({
+		url: parsedOrigin,
+		requestType: message
+			? RequestType.SIGN_MESSAGE
+			: transaction
+				? RequestType.SIGN_TRANSACTION
+				: RequestType.CONNECT,
+		transaction,
+		requestId: requestID!,
+	});
 
-                        <span>
-                            {submitting ? (
-                                <LoadingIndicator className={st.loader} />
-                            ) : (
-                                approveTitle
-                            )}
-                        </span>
-                        {isWarning && <Icon icon="arrow-right" />}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+	return (
+		<>
+			<ScamOverlay
+				open={isOpen}
+				title={data?.block.title}
+				subtitle={data?.block.subtitle}
+				onDismiss={() => handleOnResponse(false)}
+			/>
+			<div className="flex flex-1 flex-col flex-nowrap h-full">
+				<div className="flex-1 pb-0 flex flex-col">
+					<DAppInfoCard
+						name={parsedOrigin.host}
+						url={origin}
+						permissions={permissions}
+						iconUrl={originFavIcon}
+						connectedAddress={!addressHidden && address ? address : undefined}
+						showSecurityWarning={isError}
+					/>
+					<div className="flex flex-1 flex-col px-6 bg-hero-darkest/5">{children}</div>
+				</div>
+				<div className="sticky bottom-0">
+					<div
+						className={cn(
+							'bg-hero-darkest/5 backdrop-blur-lg py-4 px-5 flex items-center gap-2.5',
+							{
+								'flex-row-reverse': isWarning,
+							},
+						)}
+					>
+						{!checkAccountLock || !selectedAccount?.isLocked ? (
+							<>
+								<Button
+									size="tall"
+									variant="secondary"
+									onClick={() => {
+										handleOnResponse(false);
+									}}
+									disabled={submitting}
+									text={rejectTitle}
+								/>
+								<Button
+									size="tall"
+									variant={isWarning ? 'secondary' : 'primary'}
+									onClick={() => {
+										handleOnResponse(true);
+									}}
+									disabled={approveDisabled}
+									loading={submitting || approveLoading || isDomainCheckLoading}
+									text={approveTitle}
+								/>
+							</>
+						) : (
+							<UnlockAccountButton account={selectedAccount} title="Unlock to Approve" />
+						)}
+					</div>
+				</div>
+			</div>
+		</>
+	);
 }
-
-export default memo(UserApproveContainer);

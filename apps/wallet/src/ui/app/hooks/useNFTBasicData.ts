@@ -1,28 +1,26 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { isSuiMoveObject, getObjectId, getObjectFields } from '@mysten/sui.js';
+import type { SuiObjectData } from '@mysten/sui/client';
 
 import useFileExtensionType from './useFileExtensionType';
 import useMediaUrl from './useMediaUrl';
 
-import type { SuiObject } from '@mysten/sui.js';
-
-export default function useNFTBasicData(nftObj: SuiObject) {
-    const nftObjectID = getObjectId(nftObj.reference);
-    const filePath = useMediaUrl(nftObj.data);
-    let objType = null;
-    let nftFields = null;
-    if (isSuiMoveObject(nftObj.data)) {
-        objType = nftObj.data.type;
-        nftFields = getObjectFields(nftObj.data);
-    }
-    const fileExtensionType = useFileExtensionType(filePath || '');
-    return {
-        nftObjectID,
-        filePath,
-        nftFields,
-        fileExtensionType,
-        objType,
-    };
+export default function useNFTBasicData(nftObj: SuiObjectData | null) {
+	const nftObjectID = nftObj?.objectId || null;
+	const filePath = useMediaUrl(nftObj?.content || null);
+	let objType = null;
+	let nftFields = null;
+	if (nftObj && nftObj.content?.dataType === 'moveObject') {
+		objType = nftObj.content?.type;
+		nftFields = nftObj?.content?.dataType === 'moveObject' ? nftObj.content.fields : null;
+	}
+	const fileExtensionType = useFileExtensionType(filePath || '');
+	return {
+		nftObjectID,
+		filePath,
+		nftFields,
+		fileExtensionType,
+		objType,
+	};
 }

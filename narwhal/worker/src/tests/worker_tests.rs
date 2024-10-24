@@ -2,33 +2,56 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
-use crate::metrics::initialise_metrics;
-use arc_swap::ArcSwap;
+use crate::LocalNarwhalClient;
+use crate::{metrics::initialise_metrics, TrivialTransactionValidator};
+use async_trait::async_trait;
 use bytes::Bytes;
-use consensus::{dag::Dag, metrics::ConsensusMetrics};
-use fastcrypto::{
-    encoding::{Encoding, Hex},
-    hash::Hash,
-};
+use fastcrypto::hash::Hash;
 use futures::stream::FuturesOrdered;
-use primary::{NetworkModel, Primary, CHANNEL_CAPACITY};
+use futures::StreamExt;
+use primary::{CHANNEL_CAPACITY, NUM_SHUTDOWN_RECEIVERS};
 use prometheus::Registry;
-use std::time::Duration;
-use storage::NodeStorage;
 use store::rocks;
-use test_utils::{batch, temp_dir, CommitteeFixture};
-use types::{MockWorkerToPrimary, MockWorkerToWorker, TransactionsClient, WorkerToPrimaryServer};
+use store::rocks::MetricConf;
+use store::rocks::ReadWriteOptions;
+use test_utils::{
+    batch, latest_protocol_version, temp_dir, test_network, transaction, CommitteeFixture,
+};
+use types::{
+    BatchAPI, MockWorkerToPrimary, MockWorkerToWorker, PreSubscribedBroadcastSender,
+    TransactionProto, TransactionsClient, WorkerBatchMessage, WorkerToWorkerClient,
+};
+
+// A test validator that rejects every transaction / batch
+#[derive(Clone)]
+struct NilTxValidator;
+#[async_trait]
+impl TransactionValidator for NilTxValidator {
+    type Error = eyre::Report;
+
+    fn validate(&self, _tx: &[u8]) -> Result<(), Self::Error> {
+        eyre::bail!("Invalid transaction");
+    }
+    fn validate_batch(
+        &self,
+        _txs: &Batch,
+        _protocol_config: &ProtocolConfig,
+    ) -> Result<(), Self::Error> {
+        eyre::bail!("Invalid batch");
+    }
+}
 
 #[tokio::test]
-async fn handle_clients_transactions() {
+async fn reject_invalid_clients_transactions() {
     let fixture = CommitteeFixture::builder().randomize_ports(true).build();
     let committee = fixture.committee();
-    let worker_cache = fixture.shared_worker_cache();
+    let worker_cache = fixture.worker_cache();
 
     let worker_id = 0;
     let my_primary = fixture.authorities().next().unwrap();
     let myself = my_primary.worker(worker_id);
-    let name = my_primary.public_key();
+    let public_key = my_primary.public_key();
+    let client = NetworkClient::new_from_keypair(&my_primary.network_keypair());
 
     let parameters = Parameters {
         batch_size: 200, // Two transactions.
@@ -36,48 +59,154 @@ async fn handle_clients_transactions() {
     };
 
     // Create a new test store.
-    let db = rocks::DBMap::<BatchDigest, Batch>::open(temp_dir(), None, Some("batches")).unwrap();
-    let store = Store::new(db);
+    let batch_store = rocks::DBMap::<BatchDigest, Batch>::open(
+        temp_dir(),
+        MetricConf::default(),
+        None,
+        Some("batches"),
+        &ReadWriteOptions::default(),
+    )
+    .unwrap();
 
     let registry = Registry::new();
     let metrics = initialise_metrics(&registry);
 
-    // Spawn a `Worker` instance.
+    let mut tx_shutdown = PreSubscribedBroadcastSender::new(NUM_SHUTDOWN_RECEIVERS);
+
+    // Spawn a `Worker` instance with a reject-all validator.
     Worker::spawn(
-        name.clone(),
+        my_primary.authority().clone(),
         myself.keypair(),
         worker_id,
-        Arc::new(ArcSwap::from_pointee(committee.clone())),
+        committee.clone(),
         worker_cache.clone(),
+        latest_protocol_version(),
         parameters,
-        store,
+        NilTxValidator,
+        client,
+        batch_store,
         metrics,
+        &mut tx_shutdown,
+    );
+
+    // Wait till other services have been able to start up
+    tokio::task::yield_now().await;
+    // Send enough transactions to create a batch.
+    let address = worker_cache
+        .worker(&public_key, &worker_id)
+        .unwrap()
+        .transactions;
+    let config = mysten_network::config::Config::new();
+    let channel = config.connect_lazy(&address).unwrap();
+    let mut client = TransactionsClient::new(channel);
+    let tx = transaction();
+    let txn = TransactionProto {
+        transactions: vec![Bytes::from(tx.clone())],
+    };
+
+    // Check invalid transactions are rejected
+    let res = client.submit_transaction(txn).await;
+    assert!(res.is_err());
+
+    let worker_pk = worker_cache.worker(&public_key, &worker_id).unwrap().name;
+
+    let batch = batch(&latest_protocol_version());
+    let batch_message = WorkerBatchMessage {
+        batch: batch.clone(),
+    };
+
+    // setup network : impersonate a send from another worker
+    let another_primary = fixture.authorities().nth(2).unwrap();
+    let another_worker = another_primary.worker(worker_id);
+    let network = test_network(
+        another_worker.keypair(),
+        &another_worker.info().worker_address,
+    );
+    // ensure that the networks are connected
+    network
+        .connect(myself.info().worker_address.to_anemo_address().unwrap())
+        .await
+        .unwrap();
+    let peer = network.peer(PeerId(worker_pk.0.to_bytes())).unwrap();
+
+    // Check invalid batches are rejected
+    let res = WorkerToWorkerClient::new(peer)
+        .report_batch(batch_message)
+        .await;
+    assert!(res.is_err());
+}
+
+/// TODO: test both RemoteNarwhalClient and LocalNarwhalClient in the same test case.
+#[tokio::test]
+async fn handle_remote_clients_transactions() {
+    let fixture = CommitteeFixture::builder().randomize_ports(true).build();
+    let committee = fixture.committee();
+    let worker_cache = fixture.worker_cache();
+
+    let worker_id = 0;
+    let my_primary = fixture.authorities().next().unwrap();
+    let myself = my_primary.worker(worker_id);
+    let authority_public_key = my_primary.public_key();
+    let client = NetworkClient::new_from_keypair(&my_primary.network_keypair());
+
+    let parameters = Parameters {
+        batch_size: 200, // Two transactions.
+        ..Parameters::default()
+    };
+
+    // Create a new test store.
+    let batch_store = rocks::DBMap::<BatchDigest, Batch>::open(
+        temp_dir(),
+        MetricConf::default(),
+        None,
+        Some("batches"),
+        &ReadWriteOptions::default(),
+    )
+    .unwrap();
+
+    let registry = Registry::new();
+    let metrics = initialise_metrics(&registry);
+
+    let mut tx_shutdown = PreSubscribedBroadcastSender::new(NUM_SHUTDOWN_RECEIVERS);
+
+    // Spawn a `Worker` instance.
+    Worker::spawn(
+        my_primary.authority().clone(),
+        myself.keypair(),
+        worker_id,
+        committee.clone(),
+        worker_cache.clone(),
+        latest_protocol_version(),
+        parameters,
+        TrivialTransactionValidator,
+        client.clone(),
+        batch_store,
+        metrics,
+        &mut tx_shutdown,
     );
 
     // Spawn a network listener to receive our batch's digest.
     let mut peer_networks = Vec::new();
-    let batch = batch();
+
+    // Create batches
+    let batch = batch(&latest_protocol_version());
     let batch_digest = batch.digest();
 
     let (tx_await_batch, mut rx_await_batch) = test_utils::test_channel!(CHANNEL_CAPACITY);
     let mut mock_primary_server = MockWorkerToPrimary::new();
     mock_primary_server
-        .expect_report_our_batch()
+        .expect_report_own_batch()
         .withf(move |request| {
             let message = request.body();
 
-            message.digest == batch_digest
-                && message.worker_id == worker_id
-                && message.metadata.created_at > 0
+            message.digest == batch_digest && message.worker_id == worker_id
         })
         .times(1)
         .returning(move |_| {
             tx_await_batch.try_send(()).unwrap();
             Ok(anemo::Response::new(()))
         });
-    let primary_routes =
-        anemo::Router::new().add_rpc_service(WorkerToPrimaryServer::new(mock_primary_server));
-    peer_networks.push(my_primary.new_network(primary_routes));
+    client.set_worker_to_primary_local_handler(Arc::new(mock_primary_server));
 
     // Spawn enough workers' listeners to acknowledge our batches.
     for worker in fixture.authorities().skip(1).map(|a| a.worker(worker_id)) {
@@ -93,8 +222,7 @@ async fn handle_clients_transactions() {
     tokio::task::yield_now().await;
     // Send enough transactions to create a batch.
     let address = worker_cache
-        .load()
-        .worker(&name, &worker_id)
+        .worker(&authority_public_key, &worker_id)
         .unwrap()
         .transactions;
     let config = mysten_network::config::Config::new();
@@ -103,9 +231,9 @@ async fn handle_clients_transactions() {
 
     let join_handle = tokio::task::spawn(async move {
         let mut fut_list = FuturesOrdered::new();
-        for tx in batch.transactions {
+        for tx in batch.transactions() {
             let txn = TransactionProto {
-                transaction: Bytes::from(tx.clone()),
+                transactions: vec![Bytes::from(tx.clone())],
             };
 
             // Calls to submit_transaction are now blocking, so we need to drive them
@@ -127,283 +255,117 @@ async fn handle_clients_transactions() {
     assert!(join_handle.await.is_ok());
 }
 
+/// TODO: test both RemoteNarwhalClient and LocalNarwhalClient in the same test case.
 #[tokio::test]
-async fn get_network_peers_from_admin_server() {
-    // telemetry_subscribers::init_for_testing();
-    let primary_1_parameters = Parameters {
-        batch_size: 200, // Two transactions.
-        ..Parameters::default()
-    };
+async fn handle_local_clients_transactions() {
     let fixture = CommitteeFixture::builder().randomize_ports(true).build();
     let committee = fixture.committee();
-    let worker_cache = fixture.shared_worker_cache();
-    let authority_1 = fixture.authorities().next().unwrap();
-    let name_1 = authority_1.public_key();
-    let signer_1 = authority_1.keypair().copy();
+    let worker_cache = fixture.worker_cache();
 
     let worker_id = 0;
-    let worker_1_keypair = authority_1.worker(worker_id).keypair().copy();
+    let my_primary = fixture.authorities().next().unwrap();
+    let myself = my_primary.worker(worker_id);
+    let authority_public_key = my_primary.public_key();
+    let client = NetworkClient::new_from_keypair(&my_primary.network_keypair());
 
-    // Make the data store.
-    let store = NodeStorage::reopen(temp_dir());
+    let parameters = Parameters {
+        batch_size: 200, // Two transactions.
+        ..Parameters::default()
+    };
 
-    let (tx_new_certificates, rx_new_certificates) =
-        test_utils::test_new_certificates_channel!(CHANNEL_CAPACITY);
-    let (tx_feedback, rx_feedback) = test_utils::test_channel!(CHANNEL_CAPACITY);
-    let initial_committee = ReconfigureNotification::NewEpoch(committee.clone());
-    let (tx_reconfigure, _rx_reconfigure) = watch::channel(initial_committee);
-    let consensus_metrics = Arc::new(ConsensusMetrics::new(&Registry::new()));
-
-    // Spawn Primary 1
-    Primary::spawn(
-        name_1.clone(),
-        signer_1,
-        authority_1.network_keypair().copy(),
-        Arc::new(ArcSwap::from_pointee(committee.clone())),
-        worker_cache.clone(),
-        primary_1_parameters.clone(),
-        store.header_store.clone(),
-        store.certificate_store.clone(),
-        store.proposer_store.clone(),
-        store.payload_store.clone(),
-        store.vote_digest_store.clone(),
-        /* tx_consensus */ tx_new_certificates,
-        /* rx_consensus */ rx_feedback,
-        /* dag */
-        Some(Arc::new(
-            Dag::new(&committee, rx_new_certificates, consensus_metrics).1,
-        )),
-        NetworkModel::Asynchronous,
-        tx_reconfigure,
-        tx_feedback,
-        &Registry::new(),
+    // Create a new test store.
+    let batch_store = rocks::DBMap::<BatchDigest, Batch>::open(
+        temp_dir(),
+        MetricConf::default(),
         None,
-    );
+        Some("batches"),
+        &ReadWriteOptions::default(),
+    )
+    .unwrap();
 
-    // Wait for tasks to start
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    let registry = Registry::new();
+    let metrics = initialise_metrics(&registry);
 
-    let registry_1 = Registry::new();
-    let metrics_1 = initialise_metrics(&registry_1);
+    let mut tx_shutdown = PreSubscribedBroadcastSender::new(NUM_SHUTDOWN_RECEIVERS);
 
-    let worker_1_parameters = Parameters {
-        batch_size: 200, // Two transactions.
-        ..Parameters::default()
-    };
-
-    // Spawn a `Worker` instance for primary 1.
+    // Spawn a `Worker` instance.
     Worker::spawn(
-        name_1,
-        worker_1_keypair.copy(),
+        my_primary.authority().clone(),
+        myself.keypair(),
         worker_id,
-        Arc::new(ArcSwap::from_pointee(committee.clone())),
+        committee.clone(),
         worker_cache.clone(),
-        worker_1_parameters.clone(),
-        store.batch_store.clone(),
-        metrics_1.clone(),
+        latest_protocol_version(),
+        parameters,
+        TrivialTransactionValidator,
+        client.clone(),
+        batch_store,
+        metrics,
+        &mut tx_shutdown,
     );
 
-    let primary_1_peer_id = Hex::encode(authority_1.network_keypair().copy().public().0.as_bytes());
-    let worker_1_peer_id = Hex::encode(worker_1_keypair.copy().public().0.as_bytes());
+    // Spawn a network listener to receive our batch's digest.
+    let mut peer_networks = Vec::new();
 
-    // Wait for tasks to start
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Create batches
+    let batch = batch(&latest_protocol_version());
+    let batch_digest = batch.digest();
 
-    // Test getting all known peers for worker 1
-    let resp = reqwest::get(format!(
-        "http://127.0.0.1:{}/known_peers",
-        worker_1_parameters
-            .network_admin_server
-            .worker_network_admin_server_base_port
-            + worker_id as u16
-    ))
-    .await
-    .unwrap()
-    .json::<Vec<String>>()
-    .await
-    .unwrap();
+    let (tx_await_batch, mut rx_await_batch) = test_utils::test_channel!(CHANNEL_CAPACITY);
+    let mut mock_primary_server = MockWorkerToPrimary::new();
+    mock_primary_server
+        .expect_report_own_batch()
+        .withf(move |request| {
+            let message = request.body();
+            message.digest == batch_digest && message.worker_id == worker_id
+        })
+        .times(1)
+        .returning(move |_| {
+            tx_await_batch.try_send(()).unwrap();
+            Ok(anemo::Response::new(()))
+        });
+    client.set_worker_to_primary_local_handler(Arc::new(mock_primary_server));
 
-    // Assert we returned 3 peers (1 primary + 3 other workers)
-    assert_eq!(4, resp.len());
+    // Spawn enough workers' listeners to acknowledge our batches.
+    for worker in fixture.authorities().skip(1).map(|a| a.worker(worker_id)) {
+        let mut mock_server = MockWorkerToWorker::new();
+        mock_server
+            .expect_report_batch()
+            .returning(|_| Ok(anemo::Response::new(())));
+        let routes = anemo::Router::new().add_rpc_service(WorkerToWorkerServer::new(mock_server));
+        peer_networks.push(worker.new_network(routes));
+    }
 
-    // Test getting all connected peers for worker 1 (worker at index 0 for primary 1)
-    let resp = reqwest::get(format!(
-        "http://127.0.0.1:{}/peers",
-        worker_1_parameters
-            .network_admin_server
-            .worker_network_admin_server_base_port
-            + worker_id as u16
-    ))
-    .await
-    .unwrap()
-    .json::<Vec<String>>()
-    .await
-    .unwrap();
+    // Wait till other services have been able to start up
+    tokio::task::yield_now().await;
+    // Send enough transactions to create a batch.
+    let address = worker_cache
+        .worker(&authority_public_key, &worker_id)
+        .unwrap()
+        .transactions;
+    let client = LocalNarwhalClient::get_global(&address).unwrap().load();
 
-    // Assert we returned 1 peer (only worker's primary spawned)
-    assert_eq!(1, resp.len());
+    let join_handle = tokio::task::spawn(async move {
+        let mut fut_list = FuturesOrdered::new();
+        for txn in batch.transactions() {
+            // Calls to submit_transaction are now blocking, so we need to drive them
+            // all at the same time, rather than sequentially.
+            let inner_client = client.clone();
+            fut_list.push_back(async move {
+                inner_client
+                    .submit_transactions(vec![txn.clone()])
+                    .await
+                    .unwrap();
+            });
+        }
 
-    // Assert peer ids are correct
-    let expected_peer_ids = vec![&primary_1_peer_id];
-    assert!(expected_peer_ids.iter().all(|e| resp.contains(e)));
+        // Drive all sending in parallel.
+        while fut_list.next().await.is_some() {}
+    });
 
-    let authority_2 = fixture.authorities().nth(1).unwrap();
-    let name_2 = authority_2.public_key();
-    let signer_2 = authority_2.keypair().copy();
+    // Ensure the primary received the batch's digest (ie. it did not panic).
+    rx_await_batch.recv().await.unwrap();
 
-    let worker_2_keypair = authority_2.worker(worker_id).keypair().copy();
-
-    let primary_2_parameters = Parameters {
-        batch_size: 200, // Two transactions.
-        ..Parameters::default()
-    };
-
-    let (tx_new_certificates_2, rx_new_certificates_2) =
-        test_utils::test_new_certificates_channel!(CHANNEL_CAPACITY);
-    let (tx_feedback_2, rx_feedback_2) = test_utils::test_channel!(CHANNEL_CAPACITY);
-    let initial_committee = ReconfigureNotification::NewEpoch(committee.clone());
-    let (tx_reconfigure_2, _rx_reconfigure_2) = watch::channel(initial_committee);
-    let consensus_metrics = Arc::new(ConsensusMetrics::new(&Registry::new()));
-
-    // Spawn Primary 2
-    Primary::spawn(
-        name_2.clone(),
-        signer_2,
-        authority_2.network_keypair().copy(),
-        Arc::new(ArcSwap::from_pointee(committee.clone())),
-        worker_cache.clone(),
-        primary_2_parameters.clone(),
-        store.header_store.clone(),
-        store.certificate_store.clone(),
-        store.proposer_store.clone(),
-        store.payload_store.clone(),
-        store.vote_digest_store.clone(),
-        /* tx_consensus */ tx_new_certificates_2,
-        /* rx_consensus */ rx_feedback_2,
-        /* dag */
-        Some(Arc::new(
-            Dag::new(&committee, rx_new_certificates_2, consensus_metrics).1,
-        )),
-        NetworkModel::Asynchronous,
-        tx_reconfigure_2,
-        tx_feedback_2,
-        &Registry::new(),
-        None,
-    );
-
-    // Wait for tasks to start
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    let registry_2 = Registry::new();
-    let metrics_2 = initialise_metrics(&registry_2);
-
-    let worker_2_parameters = Parameters {
-        batch_size: 200, // Two transactions.
-        ..Parameters::default()
-    };
-
-    // Spawn a `Worker` instance for primary 2.
-    Worker::spawn(
-        name_2,
-        worker_2_keypair.copy(),
-        worker_id,
-        Arc::new(ArcSwap::from_pointee(committee.clone())),
-        worker_cache.clone(),
-        worker_2_parameters.clone(),
-        store.batch_store,
-        metrics_2.clone(),
-    );
-
-    // Wait for tasks to start. Sleeping longer here to ensure all primaries and workers
-    // have  a chance to connect to each other.
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    let primary_2_peer_id = Hex::encode(authority_2.network_keypair().copy().public().0.as_bytes());
-    let worker_2_peer_id = Hex::encode(worker_2_keypair.copy().public().0.as_bytes());
-
-    // Test getting all known peers for worker 2 (worker at index 0 for primary 2)
-    let resp = reqwest::get(format!(
-        "http://127.0.0.1:{}/known_peers",
-        worker_2_parameters
-            .network_admin_server
-            .worker_network_admin_server_base_port
-            + worker_id as u16
-    ))
-    .await
-    .unwrap()
-    .json::<Vec<String>>()
-    .await
-    .unwrap();
-
-    // Assert we returned 4 peers (1 primary + 3 other workers)
-    assert_eq!(4, resp.len());
-
-    // Test getting all connected peers for worker 1 (worker at index 0 for primary 1)
-    let resp = reqwest::get(format!(
-        "http://127.0.0.1:{}/peers",
-        worker_1_parameters
-            .network_admin_server
-            .worker_network_admin_server_base_port
-            + worker_id as u16
-    ))
-    .await
-    .unwrap()
-    .json::<Vec<String>>()
-    .await
-    .unwrap();
-
-    // Assert we returned 3 peers (2 primaries spawned + 1 other worker spawned)
-    assert_eq!(3, resp.len());
-
-    // Assert peer ids are correct
-    let expected_peer_ids = vec![&primary_1_peer_id, &primary_2_peer_id, &worker_2_peer_id];
-    assert!(expected_peer_ids.iter().all(|e| resp.contains(e)));
-
-    // Test getting all connected peers for worker 2 (worker at index 0 for primary 2)
-    let resp = reqwest::get(format!(
-        "http://127.0.0.1:{}/peers",
-        worker_2_parameters
-            .network_admin_server
-            .worker_network_admin_server_base_port
-            + worker_id as u16
-    ))
-    .await
-    .unwrap()
-    .json::<Vec<String>>()
-    .await
-    .unwrap();
-
-    // Assert we returned 3 peers (2 primaries spawned  + 1 other worker spawned)
-    assert_eq!(3, resp.len());
-
-    // Assert peer ids are correct
-    let expected_peer_ids = vec![&primary_1_peer_id, &primary_2_peer_id, &worker_1_peer_id];
-    assert!(expected_peer_ids.iter().all(|e| resp.contains(e)));
-
-    // Assert network connectivity metrics are also set as expected
-    let mut m = std::collections::HashMap::new();
-    m.insert("peer_id", resp.get(0).unwrap().as_str());
-    assert_eq!(
-        1,
-        metrics_2
-            .clone()
-            .network_connection_metrics
-            .unwrap()
-            .network_peer_connected
-            .get_metric_with(&m)
-            .unwrap()
-            .get()
-    );
-
-    m.insert("peer_id", resp.get(1).unwrap().as_str());
-    assert_eq!(
-        1,
-        metrics_2
-            .network_connection_metrics
-            .unwrap()
-            .network_peer_connected
-            .get_metric_with(&m)
-            .unwrap()
-            .get()
-    );
+    // Ensure sending ended.
+    assert!(join_handle.await.is_ok());
 }

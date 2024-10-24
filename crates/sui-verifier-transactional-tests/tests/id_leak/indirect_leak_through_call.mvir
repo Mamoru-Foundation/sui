@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //# publish
+// not allowed since Foo is not packed with a fresh UID
 module 0x0.m {
     import 0x2.object;
 
@@ -19,6 +20,30 @@ module 0x0.m {
         label l0:
         Foo { id } = move(f);
         Self.transfer(Foo { id: move(id) });
+        return;
+    }
+
+}
+
+//# publish
+// allowed since no packing occurs
+module 0x0.m {
+    import 0x2.object;
+
+    struct Foo has key {
+        id: object.UID,
+    }
+
+    transfer(id: object.UID) {
+        label l0:
+        abort 0;
+    }
+
+    foo(f: Self.Foo, v: &mut vector<object.UID>) {
+        let id: object.UID;
+        label l0:
+        Foo { id } = move(f);
+        Self.transfer(move(id));
         return;
     }
 

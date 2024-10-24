@@ -1,22 +1,24 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use config::{Authority, Committee, Epoch, WorkerIndex, WorkerInfo};
+use clap::Parser;
+use config::{CommitteeBuilder, Epoch, WorkerIndex, WorkerInfo};
 use crypto::{KeyPair, NetworkKeyPair};
 use fastcrypto::{
     hash::Hash,
     traits::{KeyPair as _, Signer},
 };
-use multiaddr::Multiaddr;
+use mysten_network::Multiaddr;
 use rand::{prelude::StdRng, SeedableRng};
 use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
 use std::{fs::File, io::Write};
-use structopt::{clap::arg_enum, StructOpt};
+use test_utils::latest_protocol_version;
 use types::{
-    Batch, BatchDigest, Certificate, CertificateDigest, HeaderBuilder, HeaderDigest, Metadata,
-    ReconfigureNotification, WorkerOthersBatchMessage, WorkerOurBatchMessage,
-    WorkerReconfigureMessage, WorkerSynchronizeMessage,
+    Batch, BatchDigest, Certificate, CertificateDigest, Header, HeaderDigest, HeaderV1Builder,
+    MetadataV1, VersionedMetadata, WorkerOthersBatchMessage, WorkerOwnBatchMessage,
+    WorkerSynchronizeMessage,
 };
 
+#[allow(clippy::mutable_key_type)]
 fn get_registry() -> Result<Registry> {
     let mut tracer = Tracer::new(TracerConfig::default());
     let mut samples = Samples::new();
@@ -42,53 +44,57 @@ fn get_registry() -> Result<Registry> {
     tracer.trace_value(&mut samples, &pk)?;
 
     let msg = b"Hello world!";
-    let signature = kp.try_sign(msg).unwrap();
+    let signature = kp.sign(msg);
     tracer.trace_value(&mut samples, &signature)?;
 
-    let committee = Committee {
-        epoch: Epoch::default(),
-        authorities: keys
-            .iter()
-            .zip(network_keys.iter())
-            .enumerate()
-            .map(|(i, (kp, network_key))| {
-                let id = kp.public();
-                let primary_address: Multiaddr = format!("/ip4/127.0.0.1/tcp/{}/http", 100 + i)
-                    .parse()
-                    .unwrap();
-                (
-                    id.clone(),
-                    Authority {
-                        stake: 1,
-                        primary_address,
-                        network_key: network_key.public().clone(),
-                    },
-                )
-            })
-            .collect(),
-    };
+    let mut committee_builder = CommitteeBuilder::new(Epoch::default());
+    for (i, (kp, network_key)) in keys.iter().zip(network_keys.iter()).enumerate() {
+        let primary_address: Multiaddr = format!("/ip4/127.0.0.1/udp/{}", 100 + i).parse().unwrap();
 
-    let certificates: Vec<Certificate> = Certificate::genesis(&committee);
+        committee_builder = committee_builder.add_authority(
+            kp.public().clone(),
+            1,
+            primary_address,
+            network_key.public().clone(),
+            i.to_string(),
+        );
+    }
+
+    let committee = committee_builder.build();
+    tracer.trace_value(&mut samples, &committee)?;
+
+    let certificates: Vec<Certificate> =
+        Certificate::genesis(&latest_protocol_version(), &committee);
+
+    // Find the author id inside the committee
+    let authority = committee.authority_by_key(kp.public()).unwrap();
 
     // The values have to be "complete" in a data-centric sense, but not "correct" cryptographically.
-    let header_builder = HeaderBuilder::default();
+    let header_builder = HeaderV1Builder::default();
     let header = header_builder
-        .author(kp.public().clone())
+        .author(authority.id())
         .epoch(0)
+        .created_at(0)
         .round(1)
-        .payload((0..4u32).map(|wid| (BatchDigest([0u8; 32]), wid)).collect())
+        .payload(
+            (0..4u32)
+                .map(|wid| (BatchDigest([0u8; 32]), (wid, 0u64)))
+                .collect(),
+        )
         .parents(certificates.iter().map(|x| x.digest()).collect())
-        .build(&kp)
+        .build()
         .unwrap();
+    tracer.trace_value(&mut samples, &header)?;
 
     let worker_pk = network_keys[0].public().clone();
-    let certificate = Certificate::new_unsigned(&committee, header.clone(), vec![]).unwrap();
-    let signature = keys[0].sign(certificate.digest().as_ref());
-    let certificate =
-        Certificate::new_unsigned(&committee, header.clone(), vec![(pk.clone(), signature)])
-            .unwrap();
-
-    tracer.trace_value(&mut samples, &header)?;
+    let signature = keys[0].sign(header.digest().as_ref());
+    let certificate = Certificate::new_unsigned(
+        &latest_protocol_version(),
+        &committee,
+        Header::V1(header.clone()),
+        vec![(authority.id(), signature)],
+    )
+    .unwrap();
     tracer.trace_value(&mut samples, &certificate)?;
 
     // WorkerIndex & WorkerInfo will be present in a protocol message once dynamic
@@ -98,7 +104,7 @@ fn get_registry() -> Result<Registry> {
             0,
             WorkerInfo {
                 name: worker_pk,
-                worker_address: "/ip4/127.0.0.1/tcp/500/http".to_string().parse().unwrap(),
+                worker_address: "/ip4/127.0.0.1/udp/500".to_string().parse().unwrap(),
                 transactions: "/ip4/127.0.0.1/tcp/400/http".to_string().parse().unwrap(),
             },
         )]
@@ -107,10 +113,13 @@ fn get_registry() -> Result<Registry> {
     );
     tracer.trace_value(&mut samples, &worker_index)?;
 
-    let our_batch = WorkerOurBatchMessage {
+    let own_batch = WorkerOwnBatchMessage {
         digest: BatchDigest([0u8; 32]),
         worker_id: 0,
-        metadata: Metadata { created_at: 0 },
+        metadata: VersionedMetadata::V1(MetadataV1 {
+            created_at: 0,
+            received_at: None,
+        }),
     };
     let others_batch = WorkerOthersBatchMessage {
         digest: BatchDigest([0u8; 32]),
@@ -118,23 +127,13 @@ fn get_registry() -> Result<Registry> {
     };
     let sync = WorkerSynchronizeMessage {
         digests: vec![BatchDigest([0u8; 32])],
-        target: pk,
+        target: authority.id(),
+        is_certified: true,
     };
-    let epoch_change = WorkerReconfigureMessage {
-        message: ReconfigureNotification::NewEpoch(committee.clone()),
-    };
-    let update_committee = WorkerReconfigureMessage {
-        message: ReconfigureNotification::NewEpoch(committee),
-    };
-    let shutdown = WorkerReconfigureMessage {
-        message: ReconfigureNotification::Shutdown,
-    };
-    tracer.trace_value(&mut samples, &our_batch)?;
+
+    tracer.trace_value(&mut samples, &own_batch)?;
     tracer.trace_value(&mut samples, &others_batch)?;
     tracer.trace_value(&mut samples, &sync)?;
-    tracer.trace_value(&mut samples, &epoch_change)?;
-    tracer.trace_value(&mut samples, &update_committee)?;
-    tracer.trace_value(&mut samples, &shutdown)?;
 
     // 2. Trace the main entry point(s) + every enum separately.
     tracer.trace_type::<Batch>(&samples)?;
@@ -145,29 +144,27 @@ fn get_registry() -> Result<Registry> {
     tracer.registry()
 }
 
-arg_enum! {
-#[derive(Debug, StructOpt, Clone, Copy)]
+#[derive(Debug, clap::ValueEnum, Clone, Copy)]
 enum Action {
     Print,
     Test,
     Record,
 }
-}
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "Narwhal format generator",
     about = "Trace serde (de)serialization to generate format descriptions for Narwhal types"
 )]
 struct Options {
-    #[structopt(possible_values = &Action::variants(), default_value = "Print", case_insensitive = true)]
+    #[arg(value_enum, default_value = "Print", ignore_case = true)]
     action: Action,
 }
 
 const FILE_PATH: &str = "node/tests/staged/narwhal.yaml";
 
 fn main() {
-    let options = Options::from_args();
+    let options = Options::parse();
     let registry = get_registry().unwrap();
     match options.action {
         Action::Print => {

@@ -4,48 +4,57 @@ expression: common_costs_actual
 ---
 {
   "MergeCoin": {
-    "computation_cost": 696,
-    "storage_cost": 32,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "1976000",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   },
   "Publish": {
-    "computation_cost": 752,
-    "storage_cost": 83,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "13505200",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   },
   "SharedCounterAssertValue": {
-    "computation_cost": 198,
-    "storage_cost": 31,
-    "storage_rebate": 15
+    "computationCost": "1000000",
+    "storageCost": "2591600",
+    "storageRebate": "1587564",
+    "nonRefundableStorageFee": "16036"
   },
   "SharedCounterCreate": {
-    "computation_cost": 109,
-    "storage_cost": 31,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "2591600",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   },
   "SharedCounterIncrement": {
-    "computation_cost": 198,
-    "storage_cost": 31,
-    "storage_rebate": 15
+    "computationCost": "1000000",
+    "storageCost": "2591600",
+    "storageRebate": "1587564",
+    "nonRefundableStorageFee": "16036"
   },
   "SplitCoin": {
-    "computation_cost": 822,
-    "storage_cost": 80,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "4940000",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   },
   "TransferPortionSuiCoin": {
-    "computation_cost": 45,
-    "storage_cost": 48,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "1976000",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   },
   "TransferWholeCoin": {
-    "computation_cost": 41,
-    "storage_cost": 32,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "1976000",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   },
   "TransferWholeSuiCoin": {
-    "computation_cost": 39,
-    "storage_cost": 32,
-    "storage_rebate": 0
+    "computationCost": "1000000",
+    "storageCost": "988000",
+    "storageRebate": "0",
+    "nonRefundableStorageFee": "0"
   }
 }

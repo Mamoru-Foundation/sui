@@ -2,51 +2,51 @@
 // SPDX-License-Identifier: Apache-2.0
 
 type FileExtensionType = {
-    [key: string]: {
-        name: string;
-        type: string;
-    };
+	[key: string]: {
+		name: string;
+		type: string;
+	};
 };
 
 // Soft file type detection.
 // Returns the file type of the given file name.
 // Temporary solution until we have a better way to detect file types.
-// extentionType: FileExtentionType
+// extentionType: FileExtensionType
 //    type?: 'image' | 'audio' | 'video';
 const FILE_EXTENSION_TYPE_MAP: FileExtensionType = {
-    jpeg: {
-        name: 'JPEG',
-        type: 'image',
-    },
-    jpg: {
-        name: 'JPEG',
-        type: 'image',
-    },
-    png: {
-        name: 'PNG',
-        type: 'image',
-    },
-    gif: {
-        name: 'GIF',
-        type: 'image',
-    },
-    bmp: {
-        name: 'BMP',
-        type: 'image',
-    },
-    webp: {
-        name: 'WEBP',
-        type: 'image',
-    },
-    svg: {
-        name: 'SVG',
-        type: 'image',
-    },
+	jpeg: {
+		name: 'JPEG',
+		type: 'image',
+	},
+	jpg: {
+		name: 'JPEG',
+		type: 'image',
+	},
+	png: {
+		name: 'PNG',
+		type: 'image',
+	},
+	gif: {
+		name: 'GIF',
+		type: 'image',
+	},
+	bmp: {
+		name: 'BMP',
+		type: 'image',
+	},
+	webp: {
+		name: 'WEBP',
+		type: 'image',
+	},
+	svg: {
+		name: 'SVG',
+		type: 'image',
+	},
 };
 
 /*
 // TODO: extend this list with more file types.
-const FILE_EXTENSION_TYPE_MAP_HEADERS: FileExtentionType = {
+const FILE_EXTENSION_TYPE_MAP_HEADERS: FileExtensionType = {
     'image/jpeg': {
         name: 'JPEG',
         type: 'image',
@@ -98,7 +98,7 @@ export const extractFileType = async (imgUrl: string) => {
 };
  */
 export default function useFileExtensionType(url: string) {
-    if (!url) return { name: '', type: '' };
-    const fileType = url.split('.').pop() || '';
-    return FILE_EXTENSION_TYPE_MAP[fileType] || { name: '', type: '' };
+	if (!url) return { name: '', type: '' };
+	const fileType = url.split('.').pop() || '';
+	return FILE_EXTENSION_TYPE_MAP[fileType] || { name: '', type: '' };
 }

@@ -1,155 +1,155 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import cl from 'classnames';
-import { memo, useState, useCallback } from 'react';
+import { ImageIcon } from '_app/shared/image-icon';
+import ExternalLink from '_components/external-link';
+import { ampli } from '_src/shared/analytics/ampli';
+import { getDAppUrl } from '_src/shared/utils';
+import { Text } from '_src/ui/app/shared/text';
+import { useState } from 'react';
 
 import DisconnectApp from './DisconnectApp';
-import ExternalLink from '_components/external-link';
-import { useMiddleEllipsis } from '_hooks';
-import { trackEvent } from '_src/shared/plausible';
 
-import st from './SuiApp.module.scss';
+export type DAppEntry = {
+	name: string;
+	description: string;
+	link: string;
+	icon: string;
+	tags: string[];
+};
+export type DisplayType = 'full' | 'card';
 
-type Displaytype = {
-    displaytype: 'full' | 'card';
+type CardViewProp = {
+	name: string;
+	link: string;
+	icon?: string;
 };
 
-type SuiAppProps = {
-    name?: string;
-    description?: string;
-    icon?: string;
-    displaytype: 'full' | 'card';
-    tags?: string[];
-    link: string;
-    account?: string;
-    id?: string;
-    pageLink?: string;
-    permissions: string[];
-    disconnect?: boolean;
-};
+function CardView({ name, link, icon }: CardViewProp) {
+	const appUrl = getDAppUrl(link);
+	const originLabel = appUrl.hostname;
+	return (
+		<div className="bg-white flex flex-col p-3.75 box-border w-full rounded-2xl border border-gray-45 border-solid h-32 hover:bg-sui/10 hover:border-sui/30">
+			<div className="flex mb-1">
+				<ImageIcon src={icon || null} label={name} fallback={name} size="lg" rounded="lg" />
+			</div>
 
-const TRUNCATE_MAX_LENGTH = 18;
-
-function SuiAppEmpty({ displaytype }: Displaytype) {
-    return (
-        <div className={cl(st.suiApp, st.suiAppEmpty, st[displaytype])}>
-            <div className={st.icon}></div>
-            <div className={st.info}>
-                <div className={st.boxOne}></div>
-                {displaytype === 'full' && (
-                    <>
-                        <div className={st.boxTwo}></div>
-                        <div className={st.boxThree}></div>
-                    </>
-                )}
-            </div>
-        </div>
-    );
+			<div className="flex flex-col gap-1 justify-start item-start">
+				<div className="line-clamp-2 break-all">
+					<Text variant="body" weight="semibold" color="gray-90">
+						{name}
+					</Text>
+				</div>
+				<Text variant="bodySmall" weight="medium" color="steel" truncate>
+					{originLabel}
+				</Text>
+			</div>
+		</div>
+	);
 }
 
-function SuiApp({
-    name,
-    description,
-    icon,
-    displaytype,
-    link,
-    tags,
-    id,
-    account,
-    pageLink,
-    permissions,
-    disconnect,
+type ListViewProp = {
+	name: string;
+	icon?: string;
+	description: string;
+	tags?: string[];
+};
+
+function ListView({ name, icon, description, tags }: ListViewProp) {
+	return (
+		<div className="bg-white flex py-3.5 px-1.25 gap-3 item-center box-border rounded hover:bg-sui/10">
+			<ImageIcon src={icon || null} label={name} fallback={name} size="xxl" rounded="lg" />
+			<div className="flex flex-col gap-1 justify-center">
+				<Text variant="body" weight="semibold" color="sui-dark">
+					{name}
+				</Text>
+				<Text variant="pSubtitle" weight="normal" color="steel-darker">
+					{description}
+				</Text>
+				{tags?.length && (
+					<div className="flex flex-wrap gap-1 mt-0.5">
+						{tags?.map((tag) => (
+							<div
+								className="flex item-center justify-center px-1.5 py-0.5 border border-solid border-steel rounded"
+								key={tag}
+							>
+								<Text variant="captionSmall" weight="medium" color="steel-dark">
+									{tag}
+								</Text>
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+export interface SuiAppProps {
+	name: string;
+	description: string;
+	link: string;
+	icon: string;
+	tags: string[];
+	permissionID?: string;
+	displayType: DisplayType;
+	openAppSite?: boolean;
+}
+
+export function SuiApp({
+	name,
+	description,
+	link,
+	icon,
+	tags,
+	permissionID,
+	displayType,
+	openAppSite,
 }: SuiAppProps) {
-    const [showDisconnectApp, setShowDisconnectApp] = useState(false);
-    const appData = {
-        name: name || 'Unknown App',
-        icon,
-        link,
-        id,
-        permissions,
-        pageLink,
-    };
+	const [showDisconnectApp, setShowDisconnectApp] = useState(false);
+	const appUrl = getDAppUrl(link);
 
-    const originLabel = useMiddleEllipsis(
-        new URL(link).hostname,
-        TRUNCATE_MAX_LENGTH,
-        TRUNCATE_MAX_LENGTH - 1
-    );
+	if (permissionID && showDisconnectApp) {
+		return (
+			<DisconnectApp
+				name={name}
+				link={link}
+				icon={icon}
+				permissionID={permissionID}
+				setShowDisconnectApp={setShowDisconnectApp}
+			/>
+		);
+	}
 
-    const AppDetails = (
-        <div className={cl(st.suiApp, st[displaytype])}>
-            <div className={st.icon}>
-                {icon ? (
-                    <img src={icon} className={st.icon} alt={name} />
-                ) : (
-                    <div className={st.defaultImg}></div>
-                )}
-            </div>
-            <div className={st.info}>
-                <div className={st.title}>{name} </div>
-                {displaytype === 'full' && (
-                    <div className={st.description}>{description}</div>
-                )}
+	const AppDetails =
+		displayType === 'full' ? (
+			<ListView name={name} description={description} icon={icon} tags={tags} />
+		) : (
+			<CardView name={name} link={link} icon={icon} />
+		);
 
-                {displaytype === 'card' && (
-                    <div className={st.link}>{originLabel}</div>
-                )}
+	if (permissionID && !openAppSite) {
+		return (
+			<div
+				className="bg-transparent cursor-pointer text-left w-full"
+				onClick={() => setShowDisconnectApp(true)}
+				role="button"
+			>
+				{AppDetails}
+			</div>
+		);
+	}
 
-                {displaytype === 'full' && tags?.length && (
-                    <div className={st.tags}>
-                        {tags?.map((tag) => (
-                            <div className={st.tag} key={tag}>
-                                {tag}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
-    const openApp = useCallback(
-        (e: React.MouseEvent<HTMLElement>) => {
-            setShowDisconnectApp(true);
-        },
-        [setShowDisconnectApp]
-    );
-
-    const onClickAppLink = useCallback(() => {
-        trackEvent('AppOpen', {
-            props: { name: name || link, source: 'AppPage' },
-        });
-    }, [name, link]);
-
-    return (
-        <>
-            {showDisconnectApp && (
-                <DisconnectApp
-                    {...appData}
-                    setShowDisconnectApp={setShowDisconnectApp}
-                />
-            )}
-            {disconnect ? (
-                <>
-                    <div className={st.ecosystemApp} onClick={openApp}>
-                        {AppDetails}
-                    </div>
-                </>
-            ) : (
-                <ExternalLink
-                    href={pageLink || link}
-                    title={name}
-                    className={st.ecosystemApp}
-                    showIcon={false}
-                    onClick={onClickAppLink}
-                >
-                    {AppDetails}
-                </ExternalLink>
-            )}
-        </>
-    );
+	return (
+		<ExternalLink
+			href={appUrl?.toString() ?? link}
+			title={name}
+			className="no-underline"
+			onClick={() => {
+				ampli.openedApplication({ applicationName: name });
+			}}
+		>
+			{AppDetails}
+		</ExternalLink>
+	);
 }
-
-export default memo(SuiApp);
-export { SuiAppEmpty };

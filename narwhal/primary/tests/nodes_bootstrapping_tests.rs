@@ -1,20 +1,20 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
+use bytes::Bytes;
 use std::time::Duration;
 use test_utils::cluster::{setup_tracing, Cluster};
-
-use types::{PublicKeyProto, RoundsRequest};
+use types::TransactionProto;
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
-async fn test_shutdown_bug() {
+async fn test_response_error_after_shutdown_internal_consensus() {
     // Enabled debug tracing so we can easily observe the
     // nodes logs.
     let _guard = setup_tracing();
 
     let delay = Duration::from_secs(10); // 10 seconds
 
-    // A cluster of 4 nodes will be created
-    let cluster = Cluster::new(None, false);
+    // A cluster of 4 nodes will be created, with internal consensus.
+    let cluster = Cluster::new(None);
 
     // ==== Start first authority ====
     let authority = cluster.authority(0);
@@ -26,18 +26,21 @@ async fn test_shutdown_bug() {
 
     tokio::time::sleep(delay).await;
 
-    let mut client = authority.new_proposer_client().await;
+    let worker_id = 0;
+    let mut client = authority.new_transactions_client(&worker_id).await;
 
-    // send a sample rounds request
-    let request = tonic::Request::new(RoundsRequest {
-        public_key: Some(PublicKeyProto::from(authority.name.clone())),
-    });
-    let response = client.rounds(request).await;
+    // Create a fake transaction
+    let tx_str = "test transaction".to_string();
+    let tx = bcs::to_bytes(&tx_str).unwrap();
+    let txn = TransactionProto {
+        transactions: vec![Bytes::from(tx)],
+    };
 
-    // Should get back an error response - however this test will fail
-    // as we keep getting an OK response back , which shouldn't happen , as we
-    // stopped the node.
-    assert!(response.is_err());
+    // Should fail submitting to consensus.
+    let Err(e) = client.submit_transaction(txn).await else {
+        panic!("Submitting transactions after Narwhal shutdown should fail!");
+    };
+    assert!(e.message().contains("tcp connect error:"), "Actual: {}", e);
 }
 
 /// Nodes will be started in a staggered fashion. This is simulating
@@ -50,10 +53,10 @@ async fn test_node_staggered_starts() {
     // nodes logs.
     let _guard = setup_tracing();
 
-    let node_staggered_delay = Duration::from_secs(60 * 5); // 5 minutes
+    let node_staggered_delay = Duration::from_secs(60 * 2); // 2 minutes
 
     // A cluster of 4 nodes will be created
-    let cluster = Cluster::new(None, true);
+    let cluster = Cluster::new(None);
 
     // ==== Start first authority ====
     cluster.authority(0).start(false, Some(1)).await;
@@ -92,6 +95,56 @@ async fn test_node_staggered_starts() {
     cluster.assert_progress(4, 2).await;
 }
 
+/// All the nodes have an outage at the same time, when they recover, the rounds begin to advance.
+#[ignore]
+#[tokio::test]
+async fn test_full_outage_and_recovery() {
+    let _guard = setup_tracing();
+
+    let stop_and_start_delay = Duration::from_secs(12);
+    let node_advance_delay = Duration::from_secs(60);
+
+    // A cluster of 4 nodes will be created
+    let mut cluster = Cluster::new(None);
+
+    // ===== Start the cluster ====
+    cluster.start(Some(4), Some(1), None).await;
+
+    // Let the nodes advance a bit
+    tokio::time::sleep(node_advance_delay).await;
+
+    // Stop all the nodes
+    cluster.authority(0).stop_all().await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    cluster.authority(1).stop_all().await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    cluster.authority(2).stop_all().await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    cluster.authority(3).stop_all().await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    // Start all the nodes
+    cluster.authority(0).start(true, Some(1)).await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    cluster.authority(1).start(true, Some(1)).await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    cluster.authority(2).start(true, Some(1)).await;
+    tokio::time::sleep(stop_and_start_delay).await;
+
+    cluster.authority(3).start(true, Some(1)).await;
+
+    // now wait a bit to give the opportunity to recover
+    tokio::time::sleep(node_advance_delay).await;
+
+    // Ensure that nodes have made progress
+    cluster.assert_progress(4, 2).await;
+}
+
 #[ignore]
 #[tokio::test]
 async fn test_second_node_restart() {
@@ -103,7 +156,7 @@ async fn test_second_node_restart() {
     let node_advance_delay = Duration::from_secs(60);
 
     // A cluster of 4 nodes will be created
-    let mut cluster = Cluster::new(None, true);
+    let mut cluster = Cluster::new(None);
 
     // ===== Start the cluster ====
     cluster.start(Some(4), Some(1), None).await;
@@ -145,7 +198,7 @@ async fn test_loss_of_liveness_without_recovery() {
     let node_advance_delay = Duration::from_secs(60);
 
     // A cluster of 4 nodes will be created
-    let mut cluster = Cluster::new(None, true);
+    let mut cluster = Cluster::new(None);
 
     // ===== Start the cluster ====
     cluster.start(Some(4), Some(1), None).await;
@@ -175,14 +228,14 @@ async fn test_loss_of_liveness_without_recovery() {
     cluster.authority(2).start(true, Some(1)).await;
     cluster.authority(3).start(true, Some(1)).await;
 
-    // wait and fetch the latest commit round
+    // wait and fetch the latest commit round. All of them should have advanced and we allow a small
+    // threshold in case some node is faster than the others
     tokio::time::sleep(node_advance_delay).await;
-    let rounds_3 = cluster.assert_progress(4, 0).await;
+    let rounds_3 = cluster.assert_progress(4, 2).await;
 
+    // we test that nodes 0 & 1 have actually advanced in rounds compared to before.
     assert!(rounds_3.get(&0) > rounds_2.get(&0));
     assert!(rounds_3.get(&1) > rounds_2.get(&1));
-    assert_eq!(rounds_3.get(&0), rounds_3.get(&2));
-    assert_eq!(rounds_3.get(&0), rounds_3.get(&3));
 }
 
 #[ignore]
@@ -199,7 +252,7 @@ async fn test_loss_of_liveness_with_recovery() {
     let node_advance_delay = Duration::from_secs(60);
 
     // A cluster of 4 nodes will be created
-    let mut cluster = Cluster::new(None, true);
+    let mut cluster = Cluster::new(None);
 
     // ===== Start the cluster ====
     cluster.start(Some(4), Some(1), None).await;
@@ -236,9 +289,9 @@ async fn test_loss_of_liveness_with_recovery() {
 
     // wait and fetch the latest commit round
     tokio::time::sleep(node_advance_delay).await;
-    let rounds_3 = cluster.assert_progress(4, 0).await;
+    let rounds_3 = cluster.assert_progress(4, 2).await;
 
-    let round_2_max = rounds_2.values().into_iter().max().unwrap();
+    let round_2_max = rounds_2.values().max().unwrap();
     assert!(
         rounds_3.values().all(|v| v > round_2_max),
         "All the nodes should have advanced more from the previous round"
