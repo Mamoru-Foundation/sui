@@ -18,7 +18,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 64;
+const MAX_PROTOCOL_VERSION: u64 = 65;
 
 // Record history of protocol version allocations here:
 //
@@ -185,6 +185,7 @@ const MAX_PROTOCOL_VERSION: u64 = 64;
 //             Add feature flag for Mysticeti fastpath.
 // Version 62: Makes the event's sending module package upgrade-aware.
 // Version 63: Enable gas based congestion control in consensus commit.
+// Version 64: Switch to distributed vote scoring in consensus in mainnet
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -1546,10 +1547,6 @@ impl ProtocolConfig {
         self.feature_flags.consensus_network
     }
 
-    pub fn mysticeti_leader_scoring_and_schedule(&self) -> bool {
-        self.feature_flags.mysticeti_leader_scoring_and_schedule
-    }
-
     pub fn reshare_at_same_initial_version(&self) -> bool {
         self.feature_flags.reshare_at_same_initial_version
     }
@@ -2842,6 +2839,11 @@ impl ProtocolConfig {
                     cfg.max_accumulated_txn_cost_per_object_in_narwhal_commit = Some(40);
                     cfg.max_accumulated_txn_cost_per_object_in_mysticeti_commit = Some(3);
                 }
+                65 => {
+                    // Enable distributed vote scoring for mainnet
+                    cfg.feature_flags
+                        .consensus_distributed_vote_scoring_strategy = true;
+                }
                 // Use this template when making changes:
                 //
                 //     // modify an existing constant.
@@ -2978,12 +2980,9 @@ impl ProtocolConfig {
     pub fn set_zklogin_max_epoch_upper_bound_delta_for_testing(&mut self, val: Option<u64>) {
         self.feature_flags.zklogin_max_epoch_upper_bound_delta = val
     }
+
     pub fn set_disable_bridge_for_testing(&mut self) {
         self.feature_flags.bridge = false
-    }
-
-    pub fn set_mysticeti_leader_scoring_and_schedule_for_testing(&mut self, val: bool) {
-        self.feature_flags.mysticeti_leader_scoring_and_schedule = val;
     }
 
     pub fn set_mysticeti_num_leaders_per_round_for_testing(&mut self, val: Option<usize>) {

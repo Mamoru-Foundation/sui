@@ -313,8 +313,8 @@ impl MovePackage {
 
     /// The owner type of this object: Immutable, Shared, Parent, Address
     /// Packages are always Immutable.
-    pub(crate) async fn owner(&self, ctx: &Context<'_>) -> Option<ObjectOwner> {
-        ObjectImpl(&self.super_).owner(ctx).await
+    pub(crate) async fn owner(&self) -> Option<ObjectOwner> {
+        ObjectImpl(&self.super_).owner().await
     }
 
     /// The transaction block that published or upgraded this package.
@@ -546,6 +546,17 @@ impl MovePackage {
             .collect();
 
         Some(type_origins)
+    }
+
+    /// BCS representation of the package itself, as a MovePackage.
+    async fn package_bcs(&self) -> Result<Option<Base64>> {
+        let bcs = bcs::to_bytes(&self.native)
+            .map_err(|_| {
+                Error::Internal(format!("Failed to serialize package {}", self.native.id()))
+            })
+            .extend()?;
+
+        Ok(Some(bcs.into()))
     }
 
     /// BCS representation of the package's modules.  Modules appear as a sequence of pairs (module
@@ -823,7 +834,8 @@ impl MovePackage {
             history_object.serialized_object,
             checkpoint_viewed_at,
             history_object.object_version as u64,
-        );
+        )
+        .ok_or_else(|| Error::Internal("Not a package!".to_string()))?;
 
         Self::try_from(&object).map_err(|_| Error::Internal("Not a package!".to_string()))
     }

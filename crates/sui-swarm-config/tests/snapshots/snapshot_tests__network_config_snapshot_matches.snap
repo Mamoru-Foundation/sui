@@ -15,6 +15,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:
@@ -185,6 +187,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:
@@ -355,6 +359,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:
@@ -525,6 +531,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:
@@ -695,6 +703,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:
@@ -865,6 +875,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:
@@ -1035,6 +1047,8 @@ validator_configs:
     network-address: ""
     json-rpc-address: "0.0.0.0:1"
     enable-experimental-rest-api: true
+    rest:
+      enable-unstable-apis: true
     metrics-address: "0.0.0.0:1"
     admin-interface-port: 8888
     consensus-config:

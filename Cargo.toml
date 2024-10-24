@@ -203,7 +203,7 @@ members = [
 
 [workspace.package]
 # This version string will be inherited by sui-core, sui-faucet, sui-node, sui-tools, sui-sdk, sui-move-build, and sui crates.
-version = "1.35.2"
+version = "1.36.1"
 
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
@@ -265,6 +265,7 @@ aws-sdk-s3 = "0.29.0"
 aws-smithy-http = "0.56"
 aws-smithy-runtime-api = "0.56"
 axum = { version = "0.7", default-features = false, features = [
+    "macros",
     "tokio",
     "http1",
     "http2",
@@ -583,9 +584,6 @@ fastcrypto-vdf = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050
 mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3b000e652fb017b5518dc9a67320ef70d4c5c6dd" }
 mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3b000e652fb017b5518dc9a67320ef70d4c5c6dd"}
 
-#mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
-#mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
-
 passkey-types = { version = "0.2.0" }
 passkey-client = { version = "0.2.0" }
 passkey-authenticator = { version = "0.2.0" }
@@ -599,11 +597,8 @@ anemo-cli = { git = "https://github.com/mystenlabs/anemo.git", rev = "e609f7697e
 anemo-tower = { git = "https://github.com/mystenlabs/anemo.git", rev = "e609f7697ed6169bf0760882a0b6c032a57e4f3b" }
 
 # core-types with json format for REST api
-sui-sdk2 = { package = "sui-sdk", git = "https://github.com/mystenlabs/sui-rust-sdk.git", rev = "bd233b6879b917fb95e17f21927c198e7a60c924", features = [
-    "hash",
-    "serde",
-    "schemars",
-] }
+# sui-sdk-types = { version = "0.0.1", features = ["hash", "serde", "schemars"] }
+sui-sdk-types = { git = "https://github.com/MystenLabs/sui-rust-sdk.git", rev = "31bd9da32a8057edc45da8f5e6a8f25b83919b93", features = ["hash", "serde", "schemars"] }
 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }
