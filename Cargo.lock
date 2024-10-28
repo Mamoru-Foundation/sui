@@ -262,9 +262,9 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
-version = "0.6.15"
+version = "0.6.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64e15c1ab1f89faffbf04a634d5e1962e9074f2741eef6d97f3c4e322426d526"
+checksum = "23a1e53f0f5d86382dafe1cf314783b2044280f406e7e1506368220ad11b1338"
 dependencies = [
  "anstyle",
  "anstyle-parse",
@@ -277,36 +277,36 @@ dependencies = [
 
 [[package]]
 name = "anstyle"
-version = "1.0.8"
+version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bec1de6f59aedf83baf9ff929c98f2ad654b97c9510f4e70cf6f661d49fd5b1"
+checksum = "8365de52b16c035ff4fcafe0092ba9390540e3e352870ac09933bebcaa2c8c56"
 
 [[package]]
 name = "anstyle-parse"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb47de1e80c2b463c735db5b217a0ddc39d612e7ac9e2e96a5aed1f57616c1cb"
+checksum = "3b2d16507662817a6a20a9ea92df6652ee4f94f914589377d69f3b21bc5798a9"
 dependencies = [
  "utf8parse",
 ]
 
 [[package]]
 name = "anstyle-query"
-version = "1.1.1"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d36fc52c7f6c869915e99412912f22093507da8d9e942ceaf66fe4b7c14422a"
+checksum = "79947af37f4177cfead1110013d678905c37501914fba0efea834c3fe9a8d60c"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "anstyle-wincon"
-version = "3.0.4"
+version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bf74e1b6e971609db8ca7a9ce79fd5768ab6ae46441c572e46cf596f59e57f8"
+checksum = "2109dbce0e72be3ec00bed26e6a7479ca384ad226efdd66db8fa2e3a38c83125"
 dependencies = [
  "anstyle",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2232,9 +2232,9 @@ dependencies = [
 
 [[package]]
 name = "bigdecimal"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d712318a27c7150326677b321a5fa91b55f6d9034ffd67f20319e147d40cee"
+checksum = "8f850665a0385e070b64c38d2354e6c104c8479c59868d1e48a0c13ee2c7a1c1"
 dependencies = [
  "autocfg",
  "libm",
@@ -2251,7 +2251,7 @@ checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
 
 [[package]]
 name = "bin-version"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "const-str",
  "git-version",
@@ -3216,9 +3216,9 @@ dependencies = [
 
 [[package]]
 name = "colorchoice"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3fd119d74b830634cea2a0f58bbd0d54540518a14397557951e79340abc28c0"
+checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
 name = "colored"
@@ -7268,9 +7268,9 @@ dependencies = [
 
 [[package]]
 name = "insta"
-version = "1.40.0"
+version = "1.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6593a41c7a73841868772495db7dc1e8ecab43bb5c0b6da2059246c4b506ab60"
+checksum = "a1f72d3e19488cf7d8ea52d2fc0f8754fc933398b337cd3cbdb28aaeb35159ef"
 dependencies = [
  "console",
  "lazy_static",
@@ -7872,9 +7872,9 @@ dependencies = [
 
 [[package]]
 name = "libm"
-version = "0.2.8"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
+checksum = "a00419de735aac21d53b0de5ce2c03bd3627277cf471300f27ebc89f7d828047"
 
 [[package]]
 name = "libquickjs-sys"
@@ -11170,18 +11170,18 @@ dependencies = [
 
 [[package]]
 name = "pin-project"
-version = "1.1.6"
+version = "1.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf123a161dde1e524adf36f90bc5d8d3462824a9c43553ad07a8183161189ec"
+checksum = "be57f64e946e500c8ee36ef6331845d40a93055567ec57e8fae13efd33759b95"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "1.1.6"
+version = "1.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4502d8515ca9f32f1fb543d987f63d95a14934883db45bdb48060b6b69257f8"
+checksum = "3c0f5fad0874fc7abcd4d750e76917eaebbecaa2c20bde22e1dbeeba8beb758c"
 dependencies = [
  "proc-macro2 1.0.89",
  "quote 1.0.37",
@@ -11190,9 +11190,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.14"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bda66fc9667c18cb2758a2ac84d1167245054bcf85d5d1aaa6923f45801bdd02"
+checksum = "915a1e146535de9163f3987b8944ed8cf49a18bb0056bcebcdcece385cece4ff"
 
 [[package]]
 name = "pin-utils"
@@ -12225,9 +12225,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38200e5ee88914975b69f657f0801b6f6dccafd44fd9326302a4aaeecfacb1d8"
+checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -12896,9 +12896,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.37"
+version = "0.38.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8acb788b847c24f28525660c4d7758620a7210875711f79e7f663cc152726811"
+checksum = "aa260229e6538e52293eeb577aabd09945a09d6d9cc0fc550ed7529056c2e32a"
 dependencies = [
  "bitflags 2.6.0",
  "errno",
@@ -14244,7 +14244,7 @@ checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
 name = "sui"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anemo",
  "anyhow",
@@ -14458,7 +14458,7 @@ dependencies = [
 
 [[package]]
 name = "sui-analytics-indexer"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "arrow 52.2.0",
@@ -14510,7 +14510,7 @@ dependencies = [
 
 [[package]]
 name = "sui-analytics-indexer-derive"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "proc-macro2 1.0.89",
  "quote 1.0.37",
@@ -14519,7 +14519,7 @@ dependencies = [
 
 [[package]]
 name = "sui-archival"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -14644,7 +14644,7 @@ dependencies = [
 
 [[package]]
 name = "sui-bridge"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -14694,7 +14694,7 @@ dependencies = [
 
 [[package]]
 name = "sui-bridge-cli"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -14774,7 +14774,7 @@ dependencies = [
 
 [[package]]
 name = "sui-cluster-test"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -14967,7 +14967,7 @@ dependencies = [
 
 [[package]]
 name = "sui-data-ingestion"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -15063,7 +15063,7 @@ dependencies = [
 
 [[package]]
 name = "sui-e2e-tests"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -15181,7 +15181,7 @@ dependencies = [
 
 [[package]]
 name = "sui-faucet"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -15240,7 +15240,7 @@ dependencies = [
 
 [[package]]
 name = "sui-framework-snapshot"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "bcs",
@@ -15304,7 +15304,7 @@ dependencies = [
 
 [[package]]
 name = "sui-graphql-config"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "quote 1.0.37",
  "syn 1.0.109",
@@ -15324,7 +15324,7 @@ dependencies = [
 
 [[package]]
 name = "sui-graphql-rpc"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -15423,7 +15423,7 @@ dependencies = [
 
 [[package]]
 name = "sui-indexer"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -15697,7 +15697,7 @@ dependencies = [
 
 [[package]]
 name = "sui-light-client"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -15735,7 +15735,7 @@ dependencies = [
 
 [[package]]
 name = "sui-metric-checker"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "backoff",
@@ -15756,7 +15756,7 @@ dependencies = [
 
 [[package]]
 name = "sui-move"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -15798,7 +15798,7 @@ dependencies = [
 
 [[package]]
 name = "sui-move-build"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "datatest-stable",
@@ -15822,7 +15822,7 @@ dependencies = [
 
 [[package]]
 name = "sui-move-lsp"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "bin-version",
  "clap",
@@ -15954,7 +15954,7 @@ dependencies = [
 
 [[package]]
 name = "sui-node"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -16006,7 +16006,7 @@ dependencies = [
 
 [[package]]
 name = "sui-open-rpc"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "bcs",
@@ -16042,7 +16042,7 @@ dependencies = [
 
 [[package]]
 name = "sui-oracle"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "bcs",
@@ -16072,7 +16072,7 @@ dependencies = [
 
 [[package]]
 name = "sui-package-dump"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "bcs",
@@ -16089,7 +16089,7 @@ dependencies = [
 
 [[package]]
 name = "sui-package-management"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "move-core-types",
@@ -16290,7 +16290,7 @@ dependencies = [
 
 [[package]]
 name = "sui-rosetta"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -16335,7 +16335,7 @@ dependencies = [
 
 [[package]]
 name = "sui-rpc-loadgen"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -16364,7 +16364,7 @@ dependencies = [
 
 [[package]]
 name = "sui-sdk"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -16420,7 +16420,7 @@ dependencies = [
 
 [[package]]
 name = "sui-security-watchdog"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "arrow-array 52.2.0",
@@ -16467,7 +16467,7 @@ dependencies = [
 
 [[package]]
 name = "sui-single-node-benchmark"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "async-trait",
  "bcs",
@@ -16530,7 +16530,7 @@ dependencies = [
 
 [[package]]
 name = "sui-source-validation"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "colored",
@@ -16656,7 +16656,7 @@ dependencies = [
 
 [[package]]
 name = "sui-surfer"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "async-trait",
  "bcs",
@@ -16761,7 +16761,7 @@ dependencies = [
 
 [[package]]
 name = "sui-test-validator"
-version = "1.36.1"
+version = "1.36.2"
 
 [[package]]
 name = "sui-tls"
@@ -16787,7 +16787,7 @@ dependencies = [
 
 [[package]]
 name = "sui-tool"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anemo",
  "anemo-cli",
@@ -17069,7 +17069,7 @@ dependencies = [
 
 [[package]]
 name = "suins-indexer"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -17109,7 +17109,7 @@ dependencies = [
 
 [[package]]
 name = "suiop-cli"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "axum 0.7.7",
@@ -18650,9 +18650,9 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "typeshare"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04f17399b76c2e743d58eac0635d7686e9c00f48cd4776f00695d9882a7d3187"
+checksum = "19be0f411120091e76e13e5a0186d8e2bcc3e7e244afdb70152197f1a8486ceb"
 dependencies = [
  "chrono",
  "serde",
@@ -19123,9 +19123,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-streams"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e072d4e72f700fb3443d8fe94a39315df013eef1104903cdb0a2abd322bbecd"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
 dependencies = [
  "futures-util",
  "js-sys",
@@ -20172,7 +20172,7 @@ dependencies = [
 
 [[package]]
 name = "x"
-version = "1.36.1"
+version = "1.36.2"
 dependencies = [
  "anyhow",
  "camino",

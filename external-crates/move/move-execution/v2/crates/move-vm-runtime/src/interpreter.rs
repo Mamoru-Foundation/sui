@@ -287,10 +287,10 @@ impl Interpreter {
                             func.name(),
                             self.operand_stack
                                 .last_n(func.arg_count())
-                                .map_err(|e| set_err_info!(current_frame, e))?,
+                                .map_err(|e| set_err_info!(current_frame, e.clone()))?,
                             (func.local_count() as u64).into(),
                         )
-                        .map_err(|e| set_err_info!(current_frame, e))?;
+                        .map_err(|e| set_err_info!(current_frame, e.clone()))?;
 
                     if func.is_native() {
                         self.call_native(&resolver, gas_meter, extensions, func, vec![])?;
@@ -316,7 +316,7 @@ impl Interpreter {
                     // TODO(Gas): We should charge gas as we do type substitution...
                     let ty_args = resolver
                         .instantiate_generic_function(idx, current_frame.ty_args())
-                        .map_err(|e| set_err_info!(current_frame, e))?;
+                        .map_err(|e| set_err_info!(current_frame, e.clone()))?;
                     let func = resolver.function_from_instantiation(idx);
                     #[cfg(feature = "gas-profiler")]
                     let func_name = func.pretty_string();
@@ -331,10 +331,10 @@ impl Interpreter {
                             ty_args.iter().map(|ty| TypeWithLoader { ty, loader }),
                             self.operand_stack
                                 .last_n(func.arg_count())
-                                .map_err(|e| set_err_info!(current_frame, e))?,
+                                .map_err(|e| set_err_info!(current_frame, e.clone()))?,
                             (func.local_count() as u64).into(),
                         )
-                        .map_err(|e| set_err_info!(current_frame, e))?;
+                        .map_err(|e| set_err_info!(current_frame, e.clone()))?;
 
                     if func.is_native() {
                         self.call_native(&resolver, gas_meter, extensions, func, ty_args)?;

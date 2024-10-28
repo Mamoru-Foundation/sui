@@ -88,17 +88,6 @@ export default function Home() {
               Standards
             </Link>
           </HomeCard>
-          <HomeCard title="About Sui">
-            <Link className={styles.cardLink} to="./concepts/tokenomics">
-              Tokenomics
-            </Link>
-            <Link className={styles.cardLink} to="./concepts/cryptography">
-              Cryptography
-            </Link>
-            <Link className={styles.cardLink} to="standards">
-              Standards
-            </Link>
-          </HomeCard>
           <HomeCard title="References" aux>
             <Link
               className={styles.cardLink}
