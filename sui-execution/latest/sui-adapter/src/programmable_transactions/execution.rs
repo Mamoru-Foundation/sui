@@ -391,6 +391,8 @@ mod checked {
             context.take_user_events(runtime_id, index, last_instr)?;
         }
 
+        context.tx_context.call_traces_mut().extend(call_traces);
+
         // save the link context because calls to `make_value` below can set new ones, and we don't want
         // it to be clobbered.
         let saved_linkage = context.linkage_view.steal_linkage();
