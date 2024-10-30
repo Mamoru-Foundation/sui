@@ -581,8 +581,8 @@ fastcrypto-vdf = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050
     "experimental",
 ] }
 
-mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3b000e652fb017b5518dc9a67320ef70d4c5c6dd" }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "3b000e652fb017b5518dc9a67320ef70d4c5c6dd"}
+mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "9f4c36051a548e22145fb0df4f99ce7f8aefad5f" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "9f4c36051a548e22145fb0df4f99ce7f8aefad5f" }
 
 passkey-types = { version = "0.2.0" }
 passkey-client = { version = "0.2.0" }
