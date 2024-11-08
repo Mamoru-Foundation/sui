@@ -3,23 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    debug_display,
-    diagnostics::WarningFilters,
+    diagnostics::warning_filters::WarningFilters,
     expansion::ast::{
         Address, Attributes, Fields, Friend, ModuleIdent, Mutability, TargetKind, Value, Visibility,
     },
-    ice,
     naming::ast::{
         BlockLabel, EnumDefinition, FunctionSignature, Neighbor, StructDefinition, SyntaxMethods,
-        Type, TypeName_, Type_, UseFuns, Var,
+        Type, Type_, UseFuns, Var,
     },
     parser::ast::{
         BinOp, ConstantName, DatatypeName, Field, FunctionName, UnaryOp, VariantName,
         ENTRY_MODIFIER, MACRO_MODIFIER, NATIVE_MODIFIER,
     },
-    shared::{
-        ast_debug::*, program_info::TypingProgramInfo, unique_map::UniqueMap, CompilationEnv, Name,
-    },
+    shared::{ast_debug::*, program_info::TypingProgramInfo, unique_map::UniqueMap, Name},
 };
 use move_ir_types::location::*;
 use move_symbol_pool::Symbol;
@@ -191,7 +187,7 @@ pub enum UnannotatedExp_ {
     Builtin(Box<BuiltinFunction>, Box<Exp>),
     Vector(Loc, usize, Box<Type>, Box<Exp>),
 
-    IfElse(Box<Exp>, Box<Exp>, Box<Exp>),
+    IfElse(Box<Exp>, Box<Exp>, Option<Box<Exp>>),
     Match(Box<Exp>, Spanned<Vec<MatchArm>>),
     VariantMatch(
         Box<Exp>,
@@ -359,20 +355,6 @@ pub fn exp(ty: Type, exp: UnannotatedExp) -> Exp {
 pub fn single_item(e: Exp) -> ExpListItem {
     let ty = Box::new(e.ty.clone());
     ExpListItem::Single(e, ty)
-}
-
-pub fn splat_item(env: &mut CompilationEnv, splat_loc: Loc, e: Exp) -> ExpListItem {
-    let ss = match &e.ty {
-        sp!(_, Type_::Unit) => vec![],
-        sp!(_, Type_::Apply(_, sp!(_, TypeName_::Multiple(_)), ss)) => ss.clone(),
-        _ => {
-            let mut diag = ice!((splat_loc, "ICE called `splat_item` on a non-list type"));
-            diag.add_note(format!("Expression: {}", debug_display!(e)));
-            env.add_diag(diag);
-            vec![]
-        }
-    };
-    ExpListItem::Splat(splat_loc, e, ss)
 }
 
 pub fn pat(ty: Type, pat: UnannotatedPat) -> MatchPattern {
@@ -683,13 +665,15 @@ impl AstDebug for UnannotatedExp_ {
                 });
                 w.write("}");
             }
-            E::IfElse(b, t, f) => {
+            E::IfElse(b, t, f_opt) => {
                 w.write("if (");
                 b.ast_debug(w);
                 w.write(") ");
                 t.ast_debug(w);
-                w.write(" else ");
-                f.ast_debug(w);
+                if let Some(f) = f_opt {
+                    w.write(" else ");
+                    f.ast_debug(w);
+                }
             }
             E::Match(esubject, arms) => {
                 w.write("match (");
