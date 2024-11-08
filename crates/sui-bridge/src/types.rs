@@ -147,23 +147,6 @@ impl core::fmt::Display for BridgeCommittee {
     }
 }
 
-impl core::fmt::Display for BridgeCommittee {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
-        for m in self.members.values() {
-            writeln!(
-                f,
-                "pubkey: {:?}, url: {:?}, stake: {:?}, blocklisted: {}, eth address: {:x}",
-                Hex::encode(m.pubkey_bytes().as_bytes()),
-                m.base_url,
-                m.voting_power,
-                m.is_blocklisted,
-                m.pubkey_bytes().to_eth_address(),
-            )?;
-        }
-        Ok(())
-    }
-}
-
 impl CommitteeTrait<BridgeAuthorityPublicKeyBytes> for BridgeCommittee {
     // Note: blocklisted members are always excluded.
     fn shuffle_by_stake_with_rng(
