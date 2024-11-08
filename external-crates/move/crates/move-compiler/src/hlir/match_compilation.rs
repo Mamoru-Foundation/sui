@@ -724,7 +724,7 @@ fn make_arm_unpack(
                 let Some((queue_entries, unpack)) =
                     arm_variant_unpack(context, None, ploc, m, e, tys, v, fs, entry)
                 else {
-                    context.hlir_context.env.add_diag(ice!((
+                    context.hlir_context.add_diag(ice!((
                         ploc,
                         "Did not build an arm unpack for a value variant"
                     )));
@@ -750,7 +750,7 @@ fn make_arm_unpack(
                 let Some((queue_entries, unpack)) =
                     arm_struct_unpack(context, None, ploc, m, s, tys, fs, entry)
                 else {
-                    context.hlir_context.env.add_diag(ice!((
+                    context.hlir_context.add_diag(ice!((
                         ploc,
                         "Did not build an arm unpack for a value struct"
                     )));
@@ -1277,7 +1277,7 @@ fn make_if_else(test: T::Exp, conseq: T::Exp, alt: T::Exp, result_ty: Type) -> T
         result_ty,
         sp(
             loc,
-            T::UnannotatedExp_::IfElse(Box::new(test), Box::new(conseq), Box::new(alt)),
+            T::UnannotatedExp_::IfElse(Box::new(test), Box::new(conseq), Some(Box::new(alt))),
         ),
     )
 }

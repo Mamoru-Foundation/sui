@@ -11,6 +11,7 @@ use crate::verify_indexes::verify_indexes;
 use anyhow::anyhow;
 use arc_swap::{ArcSwap, Guard};
 use async_trait::async_trait;
+use authority_per_epoch_store::CertLockGuard;
 use chrono::prelude::*;
 use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Encoding;
@@ -54,11 +55,12 @@ use sui_types::layout_resolver::LayoutResolver;
 use sui_types::messages_consensus::{AuthorityCapabilitiesV1, AuthorityCapabilitiesV2};
 use sui_types::object::bounded_visitor::BoundedVisitor;
 use sui_types::transaction_executor::SimulateTransactionResult;
+
 use tap::{TapFallible, TapOptional};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn, Instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 use self::authority_store::ExecutionLockWriteGuard;
 use self::authority_store_pruner::AuthorityStorePruningMetrics;
@@ -67,8 +69,10 @@ use mysten_metrics::{monitored_scope, spawn_monitored_task};
 
 use mamoru_sui_sniffer::SuiSniffer;
 use move_core_types::trace::CallTrace;
+
 use crate::jsonrpc_index::IndexStore;
 use crate::jsonrpc_index::{CoinInfo, ObjectIndexChanges};
+use mysten_common::debug_fatal;
 use once_cell::sync::OnceCell;
 use shared_crypto::intent::{AppId, Intent, IntentMessage, IntentScope, IntentVersion};
 use sui_archival::reader::ArchiveReaderBalancer;
@@ -92,7 +96,7 @@ use sui_types::digests::TransactionEventsDigest;
 use sui_types::dynamic_field::{DynamicFieldInfo, DynamicFieldName};
 use sui_types::effects::{
     InputSharedObject, SignedTransactionEffects, TransactionEffects, TransactionEffectsAPI,
-    TransactionEvents, VerifiedCertifiedTransactionEffects, VerifiedSignedTransactionEffects,
+    TransactionEvents, VerifiedSignedTransactionEffects,
 };
 use sui_types::error::{ExecutionError, UserInputError};
 use sui_types::event::{Event, EventID};
@@ -126,7 +130,6 @@ use sui_types::{
     committee::Committee,
     crypto::AuthoritySignature,
     error::{SuiError, SuiResult},
-    fp_ensure,
     object::{Object, ObjectRead},
     transaction::*,
     SUI_SYSTEM_ADDRESS,
@@ -240,7 +243,6 @@ pub struct AuthorityMetrics {
     execute_certificate_latency_shared_object: Histogram,
     await_transaction_latency: Histogram,
 
-    execute_certificate_with_effects_latency: Histogram,
     internal_execution_latency: Histogram,
     execution_load_input_objects_latency: Histogram,
     prepare_certificate_latency: Histogram,
@@ -303,8 +305,6 @@ pub struct AuthorityMetrics {
 
     /// bytecode verifier metrics for tracking timeouts
     pub bytecode_verifier_metrics: Arc<BytecodeVerifierMetrics>,
-
-    pub authenticator_state_update_failed: IntCounter,
 
     /// Count of zklogin signatures
     pub zklogin_sig_count: IntCounter,
@@ -456,13 +456,6 @@ impl AuthorityMetrics {
             await_transaction_latency: register_histogram_with_registry!(
                 "await_transaction_latency",
                 "Latency of awaiting user transaction execution, including waiting for inputs",
-                LATENCY_SEC_BUCKETS.to_vec(),
-                registry,
-            )
-            .unwrap(),
-            execute_certificate_with_effects_latency: register_histogram_with_registry!(
-                "authority_state_execute_certificate_with_effects_latency",
-                "Latency of executing certificates with effects, including waiting for inputs",
                 LATENCY_SEC_BUCKETS.to_vec(),
                 registry,
             )
@@ -737,12 +730,6 @@ impl AuthorityMetrics {
             ).unwrap(),
             limits_metrics: Arc::new(LimitsMetrics::new(registry)),
             bytecode_verifier_metrics: Arc::new(BytecodeVerifierMetrics::new(registry)),
-            authenticator_state_update_failed: register_int_counter_with_registry!(
-                "authenticator_state_update_failed",
-                "Number of failed authenticator state updates",
-                registry,
-            )
-            .unwrap(),
             zklogin_sig_count: register_int_counter_with_registry!(
                 "zklogin_sig_count",
                 "Count of zkLogin signatures",
@@ -1122,81 +1109,6 @@ impl AuthorityState {
             .inc();
     }
 
-    /// Executes a transaction that's known to have correct effects.
-    /// For such transaction, we don't have to wait for consensus to set shared object
-    /// locks because we already know the shared object versions based on the effects.
-    /// This function can be called by a fullnode only.
-    // TODO: This function is no longer needed. Remove it and cleanup all the
-    // related functions.
-    #[instrument(level = "trace", skip_all)]
-    pub async fn fullnode_execute_certificate_with_effects(
-        &self,
-        transaction: &VerifiedExecutableTransaction,
-        // NOTE: the caller of this must promise to wait until it
-        // knows for sure this tx is finalized, namely, it has seen a
-        // CertifiedTransactionEffects or at least f+1 identifical effects
-        // digests matching this TransactionEffectsEnvelope, before calling
-        // this function, in order to prevent a byzantine validator from
-        // giving us incorrect effects.
-        effects: &VerifiedCertifiedTransactionEffects,
-        epoch_store: &Arc<AuthorityPerEpochStore>,
-    ) -> SuiResult {
-        assert!(self.is_fullnode(epoch_store));
-        // NOTE: the fullnode can change epoch during local execution. It should not cause
-        // data inconsistency, but can be problematic for certain tests.
-        // The check below mitigates the issue, but it is not a fundamental solution to
-        // avoid race between local execution and reconfiguration.
-        if self.epoch_store.load().epoch() != epoch_store.epoch() {
-            return Err(SuiError::EpochEnded(epoch_store.epoch()));
-        }
-        let _metrics_guard = self
-            .metrics
-            .execute_certificate_with_effects_latency
-            .start_timer();
-        let digest = *transaction.digest();
-        debug!("execute_certificate_with_effects");
-        fp_ensure!(
-            *effects.data().transaction_digest() == digest,
-            SuiError::ErrorWhileProcessingCertificate {
-                err: "effects/tx digest mismatch".to_string()
-            }
-        );
-
-        if transaction.contains_shared_object() {
-            epoch_store
-                .acquire_shared_locks_from_effects(
-                    transaction,
-                    effects.data(),
-                    self.get_object_cache_reader().as_ref(),
-                )
-                .await?;
-        }
-
-        let expected_effects_digest = effects.digest();
-
-        self.transaction_manager
-            .enqueue(vec![transaction.clone()], epoch_store);
-
-        let observed_effects = self
-            .get_transaction_cache_reader()
-            .notify_read_executed_effects(&[digest])
-            .instrument(tracing::debug_span!(
-                "notify_read_effects_in_execute_certificate_with_effects"
-            ))
-            .await?
-            .pop()
-            .expect("notify_read_effects should return exactly 1 element");
-
-        let observed_effects_digest = observed_effects.digest();
-        if &observed_effects_digest != expected_effects_digest {
-            panic!(
-                "Locally executed effects do not match canonical effects! expected_effects_digest={:?} observed_effects_digest={:?} expected_effects={:?} observed_effects={:?} input_objects={:?}",
-                expected_effects_digest, observed_effects_digest, effects.data(), observed_effects, transaction.data().transaction_data().input_objects()
-            );
-        }
-        Ok(())
-    }
-
     /// Executes a certificate for its effects.
     #[instrument(level = "trace", skip_all)]
     pub async fn execute_certificate(
@@ -1225,7 +1137,13 @@ impl AuthorityState {
             self.enqueue_certificates_for_execution(vec![certificate.clone()], epoch_store);
         }
 
-        self.notify_read_effects(*certificate.digest()).await
+        // tx could be reverted when epoch ends, so we must be careful not to return a result
+        // here after the epoch ends.
+        epoch_store
+            .within_alive_epoch(self.notify_read_effects(*certificate.digest()))
+            .await
+            .map_err(|_| SuiError::EpochEnded(epoch_store.epoch()))
+            .and_then(|r| r)
     }
 
     /// Awaits the effects of executing a user transaction.
@@ -1234,12 +1152,20 @@ impl AuthorityState {
     pub async fn await_transaction_effects(
         &self,
         digest: TransactionDigest,
+        epoch_store: &Arc<AuthorityPerEpochStore>,
     ) -> SuiResult<TransactionEffects> {
         let _metrics_guard = self.metrics.await_transaction_latency.start_timer();
         debug!("await_transaction");
 
         // TODO(fastpath): Add handling for transactions rejected by Mysticeti fast path.
-        self.notify_read_effects(digest).await
+        // TODO(fastpath): Can an MFP transaction be reverted after epoch ends? If so,
+        // same warning as above applies: We must be careful not to return a result
+        // here after the epoch ends.
+        epoch_store
+            .within_alive_epoch(self.notify_read_effects(digest))
+            .await
+            .map_err(|_| SuiError::EpochEnded(epoch_store.epoch()))
+            .and_then(|r| r)
     }
 
     /// Internal logic to execute a certificate.
@@ -1265,7 +1191,22 @@ impl AuthorityState {
         debug!("execute_certificate_internal");
 
         let tx_digest = certificate.digest();
-        let input_objects = self.read_objects_for_execution(certificate, epoch_store)?;
+
+        // prevent concurrent executions of the same tx.
+        let tx_guard = epoch_store.acquire_tx_guard(certificate).await?;
+
+        // The cert could have been processed by a concurrent attempt of the same cert, so check if
+        // the effects have already been written.
+        if let Some(effects) = self
+            .get_transaction_cache_reader()
+            .get_executed_effects(tx_digest)?
+        {
+            tx_guard.release();
+            return Ok((effects, None));
+        }
+
+        let input_objects =
+            self.read_objects_for_execution(tx_guard.as_lock_guard(), certificate, epoch_store)?;
 
         if expected_effects_digest.is_none() {
             // We could be re-executing a previously executed but uncommitted transaction, perhaps after
@@ -1274,12 +1215,6 @@ impl AuthorityState {
             // TODO: read from cache instead of DB
             expected_effects_digest = epoch_store.get_signed_effects_digest(tx_digest)?;
         }
-
-        // This acquires a lock on the tx digest to prevent multiple concurrent executions of the
-        // same tx. While we don't need this for safety (tx sequencing is ultimately atomic), it is
-        // very common to receive the same tx multiple times simultaneously due to gossip, so we
-        // may as well hold the lock and save the cpu time for other requests.
-        let tx_guard = epoch_store.acquire_tx_guard(certificate).await?;
 
         self.process_certificate(
             tx_guard,
@@ -1294,6 +1229,7 @@ impl AuthorityState {
 
     pub fn read_objects_for_execution(
         &self,
+        tx_lock: &CertLockGuard,
         certificate: &VerifiedExecutableTransaction,
         epoch_store: &Arc<AuthorityPerEpochStore>,
     ) -> SuiResult<InputObjects> {
@@ -1306,6 +1242,7 @@ impl AuthorityState {
         self.input_loader.read_objects_for_execution(
             epoch_store.as_ref(),
             &certificate.key(),
+            tx_lock,
             input_objects,
             epoch_store.epoch(),
         )
@@ -1395,15 +1332,6 @@ impl AuthorityState {
             }
         });
 
-        // The cert could have been processed by a concurrent attempt of the same cert, so check if
-        // the effects have already been written.
-        if let Some(effects) = self
-            .get_transaction_cache_reader()
-            .get_executed_effects(&digest)?
-        {
-            tx_guard.release();
-            return Ok((effects, None));
-        }
         let execution_guard = self
             .execution_lock_for_executable_transaction(certificate)
             .await;
@@ -1503,10 +1431,8 @@ impl AuthorityState {
             certificate.data().transaction_data().kind()
         {
             if let Some(err) = &execution_error_opt {
-                error!("Authenticator state update failed: {err}");
-                self.metrics.authenticator_state_update_failed.inc();
+                debug_fatal!("Authenticator state update failed: {:?}", err);
             }
-            debug_assert!(execution_error_opt.is_none());
             epoch_store.update_authenticator_state(auth_state);
 
             // double check that the signature verifier always matches the authenticator state
@@ -3224,7 +3150,16 @@ impl AuthorityState {
         );
 
         self.committee_store.insert_new_committee(&new_committee)?;
+
+        // Wait until no transactions are being executed.
         let mut execution_lock = self.execution_lock_for_reconfiguration().await;
+
+        // Terminate all epoch-specific tasks (those started with within_alive_epoch).
+        cur_epoch_store.epoch_terminated().await;
+
+        // Safe to being reconfiguration now. No transactions are being executed,
+        // and no epoch-specific tasks are running.
+
         // TODO: revert_uncommitted_epoch_transactions will soon be unnecessary -
         // clear_state_end_of_epoch() can simply drop all uncommitted transactions
         self.revert_uncommitted_epoch_transactions(cur_epoch_store)
@@ -5119,7 +5054,7 @@ impl AuthorityState {
         );
 
         fail_point_async!("change_epoch_tx_delay");
-        let _tx_lock = epoch_store.acquire_tx_lock(tx_digest).await;
+        let tx_lock = epoch_store.acquire_tx_lock(tx_digest).await;
 
         // The tx could have been executed by state sync already - if so simply return an error.
         // The checkpoint builder will shortly be terminated by reconfiguration anyway.
@@ -5147,7 +5082,8 @@ impl AuthorityState {
             )
             .await?;
 
-        let input_objects = self.read_objects_for_execution(&executable_tx, epoch_store)?;
+        let input_objects =
+            self.read_objects_for_execution(&tx_lock, &executable_tx, epoch_store)?;
 
         let (temporary_store, effects, _execution_error_opt) =
             self.prepare_certificate(&execution_guard, &executable_tx, input_objects, epoch_store)?;
@@ -5238,7 +5174,6 @@ impl AuthorityState {
             cur_epoch_store.get_chain_identifier(),
         );
         self.epoch_store.store(new_epoch_store.clone());
-        cur_epoch_store.epoch_terminated().await;
         Ok(new_epoch_store)
     }
 

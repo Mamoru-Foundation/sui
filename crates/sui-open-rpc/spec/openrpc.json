@@ -12,7 +12,7 @@
       "name": "Apache-2.0",
       "url": "https://raw.githubusercontent.com/MystenLabs/sui/main/LICENSE"
     },
-    "version": "1.36.1"
+    "version": "1.37.1"
   },
   "methods": [
     {
@@ -1293,7 +1293,7 @@
             "name": "Result",
             "value": {
               "minSupportedProtocolVersion": "1",
-              "maxSupportedProtocolVersion": "65",
+              "maxSupportedProtocolVersion": "68",
               "protocolVersion": "6",
               "featureFlags": {
                 "accept_zklogin_in_multisig": false,
@@ -1310,6 +1310,7 @@
                 "disable_invariant_violation_check_in_swap_loc": false,
                 "disallow_adding_abilities_on_upgrade": false,
                 "disallow_change_struct_type_params_on_upgrade": false,
+                "disallow_new_modules_in_deps_only_packages": false,
                 "enable_coin_deny_list": false,
                 "enable_coin_deny_list_v2": false,
                 "enable_effects_v2": false,
@@ -1353,6 +1354,7 @@
                 "soft_bundle": false,
                 "throughput_aware_consensus_submission": false,
                 "txn_base_cost_as_multiplier": false,
+                "uncompressed_g1_group_elements": false,
                 "upgraded_multisig_supported": false,
                 "validate_identifier_inputs": false,
                 "verify_legacy_zklogin_address": false,
@@ -1592,6 +1594,7 @@
                   "u64": "2"
                 },
                 "execution_version": null,
+                "gas_budget_based_txn_cost_absolute_cap_commit_count": null,
                 "gas_budget_based_txn_cost_cap_factor": null,
                 "gas_model_version": {
                   "u64": "5"
@@ -1630,6 +1633,7 @@
                 "group_ops_bls12381_g1_msm_base_cost_per_input": null,
                 "group_ops_bls12381_g1_mul_cost": null,
                 "group_ops_bls12381_g1_sub_cost": null,
+                "group_ops_bls12381_g1_to_uncompressed_g1_cost": null,
                 "group_ops_bls12381_g2_add_cost": null,
                 "group_ops_bls12381_g2_div_cost": null,
                 "group_ops_bls12381_g2_hash_to_base_cost": null,
@@ -1648,6 +1652,10 @@
                 "group_ops_bls12381_scalar_div_cost": null,
                 "group_ops_bls12381_scalar_mul_cost": null,
                 "group_ops_bls12381_scalar_sub_cost": null,
+                "group_ops_bls12381_uncompressed_g1_sum_base_cost": null,
+                "group_ops_bls12381_uncompressed_g1_sum_cost_per_term": null,
+                "group_ops_bls12381_uncompressed_g1_sum_max_terms": null,
+                "group_ops_bls12381_uncompressed_g1_to_g1_cost": null,
                 "hash_blake2b256_cost_base": {
                   "u64": "52"
                 },
@@ -1681,6 +1689,7 @@
                 "hmac_hmac_sha3_256_input_cost_per_byte": {
                   "u64": "2"
                 },
+                "max_accumulated_randomness_txn_cost_per_object_in_mysticeti_commit": null,
                 "max_accumulated_txn_cost_per_object_in_mysticeti_commit": null,
                 "max_accumulated_txn_cost_per_object_in_narwhal_commit": null,
                 "max_age_of_jwk_in_epochs": null,
@@ -1811,6 +1820,7 @@
                 "max_tx_size_bytes": {
                   "u64": "131072"
                 },
+                "max_txn_cost_overage_per_object_in_commit": null,
                 "max_type_argument_depth": {
                   "u32": "16"
                 },
@@ -10714,7 +10724,7 @@
       "TransactionFilter": {
         "oneOf": [
           {
-            "description": "Query by checkpoint.",
+            "description": "CURRENTLY NOT SUPPORTED. Query by checkpoint.",
             "type": "object",
             "required": [
               "Checkpoint"
@@ -10850,7 +10860,7 @@
             "additionalProperties": false
           },
           {
-            "description": "Query txs that have a given address as sender or recipient.",
+            "description": "CURRENTLY NOT SUPPORTED. Query txs that have a given address as sender or recipient.",
             "type": "object",
             "required": [
               "FromOrToAddress"

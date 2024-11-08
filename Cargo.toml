@@ -93,7 +93,6 @@ members = [
     "crates/sui-bridge",
     "crates/sui-bridge-cli",
     "crates/sui-bridge-indexer",
-    "crates/sui-bridge-watchdog",
     "crates/sui-cluster-test",
     "crates/sui-config",
     "crates/sui-core",
@@ -104,6 +103,9 @@ members = [
     "crates/sui-e2e-tests",
     "crates/sui-enum-compat-util",
     "crates/sui-faucet",
+    "crates/sui-field-count",
+    "crates/sui-field-count-derive",
+    "crates/sui-field-count-main",
     "crates/sui-framework",
     "crates/sui-framework-snapshot",
     "crates/sui-framework-tests",
@@ -114,6 +116,7 @@ members = [
     "crates/sui-graphql-rpc-client",
     "crates/sui-graphql-rpc-headers",
     "crates/sui-indexer",
+    "crates/sui-indexer-alt",
     "crates/sui-indexer-builder",
     "crates/sui-json",
     "crates/sui-json-rpc",
@@ -121,12 +124,14 @@ members = [
     "crates/sui-json-rpc-tests",
     "crates/sui-json-rpc-types",
     "crates/sui-keys",
+    "crates/sui-kvstore",
     "crates/sui-light-client",
     "crates/sui-macros",
     "crates/sui-metric-checker",
     "crates/sui-move",
     "crates/sui-move-build",
     "crates/sui-move-lsp",
+    "crates/sui-mvr-indexer",
     "crates/sui-network",
     "crates/sui-node",
     "crates/sui-open-rpc",
@@ -154,6 +159,7 @@ members = [
     "crates/sui-surfer",
     "crates/sui-swarm",
     "crates/sui-swarm-config",
+    "crates/sui-synthetic-ingestion",
     "crates/sui-telemetry",
     "crates/sui-test-transaction-builder",
     "crates/sui-test-validator",
@@ -203,7 +209,7 @@ members = [
 
 [workspace.package]
 # This version string will be inherited by sui-core, sui-faucet, sui-node, sui-tools, sui-sdk, sui-move-build, and sui crates.
-version = "1.36.1"
+version = "1.37.1"
 
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
@@ -256,6 +262,7 @@ async-graphql = "=7.0.1"
 async-graphql-axum = "=7.0.1"
 async-graphql-value = "=7.0.1"
 async-recursion = "1.0.4"
+async-stream = "0.3.6"
 async-trait = "0.1.61"
 atomic_float = "0.1"
 aws-config = "0.56"
@@ -301,6 +308,7 @@ camino = "1.1.1"
 cfg-if = "1.0.0"
 chrono = { version = "0.4.26", features = ["clock", "serde"] }
 clap = { version = "4.4", features = ["derive", "wrap_help"] }
+codespan-reporting = "0.11.1"
 collectable = "0.0.2"
 colored = "2.0.0"
 color-eyre = "0.6.2"
@@ -344,6 +352,7 @@ futures-core = "0.3.21"
 git-version = "0.3.5"
 glob = "0.3.1"
 governor = "0.6.0"
+gcp_auth = "0.12.3"
 hashbrown = "0.12"
 hdrhistogram = "7.5.1"
 hex = "0.4.3"
@@ -418,6 +427,7 @@ proptest = "1.1.0"
 proptest-derive = "0.3.0"
 prost = "0.13"
 prost-build = "0.13"
+prost-types = "0.13.1"
 protobuf = { version = "2.28", features = ["with-bytes"] }
 quinn-proto = "0.11.7"
 quote = "1.0.23"
@@ -496,12 +506,10 @@ tokio-stream = { version = "0.1.14", features = ["sync", "net"] }
 tokio-util = "0.7.10"
 toml = { version = "0.7.4", features = ["preserve_order"] }
 toml_edit = { version = "0.19.10" }
-# NOTE: do not enable the `tls` feature on tonic. It will break custom TLS handling
-# for self signed certificates. Unit tests under consensus/core and other integration
-# tests will fail.
 tonic = { version = "0.12", features = ["transport"] }
 tonic-build = { version = "0.12", features = ["prost", "transport"] }
 tonic-health = "0.12"
+tonic-rustls = "0.1.0"
 tower = { version = "0.4.12", features = [
     "full",
     "util",
@@ -540,6 +548,7 @@ webpki = { version = "0.102", package = "rustls-webpki", features = [
     "alloc",
     "std",
 ] }
+wiremock = "0.5"
 x509-parser = "0.14.0"
 zstd = "0.12.3"
 zeroize = "1.6.0"
@@ -579,10 +588,10 @@ mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", r
 #mamoru-sniffer = { path = "../mamoru-core/mamoru-sniffer" }
 #mamoru-sui-types = { path = "../mamoru-core/blockchain-types/mamoru-sui-types" }
 
-fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050ffc78b93739328af5d59b05f90e0e26b1b7e" }
-fastcrypto-tbls = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050ffc78b93739328af5d59b05f90e0e26b1b7e" }
-fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050ffc78b93739328af5d59b05f90e0e26b1b7e", package = "fastcrypto-zkp" }
-fastcrypto-vdf = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c050ffc78b93739328af5d59b05f90e0e26b1b7e", features = [
+fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898" }
+fastcrypto-tbls = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898" }
+fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898", package = "fastcrypto-zkp" }
+fastcrypto-vdf = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898", features = [
     "experimental",
 ] }
 passkey-types = { version = "0.2.0" }
@@ -621,7 +630,6 @@ sui-archival = { path = "crates/sui-archival" }
 sui-authority-aggregation = { path = "crates/sui-authority-aggregation" }
 sui-benchmark = { path = "crates/sui-benchmark" }
 sui-bridge = { path = "crates/sui-bridge" }
-sui-bridge-watchdog = { path = "crates/sui-bridge-watchdog" }
 sui-cluster-test = { path = "crates/sui-cluster-test" }
 sui-config = { path = "crates/sui-config" }
 sui-core = { path = "crates/sui-core" }
@@ -631,6 +639,9 @@ sui-data-ingestion-core = { path = "crates/sui-data-ingestion-core" }
 sui-e2e-tests = { path = "crates/sui-e2e-tests" }
 sui-enum-compat-util = { path = "crates/sui-enum-compat-util" }
 sui-faucet = { path = "crates/sui-faucet" }
+sui-field-count = { path = "crates/sui-field-count" }
+sui-field-count-main = { path = "crates/sui-field-count-main" }
+sui-field-count-derive = { path = "crates/sui-field-count-derive" }
 sui-framework = { path = "crates/sui-framework" }
 sui-framework-snapshot = { path = "crates/sui-framework-snapshot" }
 sui-framework-tests = { path = "crates/sui-framework-tests" }
@@ -646,11 +657,13 @@ sui-json-rpc = { path = "crates/sui-json-rpc" }
 sui-json-rpc-api = { path = "crates/sui-json-rpc-api" }
 sui-json-rpc-types = { path = "crates/sui-json-rpc-types" }
 sui-keys = { path = "crates/sui-keys" }
+sui-kvstore = {path = "crates/sui-kvstore"}
 sui-macros = { path = "crates/sui-macros" }
 sui-metric-checker = { path = "crates/sui-metric-checker" }
 sui-move = { path = "crates/sui-move" }
 sui-move-build = { path = "crates/sui-move-build" }
 sui-move-lsp = { path = "crates/sui-move-lsp" }
+sui-mvr-indexer = { path = "crates/sui-mvr-indexer" }
 sui-network = { path = "crates/sui-network" }
 sui-node = { path = "crates/sui-node" }
 sui-open-rpc = { path = "crates/sui-open-rpc" }
@@ -674,6 +687,7 @@ sui-storage = { path = "crates/sui-storage" }
 sui-surfer = { path = "crates/sui-surfer" }
 sui-swarm = { path = "crates/sui-swarm" }
 sui-swarm-config = { path = "crates/sui-swarm-config" }
+sui-synthetic-ingestion = { path = "crates/sui-synthetic-ingestion" }
 sui-telemetry = { path = "crates/sui-telemetry" }
 sui-test-transaction-builder = { path = "crates/sui-test-transaction-builder" }
 sui-test-validator = { path = "crates/sui-test-validator" }
