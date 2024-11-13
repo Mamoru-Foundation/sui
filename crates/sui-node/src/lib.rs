@@ -13,7 +13,6 @@ use arc_swap::ArcSwap;
 use fastcrypto_zkp::bn254::zk_login::JwkId;
 use fastcrypto_zkp::bn254::zk_login::OIDCProvider;
 use futures::TryFutureExt;
-use mysten_network::server::SUI_TLS_SERVER_NAME;
 use prometheus::Registry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
@@ -184,9 +183,9 @@ mod simulator {
     }
 
     type JwkInjector = dyn Fn(AuthorityName, &OIDCProvider) -> SuiResult<Vec<(JwkId, JWK)>>
-        + Send
-        + Sync
-        + 'static;
+    + Send
+    + Sync
+    + 'static;
 
     fn default_fetch_jwks(
         _authority: AuthorityName,
@@ -198,7 +197,7 @@ mod simulator {
             sui_types::zk_login_util::DEFAULT_JWK_BYTES,
             &OIDCProvider::Twitch,
         )
-        .map_err(|_| SuiError::JWKRetrievalError)
+            .map_err(|_| SuiError::JWKRetrievalError)
     }
 
     thread_local! {
@@ -641,7 +640,7 @@ impl SuiNode {
             &trusted_peer_change_tx,
             epoch_store.epoch_start_state(),
         )
-        .expect("Initial trusted peers must be set");
+            .expect("Initial trusted peers must be set");
 
         info!("start state archival");
         // Start archiving local state to remote store
@@ -702,7 +701,7 @@ impl SuiNode {
             archive_readers,
             validator_tx_finalizer,
         )
-        .await;
+            .await;
         // ensure genesis txn was executed
         if epoch_store.epoch() == 0 {
             let txn = &genesis.transaction();
@@ -737,7 +736,7 @@ impl SuiNode {
                     state.get_accumulator_store().as_ref(),
                     indexes,
                 )
-                .expect("secondary indexes are inconsistent");
+                    .expect("secondary indexes are inconsistent");
             }
         }
 
@@ -767,7 +766,7 @@ impl SuiNode {
             custom_rpc_runtime,
             software_version,
         )
-        .await?;
+            .await?;
 
         let accumulator = Arc::new(StateAccumulator::new(
             cache_traits.accumulator_store.clone(),
@@ -814,7 +813,7 @@ impl SuiNode {
                 &registry_service,
                 sui_node_metrics.clone(),
             )
-            .await?;
+                .await?;
             // This is only needed during cold start.
             components.consensus_adapter.submit_recovered(&epoch_store);
 
@@ -940,7 +939,7 @@ impl SuiNode {
                 256 * 1024 * 1024,
                 prometheus_registry,
             )
-            .await?;
+                .await?;
             Ok(Some(archive_writer.start(state_sync_store).await?))
         } else {
             Ok(None)
@@ -1229,7 +1228,7 @@ impl SuiNode {
             consensus_adapter.clone(),
             &registry_service.default_registry(),
         )
-        .await?;
+            .await?;
 
         // Starts an overload monitor that monitors the execution of the authority.
         // Don't start the overload monitor when max_load_shedding_percentage is 0.
@@ -1266,7 +1265,7 @@ impl SuiNode {
             sui_node_metrics,
             sui_tx_validator_metrics,
         )
-        .await
+            .await
     }
 
     async fn start_epoch_specific_validator_components(
@@ -1311,7 +1310,7 @@ impl SuiNode {
                 randomness_handle,
                 config.protocol_key_pair(),
             )
-            .await;
+                .await;
             if let Some(randomness_manager) = randomness_manager {
                 epoch_store
                     .set_randomness_manager(randomness_manager)
@@ -1474,13 +1473,8 @@ impl SuiNode {
 
         server_builder = server_builder.add_service(ValidatorServer::new(validator_service));
 
-        let tls_config = sui_tls::create_rustls_server_config(
-            config.network_key_pair().copy().private(),
-            SUI_TLS_SERVER_NAME.to_string(),
-            sui_tls::AllowAll,
-        );
         let server = server_builder
-            .bind(config.network_address(), Some(tls_config))
+            .bind(config.network_address())
             .await
             .map_err(|err| anyhow!(err.to_string()))?;
         let local_addr = server.local_addr();
@@ -1681,15 +1675,15 @@ impl SuiNode {
             // in the new epoch.
 
             let new_validator_components = if let Some(ValidatorComponents {
-                validator_server_handle,
-                validator_overload_monitor_handle,
-                consensus_manager,
-                consensus_store_pruner,
-                consensus_adapter,
-                mut checkpoint_service_tasks,
-                checkpoint_metrics,
-                sui_tx_validator_metrics,
-            }) = self.validator_components.lock().await.take()
+                                                           validator_server_handle,
+                                                           validator_overload_monitor_handle,
+                                                           consensus_manager,
+                                                           consensus_store_pruner,
+                                                           consensus_adapter,
+                                                           mut checkpoint_service_tasks,
+                                                           checkpoint_metrics,
+                                                           sui_tx_validator_metrics,
+                                                       }) = self.validator_components.lock().await.take()
             {
                 info!("Reconfiguring the validator.");
                 // Cancel the old checkpoint service tasks.
@@ -1755,7 +1749,7 @@ impl SuiNode {
                             self.metrics.clone(),
                             sui_tx_validator_metrics,
                         )
-                        .await?,
+                            .await?,
                     )
                 } else {
                     info!("This node is no longer a validator after reconfiguration");
@@ -1802,7 +1796,7 @@ impl SuiNode {
                             &self.registry_service,
                             self.metrics.clone(),
                         )
-                        .await?,
+                            .await?,
                     )
                 } else {
                     None
@@ -1823,11 +1817,11 @@ impl SuiNode {
                 )
             {
                 self.state
-                .prune_checkpoints_for_eligible_epochs_for_testing(
-                    self.config.clone(),
-                    sui_core::authority::authority_store_pruner::AuthorityStorePruningMetrics::new_for_test(),
-                )
-                .await?;
+                    .prune_checkpoints_for_eligible_epochs_for_testing(
+                        self.config.clone(),
+                        sui_core::authority::authority_store_pruner::AuthorityStorePruningMetrics::new_for_test(),
+                    )
+                    .await?;
             }
 
             info!("Reconfiguration finished");
@@ -1862,7 +1856,7 @@ impl SuiNode {
             state.get_object_store().as_ref(),
             EpochFlag::default_flags_for_new_epoch(&state.config),
         )
-        .expect("EpochStartConfiguration construction cannot fail");
+            .expect("EpochStartConfiguration construction cannot fail");
 
         let new_epoch_store = self
             .state
@@ -2116,8 +2110,8 @@ pub async fn build_http_server(
             listener,
             router.into_make_service_with_connect_info::<SocketAddr>(),
         )
-        .await
-        .unwrap()
+            .await
+            .unwrap()
     });
 
     info!(local_addr =? addr, "Sui JSON-RPC server listening on {addr}");

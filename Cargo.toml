@@ -209,7 +209,7 @@ members = [
 
 [workspace.package]
 # This version string will be inherited by sui-core, sui-faucet, sui-node, sui-tools, sui-sdk, sui-move-build, and sui crates.
-version = "1.37.1"
+version = "1.37.3"
 
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
@@ -262,7 +262,6 @@ async-graphql = "=7.0.1"
 async-graphql-axum = "=7.0.1"
 async-graphql-value = "=7.0.1"
 async-recursion = "1.0.4"
-async-stream = "0.3.6"
 async-trait = "0.1.61"
 atomic_float = "0.1"
 aws-config = "0.56"
@@ -328,10 +327,9 @@ cynic-codegen = "= 3.7.3"
 dashmap = "5.5.3"
 # datatest-stable = "0.1.2"
 datatest-stable = { git = "https://github.com/nextest-rs/datatest-stable.git", rev = "72db7f6d1bbe36a5407e96b9488a581f763e106f" }
-derivative = "2.2.0"
 derive-syn-parse = "0.1.5"
 derive_builder = "0.12.0"
-derive_more = "0.99.17"
+derive_more = "1.0.0"
 diesel = "2.2"
 diesel_migrations = "2.2"
 diesel-async = "0.5"
@@ -583,15 +581,15 @@ move-abstract-interpreter = { path = "external-crates/move/crates/move-abstract-
 move-abstract-stack = { path = "external-crates/move/crates/move-abstract-stack" }
 move-analyzer = { path = "external-crates/move/crates/move-analyzer" }
 
-mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "9f4c36051a548e22145fb0df4f99ce7f8aefad5f" }
-mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "9f4c36051a548e22145fb0df4f99ce7f8aefad5f" }
-
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898" }
 fastcrypto-tbls = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898" }
 fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898", package = "fastcrypto-zkp" }
 fastcrypto-vdf = { git = "https://github.com/MystenLabs/fastcrypto", rev = "2f502fd8570fe4e9cff36eea5bbd6fef22002898", features = [
     "experimental",
 ] }
+mamoru-sniffer = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "9f4c36051a548e22145fb0df4f99ce7f8aefad5f" }
+mamoru-sui-types = { git = "https://github.com/Mamoru-Foundation/mamoru-core", rev = "9f4c36051a548e22145fb0df4f99ce7f8aefad5f" }
+
 passkey-types = { version = "0.2.0" }
 passkey-client = { version = "0.2.0" }
 passkey-authenticator = { version = "0.2.0" }
