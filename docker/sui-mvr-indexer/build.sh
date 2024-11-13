@@ -11,21 +11,12 @@ DOCKERFILE="$DIR/Dockerfile"
 GIT_REVISION="$(git describe --always --abbrev=12 --dirty --exclude '*')"
 BUILD_DATE="$(date -u +'%Y-%m-%d')"
 
-# option to build using debug symbols
-if [ "$1" = "--debug-symbols" ]; then
-	PROFILE="bench"
-	echo "Building with full debug info enabled ... WARNING: binary size might significantly increase"
-	shift
-else
-	PROFILE="release"
-fi
-
 echo
-<<<<<<<< HEAD:docker/sui-graphql-rpc-staging/build.sh
-echo "Building sui-graphql-rpc docker image"
+<<<<<<<< HEAD:docker/sui-indexer-alt/build.sh
+echo "Building sui-indexer-alt docker image"
 ========
 echo "Building sui-mvr-indexer docker image"
->>>>>>>> testnet-v1.37.1:docker/sui-mvr-indexer/build.sh
+>>>>>>>> testnet-v1.37.3:docker/sui-mvr-indexer/build.sh
 echo "Dockerfile: \t$DOCKERFILE"
 echo "docker context: $REPO_ROOT"
 echo "build date: \t$BUILD_DATE"
@@ -35,6 +26,4 @@ echo
 docker build -f "$DOCKERFILE" "$REPO_ROOT" \
 	--build-arg GIT_REVISION="$GIT_REVISION" \
 	--build-arg BUILD_DATE="$BUILD_DATE" \
-	--build-arg PROFILE="$PROFILE" \
-	--features staging \
 	"$@"

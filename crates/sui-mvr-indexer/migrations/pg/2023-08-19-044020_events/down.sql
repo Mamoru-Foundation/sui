@@ -1,2 +1,2 @@
 -- This file should undo anything in `up.sql`
-DROP TABLE IF EXISTS chain_identifier;
+DROP TABLE IF EXISTS epochs;
