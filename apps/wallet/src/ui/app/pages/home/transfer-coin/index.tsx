@@ -1,218 +1,184 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { getTransactionDigest } from '@mysten/sui.js';
-import BigNumber from 'bignumber.js';
-import { Formik } from 'formik';
-import { useCallback, useMemo, useState } from 'react';
+import BottomMenuLayout, { Content, Menu } from '_app/shared/bottom-menu-layout';
+import { Button } from '_app/shared/ButtonUI';
+import { Text } from '_app/shared/text';
+import { ActiveCoinsCard } from '_components/active-coins-card';
+import Overlay from '_components/overlay';
+import { ampli } from '_src/shared/analytics/ampli';
+import { getSignerOperationErrorMessage } from '_src/ui/app/helpers/errorMessages';
+import { useActiveAccount } from '_src/ui/app/hooks/useActiveAccount';
+import { useQredoTransaction } from '_src/ui/app/hooks/useQredoTransaction';
+import { useSigner } from '_src/ui/app/hooks/useSigner';
+import { useUnlockedGuard } from '_src/ui/app/hooks/useUnlockedGuard';
+import { QredoActionIgnoredByUser } from '_src/ui/app/QredoSigner';
+import { useCoinMetadata } from '@mysten/core';
+import { ArrowLeft16, ArrowRight16 } from '@mysten/icons';
+import * as Sentry from '@sentry/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
-import StepOne from './TransferCoinForm/StepOne';
-import StepTwo from './TransferCoinForm/StepTwo';
-import {
-    createValidationSchemaStepOne,
-    createValidationSchemaStepTwo,
-} from './validation';
-import { Content } from '_app/shared/bottom-menu-layout';
-import PageTitle from '_app/shared/page-title';
-import Loading from '_components/loading';
-import ProgressBar from '_components/progress-bar';
-import { useAppSelector, useAppDispatch, useCoinDecimals } from '_hooks';
-import { accountAggregateBalancesSelector } from '_redux/slices/account';
-import { Coin, GAS_TYPE_ARG } from '_redux/slices/sui-objects/Coin';
-import { sendTokens } from '_redux/slices/transactions';
-import { trackEvent } from '_src/shared/plausible';
+import { PreviewTransfer } from './PreviewTransfer';
+import { SendTokenForm } from './SendTokenForm';
+import type { SubmitProps } from './SendTokenForm';
+import { createTokenTransferTransaction } from './utils/transaction';
 
-import type { SerializedError } from '@reduxjs/toolkit';
-import type { FormikHelpers } from 'formik';
-
-import st from './TransferCoinPage.module.scss';
-
-const initialValues = {
-    to: '',
-    amount: '',
-};
-
-export type FormValues = typeof initialValues;
-
-const DEFAULT_FORM_STEP = 1;
-
-// TODO: show out of sync when sui objects locally might be outdated
 function TransferCoinPage() {
-    const [searchParams] = useSearchParams();
-    const coinType = searchParams.get('type');
+	const [searchParams] = useSearchParams();
+	const coinType = searchParams.get('type');
+	const [showTransactionPreview, setShowTransactionPreview] = useState<boolean>(false);
+	const [formData, setFormData] = useState<SubmitProps>();
+	const navigate = useNavigate();
+	const { data: coinMetadata } = useCoinMetadata(coinType);
+	const activeAccount = useActiveAccount();
+	const signer = useSigner(activeAccount);
+	const address = activeAccount?.address;
+	const queryClient = useQueryClient();
+	const { clientIdentifier, notificationModal } = useQredoTransaction();
 
-    const aggregateBalances = useAppSelector(accountAggregateBalancesSelector);
-    const coinBalance = useMemo(
-        () => (coinType && aggregateBalances[coinType]) || BigInt(0),
-        [coinType, aggregateBalances]
-    );
+	const transaction = useMemo(() => {
+		if (!coinType || !signer || !formData || !address) return null;
 
-    const gasAggregateBalance = useMemo(
-        () => aggregateBalances[GAS_TYPE_ARG] || BigInt(0),
-        [aggregateBalances]
-    );
+		return createTokenTransferTransaction({
+			coinType,
+			coinDecimals: coinMetadata?.decimals ?? 0,
+			...formData,
+		});
+	}, [formData, signer, coinType, address, coinMetadata?.decimals]);
 
-    const coinSymbol = useMemo(
-        () => (coinType && Coin.getCoinSymbol(coinType)) || '',
-        [coinType]
-    );
+	const executeTransfer = useMutation({
+		mutationFn: async () => {
+			if (!transaction || !signer) {
+				throw new Error('Missing data');
+			}
 
-    const [sendError, setSendError] = useState<string | null>(null);
-    const [currentStep, setCurrentStep] = useState<number>(DEFAULT_FORM_STEP);
-    const [formData] = useState<FormValues>(initialValues);
+			const sentryTransaction = Sentry.startTransaction({
+				name: 'send-tokens',
+			});
+			try {
+				return signer.signAndExecuteTransactionBlock(
+					{
+						transactionBlock: transaction,
+						options: {
+							showInput: true,
+							showEffects: true,
+							showEvents: true,
+						},
+					},
+					clientIdentifier,
+				);
+			} catch (error) {
+				if (!(error instanceof QredoActionIgnoredByUser)) {
+					sentryTransaction.setTag('failure', true);
+				}
+				throw error;
+			} finally {
+				sentryTransaction.finish();
+			}
+		},
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ['get-coins'] });
+			queryClient.invalidateQueries({ queryKey: ['coin-balance'] });
 
-    const [coinDecimals] = useCoinDecimals(coinType);
-    const [gasDecimals] = useCoinDecimals(GAS_TYPE_ARG);
+			ampli.sentCoins({
+				coinType: coinType!,
+			});
 
-    const validationSchemaStepOne = useMemo(
-        () =>
-            createValidationSchemaStepOne(
-                coinType || '',
-                coinBalance,
-                coinSymbol,
-                gasAggregateBalance,
-                coinDecimals,
-                gasDecimals
-            ),
-        [
-            coinType,
-            coinBalance,
-            coinSymbol,
-            coinDecimals,
-            gasDecimals,
-            gasAggregateBalance,
-        ]
-    );
-    const validationSchemaStepTwo = useMemo(
-        () => createValidationSchemaStepTwo(),
-        []
-    );
+			const receiptUrl = `/receipt?txdigest=${encodeURIComponent(
+				response.digest,
+			)}&from=transactions`;
+			return navigate(receiptUrl);
+		},
+		onError: (error) => {
+			if (error instanceof QredoActionIgnoredByUser) {
+				navigate('/');
+			} else {
+				toast.error(
+					<div className="max-w-xs overflow-hidden flex flex-col">
+						<small className="text-ellipsis overflow-hidden">
+							{getSignerOperationErrorMessage(error)}
+						</small>
+					</div>,
+				);
+			}
+		},
+	});
 
-    const dispatch = useAppDispatch();
-    const navigate = useNavigate();
-    const onHandleSubmit = useCallback(
-        async (
-            { to, amount }: FormValues,
-            { resetForm }: FormikHelpers<FormValues>
-        ) => {
-            if (coinType === null) {
-                return;
-            }
-            setSendError(null);
-            trackEvent('TransferCoins', {
-                props: { coinType },
-            });
-            try {
-                const bigIntAmount = BigInt(
-                    new BigNumber(amount)
-                        .shiftedBy(coinDecimals)
-                        .integerValue()
-                        .toString()
-                );
-                const response = await dispatch(
-                    sendTokens({
-                        amount: bigIntAmount,
-                        recipientAddress: to,
-                        tokenTypeArg: coinType,
-                    })
-                ).unwrap();
+	if (useUnlockedGuard()) {
+		return null;
+	}
 
-                resetForm();
-                const txDigest = getTransactionDigest(response);
-                const receiptUrl = `/receipt?txdigest=${encodeURIComponent(
-                    txDigest
-                )}&transfer=coin`;
+	if (!coinType) {
+		return <Navigate to="/" replace={true} />;
+	}
 
-                navigate(receiptUrl);
-            } catch (e) {
-                setSendError((e as SerializedError).message || null);
-            }
-        },
-        [dispatch, navigate, coinType, coinDecimals]
-    );
+	return (
+		<Overlay
+			showModal={true}
+			title={showTransactionPreview ? 'Review & Send' : 'Send Coins'}
+			closeOverlay={() => navigate('/')}
+		>
+			<div className="flex flex-col w-full h-full">
+				{showTransactionPreview && formData ? (
+					<BottomMenuLayout>
+						<Content>
+							<PreviewTransfer
+								coinType={coinType}
+								amount={formData.amount}
+								to={formData.to}
+								approximation={formData.isPayAllSui}
+								gasBudget={formData.gasBudgetEst}
+							/>
+						</Content>
+						<Menu stuckClass="sendCoin-cta" className="w-full px-0 pb-0 mx-0 gap-2.5">
+							<Button
+								type="button"
+								variant="secondary"
+								onClick={() => setShowTransactionPreview(false)}
+								text="Back"
+								before={<ArrowLeft16 />}
+							/>
 
-    const handleNextStep = useCallback(
-        (_: FormValues, { setSubmitting }: FormikHelpers<FormValues>) => {
-            setCurrentStep((prev) => prev + 1);
-            setSubmitting(false);
-        },
-        []
-    );
+							<Button
+								type="button"
+								variant="primary"
+								onClick={() => executeTransfer.mutateAsync()}
+								text="Send Now"
+								disabled={coinType === null}
+								after={<ArrowRight16 />}
+								loading={executeTransfer.isPending}
+							/>
+						</Menu>
+					</BottomMenuLayout>
+				) : (
+					<>
+						<div className="mb-7 flex flex-col gap-2.5">
+							<div className="pl-1.5">
+								<Text variant="caption" color="steel" weight="semibold">
+									Select all Coins
+								</Text>
+							</div>
+							<ActiveCoinsCard activeCoinType={coinType} />
+						</div>
 
-    const handleBackStep = useCallback(() => {
-        setCurrentStep(DEFAULT_FORM_STEP);
-    }, []);
-
-    const handleOnClearSubmitError = useCallback(() => {
-        setSendError(null);
-    }, []);
-    const loadingBalance = useAppSelector(
-        ({ suiObjects }) => suiObjects.loading && !suiObjects.lastSync
-    );
-
-    if (!coinType) {
-        return <Navigate to="/" replace={true} />;
-    }
-
-    const StepOneForm = (
-        <Formik
-            initialValues={formData}
-            validateOnMount={true}
-            validationSchema={validationSchemaStepOne}
-            onSubmit={handleNextStep}
-        >
-            <StepOne
-                submitError={sendError}
-                coinBalance={coinBalance.toString()}
-                coinSymbol={coinSymbol}
-                coinType={coinType}
-                onClearSubmitError={handleOnClearSubmitError}
-            />
-        </Formik>
-    );
-
-    const StepTwoForm = (
-        <Formik
-            initialValues={formData}
-            validateOnMount={true}
-            validationSchema={validationSchemaStepTwo}
-            onSubmit={onHandleSubmit}
-        >
-            <StepTwo
-                submitError={sendError}
-                coinBalance={coinBalance.toString()}
-                coinSymbol={coinSymbol}
-                coinType={coinType}
-                onClearSubmitError={handleOnClearSubmitError}
-            />
-        </Formik>
-    );
-
-    const steps = [StepOneForm, StepTwoForm];
-
-    const SendCoin = (
-        <div className={st.container}>
-            <PageTitle
-                title="Send Coins"
-                backLink={'/'}
-                className={st.pageTitle}
-                {...(currentStep > 1 && { onClick: handleBackStep })}
-            />
-
-            <Content className={st.content}>
-                <Loading loading={loadingBalance}>
-                    <ProgressBar
-                        currentStep={currentStep}
-                        stepsName={['Amount', 'Address']}
-                    />
-                    {steps[currentStep - 1]}
-                </Loading>
-            </Content>
-        </div>
-    );
-
-    return <>{SendCoin}</>;
+						<SendTokenForm
+							onSubmit={(formData) => {
+								setShowTransactionPreview(true);
+								setFormData(formData);
+							}}
+							coinType={coinType}
+							initialAmount={formData?.amount || ''}
+							initialTo={formData?.to || ''}
+						/>
+					</>
+				)}
+			</div>
+			{notificationModal}
+		</Overlay>
+	);
 }
 
 export default TransferCoinPage;

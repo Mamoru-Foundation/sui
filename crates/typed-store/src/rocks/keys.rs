@@ -5,16 +5,16 @@ use bincode::Options;
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
-use super::{be_fix_int_ser, DBRawIteratorMultiThreaded, TypedStoreError};
+use super::{be_fix_int_ser, RocksDBRawIter, TypedStoreError};
 
 /// An iterator over the keys of a prefix.
 pub struct Keys<'a, K> {
-    db_iter: DBRawIteratorMultiThreaded<'a>,
+    db_iter: RocksDBRawIter<'a>,
     _phantom: PhantomData<K>,
 }
 
 impl<'a, K: DeserializeOwned> Keys<'a, K> {
-    pub(crate) fn new(db_iter: DBRawIteratorMultiThreaded<'a>) -> Self {
+    pub(crate) fn new(db_iter: RocksDBRawIter<'a>) -> Self {
         Self {
             db_iter,
             _phantom: PhantomData,
@@ -23,7 +23,7 @@ impl<'a, K: DeserializeOwned> Keys<'a, K> {
 }
 
 impl<'a, K: DeserializeOwned> Iterator for Keys<'a, K> {
-    type Item = K;
+    type Item = Result<K, TypedStoreError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.db_iter.valid() {
@@ -31,11 +31,13 @@ impl<'a, K: DeserializeOwned> Iterator for Keys<'a, K> {
                 .with_big_endian()
                 .with_fixint_encoding();
             let key = self.db_iter.key().and_then(|k| config.deserialize(k).ok());
-
             self.db_iter.next();
-            key
+            key.map(Ok)
         } else {
-            None
+            match self.db_iter.status() {
+                Ok(_) => None,
+                Err(err) => Some(Err(TypedStoreError::RocksDBError(format!("{err}")))),
+            }
         }
     }
 }

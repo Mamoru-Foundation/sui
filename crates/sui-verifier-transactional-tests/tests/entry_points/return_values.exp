@@ -1,17 +1,31 @@
-processed 4 tasks
+processed 5 tasks
 
-task 0 'publish'. lines 4-11:
-Error: Transaction Effects Status: Sui Move Bytecode Verification Error. Please run the Sui Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: SuiMoveVerificationError, source: Some("Entry function foo cannot have return values") } }
+task 0, lines 6-13:
+//# publish
+created: object(1,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3959600,  storage_rebate: 0, non_refundable_storage_fee: 0
 
-task 1 'publish'. lines 13-20:
-Error: Transaction Effects Status: Sui Move Bytecode Verification Error. Please run the Sui Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: SuiMoveVerificationError, source: Some("Entry function foo cannot have return values") } }
+task 1, lines 15-22:
+//# publish
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3967200,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
-task 2 'publish'. lines 22-29:
-Error: Transaction Effects Status: Sui Move Bytecode Verification Error. Please run the Sui Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: SuiMoveVerificationError, source: Some("Entry function foo cannot have return values") } }
+task 2, lines 24-31:
+//# publish
+created: object(3,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3967200,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
-task 3 'publish'. lines 32-39:
-Error: Transaction Effects Status: Sui Move Bytecode Verification Error. Please run the Sui Move Verifier for more information.
-Execution Error: ExecutionError: ExecutionError { inner: ExecutionErrorInner { kind: SuiMoveVerificationError, source: Some("Entry function foo cannot have return values") } }
+task 3, lines 33-41:
+//# publish
+created: object(4,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 4506800,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 4, lines 43-51:
+//# publish
+created: object(5,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 4522000,  storage_rebate: 978120, non_refundable_storage_fee: 9880

@@ -19,12 +19,11 @@
 // 2. Review, accept or reject changes.
 
 use config::{
-    ConsensusAPIGrpcParameters, Import, NetworkAdminServerParameters, Parameters,
-    PrometheusMetricsParameters, Stake,
+    Import, NetworkAdminServerParameters, Parameters, PrometheusMetricsParameters, Stake,
 };
 use crypto::PublicKey;
 use insta::assert_json_snapshot;
-use multiaddr::Multiaddr;
+use mysten_network::Multiaddr;
 use narwhal_config as config;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use std::{
@@ -46,10 +45,14 @@ fn leader_election_rotates_through_all() {
     let mut leader_counts_stepping_by_2 = HashMap::new();
     for i in 0..100 {
         let leader = committee.leader(i);
+        let leader_id = leader.id();
+
         let leader_stepping_by_2 = committee.leader(i * 2);
-        *leader_counts.entry(leader).or_insert(0) += 1;
+        let leader_steeping_by_2_id = leader_stepping_by_2.id();
+
+        *leader_counts.entry(leader_id).or_insert(0) += 1;
         *leader_counts_stepping_by_2
-            .entry(leader_stepping_by_2)
+            .entry(leader_steeping_by_2_id)
             .or_insert(0) += 1;
     }
     assert!(leader_counts.values().all(|v| *v >= 20));
@@ -74,9 +77,13 @@ fn update_primary_network_info_test() {
     let fixture = CommitteeFixture::builder().build();
     let committee2 = fixture.committee();
     let invalid_new_info = committee2
-        .authorities
-        .iter()
-        .map(|(pk, a)| (pk.clone(), (a.stake, a.primary_address.clone())))
+        .authorities()
+        .map(|authority| {
+            (
+                authority.protocol_key().clone(),
+                (authority.stake(), authority.primary_address()),
+            )
+        })
         .collect::<BTreeMap<_, (Stake, Multiaddr)>>();
     let res2 = committee
         .clone()
@@ -92,10 +99,14 @@ fn update_primary_network_info_test() {
     }
 
     let invalid_new_info = committee
-        .authorities
-        .iter()
+        .authorities()
         // change the stake
-        .map(|(pk, a)| (pk.clone(), (a.stake + 1, a.primary_address.clone())))
+        .map(|authority| {
+            (
+                authority.protocol_key().clone(),
+                (authority.stake() + 1, authority.primary_address()),
+            )
+        })
         .collect::<BTreeMap<_, (Stake, Multiaddr)>>();
     let res2 = committee
         .clone()
@@ -112,9 +123,9 @@ fn update_primary_network_info_test() {
     let mut pk_n_stake = Vec::new();
     let mut addresses = Vec::new();
 
-    committee4.authorities.iter().for_each(|(pk, a)| {
-        pk_n_stake.push((pk.clone(), a.stake));
-        addresses.push(a.primary_address.clone())
+    committee4.authorities().for_each(|authority| {
+        pk_n_stake.push((authority.protocol_key().clone(), authority.stake()));
+        addresses.push(authority.primary_address())
     });
 
     let mut rng = rand::thread_rng();
@@ -129,8 +140,11 @@ fn update_primary_network_info_test() {
     let mut comm = committee;
     let res = comm.update_primary_network_info(new_info.clone());
     assert!(res.is_ok());
-    for (pk, a) in comm.authorities.iter() {
-        assert_eq!(a.primary_address, new_info.get(pk).unwrap().1);
+    for authority in comm.authorities() {
+        assert_eq!(
+            authority.primary_address(),
+            new_info.get(&authority.protocol_key().clone()).unwrap().1
+        );
     }
 }
 
@@ -146,11 +160,7 @@ fn parameters_snapshot_matches() {
     // and in Sui (prod config + shared object bench base). If this test breaks,
     // config needs to change in all of these.
 
-    // We avoid defaults that randomly bind to a random port
-    let consensus_api_grpc_parameters = ConsensusAPIGrpcParameters {
-        socket_addr: "/ip4/127.0.0.1/tcp/8081/http".parse().unwrap(),
-        ..ConsensusAPIGrpcParameters::default()
-    };
+    // Avoid default which bind to random ports.
     let prometheus_metrics_parameters = PrometheusMetricsParameters {
         socket_addr: "/ip4/127.0.0.1/tcp/8081/http".parse().unwrap(),
     };
@@ -160,7 +170,6 @@ fn parameters_snapshot_matches() {
     };
 
     let parameters = Parameters {
-        consensus_api_grpc: consensus_api_grpc_parameters,
         prometheus_metrics: prometheus_metrics_parameters,
         network_admin_server: network_admin_server_parameters,
         ..Parameters::default()
@@ -174,23 +183,11 @@ fn parameters_import_snapshot_matches() {
     let input = r#"{
          "header_num_of_batches_threshold": 32,
          "max_header_num_of_batches": 1000,
-         "max_header_delay": "100ms",
          "gc_depth": 50,
          "sync_retry_delay": "5s",
          "sync_retry_nodes": 3,
          "batch_size": 500000,
          "max_batch_delay": "100ms",
-         "block_synchronizer": {
-             "range_synchronize_timeout": "30s",
-             "certificates_synchronize_timeout": "2s",
-             "payload_synchronize_timeout": "3_000ms",
-             "payload_availability_timeout": "4_000ms"
-         },
-         "consensus_api_grpc": {
-             "socket_addr": "/ip4/127.0.0.1/tcp/0/http",
-             "get_collections_timeout": "5_000ms",
-             "remove_collections_timeout": "5_000ms"
-         },
          "max_concurrent_requests": 500000,
          "prometheus_metrics": {
             "socket_addr": "/ip4/127.0.0.1/tcp/0/http"
@@ -198,6 +195,8 @@ fn parameters_import_snapshot_matches() {
          "network_admin_server": {
            "primary_network_admin_server_port": 0,
            "worker_network_admin_server_base_port": 0
+         },
+         "anemo": {
          }
       }"#;
 

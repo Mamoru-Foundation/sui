@@ -11,20 +11,18 @@
 module a::m {
 
 use sui::dynamic_object_field::{add, borrow, borrow_mut, remove};
-use sui::object::{Self, UID};
-use sui::tx_context::{sender, TxContext};
 
-struct Obj has key, store {
+public struct Obj has key, store {
     id: UID,
 }
 
-struct Counter has key, store {
+public struct Counter has key, store {
     id: UID,
     count: u64,
 }
 
-fun new(id: UID): Counter {
-    Counter { id, count: 0 }
+fun new(ctx: &mut TxContext): Counter {
+    Counter { id: object::new(ctx), count: 0 }
 }
 
 fun count(counter: &Counter): u64 {
@@ -44,11 +42,11 @@ fun destroy(counter: Counter): u64 {
 
 entry fun create(ctx: &mut TxContext) {
     let id = object::new(ctx);
-    sui::transfer::transfer(Obj { id }, sender(ctx))
+    sui::transfer::public_transfer(Obj { id }, ctx.sender())
 }
 
 entry fun add_counter(obj: &mut Obj, ctx: &mut TxContext) {
-    add(&mut obj.id, 0, new(object::new(ctx)))
+    add(&mut obj.id, 0, new(ctx))
 }
 
 entry fun obj_bump(obj: &mut Obj) {
@@ -70,16 +68,16 @@ entry fun transfer(o1: &mut Obj, o2: &mut Obj) {
 
 //# run a::m::create --sender A
 
-//# run a::m::add_counter --sender A --args object(106)
+//# run a::m::add_counter --sender A --args object(2,0)
 
-//# run a::m::obj_bump --sender A --args object(106)
+//# run a::m::obj_bump --sender A --args object(2,0)
 
-//# run a::m::assert_count --sender A --args object(106) 1
+//# run a::m::assert_count --sender A --args object(2,0) 1
 
-//# run a::m::transfer --sender A --args object(106) object(108)
+//# run a::m::transfer --sender A --args object(2,0) object(3,0)
 
-//# run a::m::obj_bump --sender A --args object(108)
+//# run a::m::obj_bump --sender A --args object(3,0)
 
-//# run a::m::assert_count --sender A --args object(108) 2
+//# run a::m::assert_count --sender A --args object(3,0) 2
 
-//# run a::m::obj_bump --sender A --args object(106)
+//# run a::m::obj_bump --sender A --args object(2,0)

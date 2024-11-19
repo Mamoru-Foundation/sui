@@ -1,37 +1,36 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use fastcrypto::encoding::{Encoding, Hex};
-use multiaddr::Multiaddr;
-use signature::{Signer, Verifier};
-use std::{fs, path::PathBuf};
-use sui_config::{
-    genesis::{Builder, Genesis},
-    SUI_GENESIS_FILENAME,
-};
+use std::path::PathBuf;
+use sui_config::{genesis::UnsignedGenesis, SUI_GENESIS_FILENAME};
+use sui_genesis_builder::Builder;
+use sui_types::multiaddr::Multiaddr;
 use sui_types::{
-    base_types::{ObjectID, SuiAddress},
+    base_types::SuiAddress,
+    committee::ProtocolVersion,
     crypto::{
-        generate_proof_of_possession, AuthorityKeyPair, AuthorityPublicKey,
-        AuthorityPublicKeyBytes, AuthoritySignature, KeypairTraits, NetworkKeyPair, SuiKeyPair,
-        ToFromBytes,
+        generate_proof_of_possession, AuthorityKeyPair, KeypairTraits, NetworkKeyPair, SuiKeyPair,
     },
-    object::Object,
+    message_envelope::Message,
 };
 
-use crate::keytool::{
+use sui_keys::keypair_file::{
     read_authority_keypair_from_file, read_keypair_from_file, read_network_keypair_from_file,
 };
 
-const GENESIS_BUILDER_SIGNATURE_DIR: &str = "signatures";
+use crate::genesis_inspector::examine_genesis_checkpoint;
 
 #[derive(Parser)]
 pub struct Ceremony {
     #[clap(long)]
     path: Option<PathBuf>,
+
+    #[clap(long)]
+    protocol_version: Option<u64>,
 
     #[clap(subcommand)]
     command: CeremonyCommand,
@@ -47,6 +46,8 @@ impl Ceremony {
 pub enum CeremonyCommand {
     Init,
 
+    ValidateState,
+
     AddValidator {
         #[clap(long)]
         name: String,
@@ -61,23 +62,24 @@ pub enum CeremonyCommand {
         #[clap(long)]
         network_address: Multiaddr,
         #[clap(long)]
+        p2p_address: Multiaddr,
+        #[clap(long)]
         narwhal_primary_address: Multiaddr,
         #[clap(long)]
         narwhal_worker_address: Multiaddr,
         #[clap(long)]
-        narwhal_consensus_address: Multiaddr,
+        description: String,
+        #[clap(long)]
+        image_url: String,
+        #[clap(long)]
+        project_url: String,
     },
 
-    AddGasObject {
-        #[clap(long)]
-        address: SuiAddress,
-        #[clap(long)]
-        object_id: Option<ObjectID>,
-        #[clap(long)]
-        value: u64,
-    },
+    ListValidators,
 
-    Build,
+    BuildUnsignedCheckpoint,
+
+    ExamineGenesisCheckpoint,
 
     VerifyAndSign {
         #[clap(long)]
@@ -95,10 +97,20 @@ pub fn run(cmd: Ceremony) -> Result<()> {
     };
     let dir = Utf8PathBuf::try_from(dir)?;
 
+    let protocol_version = cmd
+        .protocol_version
+        .map(ProtocolVersion::new)
+        .unwrap_or(ProtocolVersion::MAX);
+
     match cmd.command {
         CeremonyCommand::Init => {
-            let builder = Builder::new();
+            let builder = Builder::new().with_protocol_version(protocol_version);
             builder.save(dir)?;
+        }
+
+        CeremonyCommand::ValidateState => {
+            let builder = Builder::load(&dir)?;
+            builder.validate()?;
         }
 
         CeremonyCommand::AddValidator {
@@ -108,9 +120,12 @@ pub fn run(cmd: Ceremony) -> Result<()> {
             account_key_file,
             network_key_file,
             network_address,
+            p2p_address,
             narwhal_primary_address,
             narwhal_worker_address,
-            narwhal_consensus_address,
+            description,
+            image_url,
+            project_url,
         } => {
             let mut builder = Builder::load(&dir)?;
             let keypair: AuthorityKeyPair = read_authority_keypair_from_file(validator_key_file)?;
@@ -119,42 +134,102 @@ pub fn run(cmd: Ceremony) -> Result<()> {
             let network_keypair: NetworkKeyPair = read_network_keypair_from_file(network_key_file)?;
             let pop = generate_proof_of_possession(&keypair, (&account_keypair.public()).into());
             builder = builder.add_validator(
-                sui_config::ValidatorInfo {
+                sui_genesis_builder::validator_info::ValidatorInfo {
                     name,
                     protocol_key: keypair.public().into(),
                     worker_key: worker_keypair.public().clone(),
-                    account_key: account_keypair.public(),
+                    account_address: SuiAddress::from(&account_keypair.public()),
                     network_key: network_keypair.public().clone(),
-                    stake: 1,
-                    delegation: 0,
-                    gas_price: 1,
-                    commission_rate: 0,
+                    gas_price: sui_config::node::DEFAULT_VALIDATOR_GAS_PRICE,
+                    commission_rate: sui_config::node::DEFAULT_COMMISSION_RATE,
                     network_address,
+                    p2p_address,
                     narwhal_primary_address,
                     narwhal_worker_address,
-                    narwhal_consensus_address,
+                    description,
+                    image_url,
+                    project_url,
                 },
                 pop,
             );
             builder.save(dir)?;
         }
 
-        CeremonyCommand::AddGasObject {
-            address,
-            object_id,
-            value,
-        } => {
-            let mut builder = Builder::load(&dir)?;
+        CeremonyCommand::ListValidators => {
+            let builder = Builder::load(&dir)?;
 
-            let object_id = object_id.unwrap_or_else(ObjectID::random);
-            let object = Object::with_id_owner_gas_for_testing(object_id, address, value);
-            builder = builder.add_object(object);
+            let mut writer = csv::Writer::from_writer(std::io::stdout());
+
+            writer.write_record(["validator-name", "account-address"])?;
+
+            let mut validators = builder
+                .validators()
+                .values()
+                .map(|v| {
+                    (
+                        v.info.name().to_lowercase(),
+                        v.info.account_address.to_string(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            validators.sort_by_key(|v| v.0.clone());
+
+            for (name, address) in validators {
+                writer.write_record([&name, &address])?;
+            }
+        }
+
+        CeremonyCommand::BuildUnsignedCheckpoint => {
+            let mut builder = Builder::load(&dir)?;
+            let UnsignedGenesis { checkpoint, .. } = builder.build_unsigned_genesis_checkpoint();
+            println!(
+                "Successfully built unsigned checkpoint: {}",
+                checkpoint.digest()
+            );
 
             builder.save(dir)?;
         }
 
-        CeremonyCommand::Build => {
+        CeremonyCommand::ExamineGenesisCheckpoint => {
             let builder = Builder::load(&dir)?;
+
+            let Some(unsigned_genesis) = builder.unsigned_genesis_checkpoint() else {
+                return Err(anyhow::anyhow!(
+                    "Unable to examine genesis checkpoint; it hasn't been built yet"
+                ));
+            };
+
+            examine_genesis_checkpoint(unsigned_genesis);
+        }
+
+        CeremonyCommand::VerifyAndSign { key_file } => {
+            let keypair: AuthorityKeyPair = read_authority_keypair_from_file(key_file)?;
+
+            let mut builder = Builder::load(&dir)?;
+
+            check_protocol_version(&builder, protocol_version)?;
+
+            // Don't sign unless the unsigned checkpoint has already been created
+            if builder.unsigned_genesis_checkpoint().is_none() {
+                return Err(anyhow::anyhow!(
+                    "Unable to verify and sign genesis checkpoint; it hasn't been built yet"
+                ));
+            }
+
+            builder = builder.add_validator_signature(&keypair);
+            let UnsignedGenesis { checkpoint, .. } = builder.unsigned_genesis_checkpoint().unwrap();
+            builder.save(dir)?;
+
+            println!(
+                "Successfully verified and signed genesis checkpoint: {}",
+                checkpoint.digest()
+            );
+        }
+
+        CeremonyCommand::Finalize => {
+            let builder = Builder::load(&dir)?;
+            check_protocol_version(&builder, protocol_version)?;
 
             let genesis = builder.build();
 
@@ -162,103 +237,8 @@ pub fn run(cmd: Ceremony) -> Result<()> {
 
             println!("Successfully built {SUI_GENESIS_FILENAME}");
             println!(
-                "{SUI_GENESIS_FILENAME} sha3-256: {}",
-                Hex::encode(genesis.sha3())
-            );
-        }
-
-        CeremonyCommand::VerifyAndSign { key_file } => {
-            let keypair: AuthorityKeyPair = read_authority_keypair_from_file(key_file)?;
-            let loaded_genesis = Genesis::load(dir.join(SUI_GENESIS_FILENAME))?;
-            let loaded_genesis_bytes = loaded_genesis.to_bytes();
-
-            let builder = Builder::load(&dir)?;
-
-            let built_genesis = builder.build();
-            let built_genesis_bytes = built_genesis.to_bytes();
-
-            if built_genesis != loaded_genesis || built_genesis_bytes != loaded_genesis_bytes {
-                return Err(anyhow::anyhow!(
-                    "loaded genesis does not match built genesis"
-                ));
-            }
-
-            if !built_genesis.validator_set().iter().any(|validator| {
-                validator.protocol_key() == AuthorityPublicKeyBytes::from(keypair.public())
-            }) {
-                return Err(anyhow::anyhow!(
-                    "provided keypair does not correspond to a validator in the validator set"
-                ));
-            }
-
-            // Sign the genesis bytes
-            let signature: AuthoritySignature = keypair.try_sign(&built_genesis_bytes)?;
-
-            let signature_dir = dir.join(GENESIS_BUILDER_SIGNATURE_DIR);
-            std::fs::create_dir_all(&signature_dir)?;
-
-            let hex_name = Hex::encode(AuthorityPublicKeyBytes::from(keypair.public()));
-            fs::write(signature_dir.join(hex_name), signature)?;
-
-            println!("Successfully verified {SUI_GENESIS_FILENAME}");
-            println!(
-                "{SUI_GENESIS_FILENAME} sha3-256: {}",
-                Hex::encode(built_genesis.sha3())
-            );
-        }
-
-        CeremonyCommand::Finalize => {
-            let genesis = Genesis::load(dir.join(SUI_GENESIS_FILENAME))?;
-            let genesis_bytes = genesis.to_bytes();
-
-            let mut signatures = std::collections::BTreeMap::new();
-
-            for entry in dir.join(GENESIS_BUILDER_SIGNATURE_DIR).read_dir_utf8()? {
-                let entry = entry?;
-                if entry.file_name().starts_with('.') {
-                    continue;
-                }
-
-                let path = entry.path();
-                let signature_bytes = fs::read(path)?;
-                let signature: AuthoritySignature =
-                    AuthoritySignature::from_bytes(&signature_bytes)?;
-                let name = path
-                    .file_name()
-                    .ok_or_else(|| anyhow::anyhow!("Invalid signature file"))?;
-                let public_key = AuthorityPublicKeyBytes::from_bytes(
-                    &Hex::decode(name).map_err(|e| anyhow!(e))?[..],
-                )?;
-                signatures.insert(public_key, signature);
-            }
-
-            for validator in genesis.validator_set() {
-                let signature = signatures
-                    .remove(&validator.protocol_key())
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("missing signature for validator {}", validator.name())
-                    })?;
-
-                let pk: AuthorityPublicKey = validator.protocol_key().try_into()?;
-
-                pk.verify(&genesis_bytes, &signature).with_context(|| {
-                    format!(
-                        "failed to validate signature for validator {}",
-                        validator.name()
-                    )
-                })?;
-            }
-
-            if !signatures.is_empty() {
-                return Err(anyhow::anyhow!(
-                    "found extra signatures from entities not in the validator set"
-                ));
-            }
-
-            println!("Successfully finalized Genesis!");
-            println!(
-                "{SUI_GENESIS_FILENAME} sha3-256: {}",
-                Hex::encode(genesis.sha3())
+                "{SUI_GENESIS_FILENAME} blake2b-256: {}",
+                Hex::encode(genesis.hash())
             );
         }
     }
@@ -266,17 +246,32 @@ pub fn run(cmd: Ceremony) -> Result<()> {
     Ok(())
 }
 
+fn check_protocol_version(builder: &Builder, protocol_version: ProtocolVersion) -> Result<()> {
+    // It is entirely possible for the user to sign a genesis blob with an unknown
+    // protocol version, but if this happens there is almost certainly some confusion
+    // (e.g. using a `sui` binary built at the wrong commit).
+    if builder.protocol_version() != protocol_version {
+        return Err(anyhow::anyhow!(
+                        "Serialized protocol version does not match local --protocol-version argument. ({:?} vs {:?})",
+                        builder.protocol_version(), protocol_version));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::keytool::{write_authority_keypair_to_file, write_keypair_to_file};
     use anyhow::Result;
-    use sui_config::{utils, ValidatorInfo};
+    use sui_config::local_ip_utils;
+    use sui_genesis_builder::validator_info::ValidatorInfo;
+    use sui_keys::keypair_file::{write_authority_keypair_to_file, write_keypair_to_file};
+    use sui_macros::nondeterministic;
     use sui_types::crypto::{get_key_pair_from_rng, AccountKeyPair, AuthorityKeyPair, SuiKeyPair};
 
     #[test]
+    #[cfg_attr(msim, ignore)]
     fn ceremony() -> Result<()> {
-        let dir = tempfile::TempDir::new().unwrap();
+        let dir = nondeterministic!(tempfile::TempDir::new().unwrap());
 
         let validators = (0..10)
             .map(|i| {
@@ -291,40 +286,32 @@ mod test {
                     name: format!("validator-{i}"),
                     protocol_key: keypair.public().into(),
                     worker_key: worker_keypair.public().clone(),
-                    account_key: account_keypair.public().clone().into(),
+                    account_address: SuiAddress::from(account_keypair.public()),
                     network_key: network_keypair.public().clone(),
-                    stake: 1,
-                    delegation: 0,
-                    gas_price: 1,
-                    commission_rate: 0,
-                    network_address: utils::new_network_address(),
-                    narwhal_primary_address: utils::new_network_address(),
-                    narwhal_worker_address: utils::new_network_address(),
-                    narwhal_consensus_address: utils::new_network_address(),
+                    gas_price: sui_config::node::DEFAULT_VALIDATOR_GAS_PRICE,
+                    commission_rate: sui_config::node::DEFAULT_COMMISSION_RATE,
+                    network_address: local_ip_utils::new_local_tcp_address_for_testing(),
+                    p2p_address: local_ip_utils::new_local_udp_address_for_testing(),
+                    narwhal_primary_address: local_ip_utils::new_local_udp_address_for_testing(),
+                    narwhal_worker_address: local_ip_utils::new_local_udp_address_for_testing(),
+                    description: String::new(),
+                    image_url: String::new(),
+                    project_url: String::new(),
                 };
                 let key_file = dir.path().join(format!("{}-0.key", info.name));
                 write_authority_keypair_to_file(&keypair, &key_file).unwrap();
 
                 let worker_key_file = dir.path().join(format!("{}.key", info.name));
-                write_keypair_to_file(
-                    &SuiKeyPair::Ed25519SuiKeyPair(worker_keypair),
-                    &worker_key_file,
-                )
-                .unwrap();
+                write_keypair_to_file(&SuiKeyPair::Ed25519(worker_keypair), &worker_key_file)
+                    .unwrap();
 
                 let network_key_file = dir.path().join(format!("{}-1.key", info.name));
-                write_keypair_to_file(
-                    &SuiKeyPair::Ed25519SuiKeyPair(network_keypair),
-                    &network_key_file,
-                )
-                .unwrap();
+                write_keypair_to_file(&SuiKeyPair::Ed25519(network_keypair), &network_key_file)
+                    .unwrap();
 
                 let account_key_file = dir.path().join(format!("{}-2.key", info.name));
-                write_keypair_to_file(
-                    &SuiKeyPair::Ed25519SuiKeyPair(account_keypair),
-                    &account_key_file,
-                )
-                .unwrap();
+                write_keypair_to_file(&SuiKeyPair::Ed25519(account_keypair), &account_key_file)
+                    .unwrap();
 
                 (
                     key_file,
@@ -339,6 +326,7 @@ mod test {
         // Initialize
         let command = Ceremony {
             path: Some(dir.path().into()),
+            protocol_version: None,
             command: CeremonyCommand::Init,
         };
         command.run()?;
@@ -349,6 +337,7 @@ mod test {
         {
             let command = Ceremony {
                 path: Some(dir.path().into()),
+                protocol_version: None,
                 command: CeremonyCommand::AddValidator {
                     name: validator.name().to_owned(),
                     validator_key_file: key_file.into(),
@@ -356,18 +345,29 @@ mod test {
                     network_key_file: network_key_file.into(),
                     account_key_file: account_key_file.into(),
                     network_address: validator.network_address().to_owned(),
+                    p2p_address: validator.p2p_address().to_owned(),
                     narwhal_primary_address: validator.narwhal_primary_address.clone(),
                     narwhal_worker_address: validator.narwhal_worker_address.clone(),
-                    narwhal_consensus_address: validator.narwhal_consensus_address.clone(),
+                    description: String::new(),
+                    image_url: String::new(),
+                    project_url: String::new(),
                 },
             };
             command.run()?;
+
+            Ceremony {
+                path: Some(dir.path().into()),
+                protocol_version: None,
+                command: CeremonyCommand::ValidateState,
+            }
+            .run()?;
         }
 
-        // Build the Genesis object
+        // Build the unsigned checkpoint
         let command = Ceremony {
             path: Some(dir.path().into()),
-            command: CeremonyCommand::Build,
+            protocol_version: None,
+            command: CeremonyCommand::BuildUnsignedCheckpoint,
         };
         command.run()?;
 
@@ -375,16 +375,25 @@ mod test {
         for (key, _worker_key, _network_key, _account_key, _validator) in &validators {
             let command = Ceremony {
                 path: Some(dir.path().into()),
+                protocol_version: None,
                 command: CeremonyCommand::VerifyAndSign {
                     key_file: key.into(),
                 },
             };
             command.run()?;
+
+            Ceremony {
+                path: Some(dir.path().into()),
+                protocol_version: None,
+                command: CeremonyCommand::ValidateState,
+            }
+            .run()?;
         }
 
-        // Finalize the Ceremony
+        // Finalize the Ceremony and build the Genesis object
         let command = Ceremony {
             path: Some(dir.path().into()),
+            protocol_version: None,
             command: CeremonyCommand::Finalize,
         };
         command.run()?;

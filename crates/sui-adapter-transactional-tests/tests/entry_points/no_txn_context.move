@@ -5,8 +5,7 @@
 
 //# publish
 module Test::M {
-    use sui::tx_context::{Self, TxContext};
-    struct Obj has key {
+    public struct Obj has key {
         id: sui::object::UID,
         value: u64
     }
@@ -25,4 +24,4 @@ module Test::M {
 
 //# run Test::M::mint --sender A
 
-//# run Test::M::incr --sender A --args object(106)
+//# run Test::M::incr --sender A --args object(2,0)

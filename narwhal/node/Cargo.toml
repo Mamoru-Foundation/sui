@@ -7,61 +7,52 @@ edition = "2021"
 publish = false
 
 [dependencies]
-arc-swap = { version = "1.5.1", features = ["serde"] }
-async-trait = "0.1.57"
-bincode = "1.3.3"
-bytes = "1.2.1"
-cfg-if = "1.0.0"
-clap = "2.34"
-dhat = { version = "0.3.2", optional = true }
-futures = "0.3.24"
-multiaddr = "0.16.0"
-rand = "0.8.5"
-thiserror = "1.0.35"
-tokio = { version = "1.20.1", features = ["full"] }
-tokio-stream = "0.1.10"
-tokio-util = { version = "0.7.4", features = ["codec"] }
-tracing = "0.1.36"
-tracing-log = "0.1.3"
-tracing-subscriber = { version = "0.3.15", features = ["time", "env-filter"] }
-url = "2.3.1"
-axum = "0.5.16"
-itertools = "0.10.5"
+arc-swap.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+cfg-if.workspace = true
+# clap.workspace = true
+clap = { version = "4", features = ["derive"] }
+futures.workspace = true
+rand.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+axum.workspace = true
 
 config = { path = "../config", package = "narwhal-config" }
-consensus = { path = "../consensus", package = "narwhal-consensus" }
 fastcrypto.workspace = true
 crypto = { path = "../crypto", package = "narwhal-crypto" }
 executor = { path = "../executor", package = "narwhal-executor" }
 network = { path = "../network", package = "narwhal-network" }
 primary = { path = "../primary", package = "narwhal-primary" }
-prometheus = "0.13.3"
+prometheus.workspace = true
 storage = { path = "../storage", package = "narwhal-storage" }
 types = { path = "../types", package = "narwhal-types" }
 worker = { path = "../worker", package = "narwhal-worker" }
-eyre = "0.6.8"
+eyre.workspace = true
+sui-keys.workspace = true
+sui-types.workspace = true
+sui-protocol-config.workspace = true
 
-store = { path = "../../crates/typed-store", package = "typed-store" }
+mysten-metrics.workspace = true
 mysten-network.workspace = true
 telemetry-subscribers.workspace = true
 
-sui-metrics = { path = "../../crates/sui-metrics" }
-workspace-hack.workspace = true
-
 anemo.workspace = true
-reqwest = { version = "0.11.12", features = ["json"] }
-once_cell = "1.16.0"
+reqwest.workspace = true
 
 [dev-dependencies]
-pretty_assertions = "1.3.0"
-serde-reflection = "0.3.6"
-serde_yaml = "0.8.26"
-structopt = "0.3.26"
+pretty_assertions.workspace = true
+serde-reflection.workspace = true
+serde_yaml.workspace = true
 test-utils = { path = "../test-utils", package = "narwhal-test-utils" }
 
 [features]
-benchmark = ["worker/benchmark", "primary/benchmark", "consensus/benchmark"]
-dhat-heap = ["dhat"]    # if you are doing heap profiling
+benchmark = ["worker/benchmark", "primary/benchmark"]
 trace_transaction = ["worker/trace_transaction"]
 
 [[bin]]

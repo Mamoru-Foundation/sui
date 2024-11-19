@@ -8,43 +8,39 @@
 //# publish
 
 module t::m {
-    use sui::object::{Self, UID};
-    use sui::transfer;
-    use sui::tx_context::{sender, TxContext};
-
-    struct Obj has key, store {
+    public struct Obj has key, store {
         id: UID,
     }
 
     public entry fun create(ctx: &mut TxContext) {
-        let o = Obj { id: object::new(ctx) };
+        let mut o = Obj { id: object::new(ctx) };
         sui::dynamic_field::add(&mut o.id, 0, Obj { id: object::new(ctx) });
         sui::dynamic_object_field::add(&mut o.id, 0, Obj { id: object::new(ctx) });
-        transfer::transfer(o, sender(ctx))
+        transfer::public_transfer(o, ctx.sender())
     }
 
     public entry fun share(o: Obj) {
-        transfer::share_object(o)
+        transfer::public_share_object(o)
     }
 
     public entry fun share_wrapped(o: &mut Obj) {
         let inner: Obj = sui::dynamic_field::remove(&mut o.id, 0);
-        transfer::share_object(inner)
+        transfer::public_share_object(inner)
     }
 
     public entry fun share_child(o: &mut Obj) {
         let inner: Obj = sui::dynamic_object_field::remove(&mut o.id, 0);
-        transfer::share_object(inner)
+        transfer::public_share_object(inner)
     }
 
 }
 
 //# run t::m::create --sender A
 
-//# view-object 109
+//# view-object 2,2
 
-//# run t::m::share --args object(109) --sender A
+//# run t::m::share --args object(2,2) --sender A
 
-//# run t::m::share_wrapped --args object(109) --sender A
+//# run t::m::share_wrapped --args object(2,2) --sender A
 
-//# run t::m::share_child --args object(109) --sender A
+//# run t::m::share_child --args object(2,2) --sender A

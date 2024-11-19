@@ -1,7 +1,10 @@
 {
-  "recommendations": [
-    "move.move-analyzer",
-    "rust-lang.rust-analyzer",
-    "esbenp.prettier-vscode"
-  ]
+    "recommendations": [
+        "mysten.move",
+        "damirka.move-syntax",
+        "rust-lang.rust-analyzer",
+        "esbenp.prettier-vscode",
+        "ms-playwright.playwright",
+        "dbaeumer.vscode-eslint"
+    ]
 }
