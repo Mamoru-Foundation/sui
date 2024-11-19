@@ -9,37 +9,34 @@
 
 module test::object_basics {
     use sui::event;
-    use sui::object::{Self, UID};
-    use sui::tx_context::{Self, TxContext};
-    use sui::transfer;
 
-    struct Object has key, store {
+    public struct Object has key, store {
         id: UID,
         value: u64,
     }
 
-    struct Wrapper has key {
+    public struct Wrapper has key {
         id: UID,
         o: Object
     }
 
-    struct NewValueEvent has copy, drop {
+    public struct NewValueEvent has copy, drop {
         new_value: u64
     }
 
     public entry fun create(value: u64, recipient: address, ctx: &mut TxContext) {
-        transfer::transfer(
+        transfer::public_transfer(
             Object { id: object::new(ctx), value },
             recipient
         )
     }
 
-    public entry fun transfer(o: Object, recipient: address) {
-        transfer::transfer(o, recipient)
+    public entry fun transfer_(o: Object, recipient: address) {
+        transfer::public_transfer(o, recipient)
     }
 
     public entry fun freeze_object(o: Object) {
-        transfer::freeze_object(o)
+        transfer::public_freeze_object(o)
     }
 
     public entry fun set_value(o: &mut Object, value: u64) {
@@ -65,20 +62,20 @@ module test::object_basics {
     public entry fun unwrap(w: Wrapper, ctx: &mut TxContext) {
         let Wrapper { id, o } = w;
         object::delete(id);
-        transfer::transfer(o, tx_context::sender(ctx))
+        transfer::public_transfer(o, tx_context::sender(ctx))
     }
 }
 
 //# run test::object_basics::create --sender A --args 10 @A
 
-//# view-object 107
+//# view-object 2,0
 
-//# run test::object_basics::transfer --sender A --args object(107) @B
+//# run test::object_basics::transfer_ --sender A --args object(2,0) @B
 
-//# view-object 107
+//# view-object 2,0
 
 //# run test::object_basics::create --sender B --args 20 @B
 
-//# run test::object_basics::update --sender B --args object(107) object(110) --view-events
+//# run test::object_basics::update --sender B --args object(2,0) object(6,0)
 
-//# run test::object_basics::delete --sender B --args object(107)
+//# run test::object_basics::delete --sender B --args object(2,0)

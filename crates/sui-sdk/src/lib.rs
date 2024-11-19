@@ -1,76 +1,444 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-extern crate core;
+//! The Sui Rust SDK
+//!
+//! It aims at providing a similar SDK functionality like the one existing for
+//! [TypeScript](https://github.com/MystenLabs/sui/tree/main/sdk/typescript/).
+//! Sui Rust SDK builds on top of the [JSON RPC API](https://docs.sui.io/sui-jsonrpc)
+//! and therefore many of the return types are the ones specified in [sui_types].
+//!
+//! The API is split in several parts corresponding to different functionalities
+//! as following:
+//! * [CoinReadApi] - provides read-only functions to work with the coins
+//! * [EventApi] - provides event related functions functions to
+//! * [GovernanceApi] - provides functionality related to staking
+//! * [QuorumDriverApi] - provides functionality to execute a transaction
+//!     block and submit it to the fullnode(s)
+//! * [ReadApi] - provides functions for retrieving data about different
+//!     objects and transactions
+//! * <a href="../sui_transaction_builder/struct.TransactionBuilder.html" title="struct sui_transaction_builder::TransactionBuilder">TransactionBuilder</a> - provides functions for building transactions
+//!
+//! # Usage
+//! The main way to interact with the API is through the [SuiClientBuilder],
+//! which returns a [SuiClient] object from which the user can access the
+//! various APIs.
+//!
+//! ## Getting Started
+//! Add the Rust SDK to the project by running `cargo add sui-sdk` in the root
+//! folder of your Rust project.
+//!
+//! The main building block for the Sui Rust SDK is the [SuiClientBuilder],
+//! which provides a simple and straightforward way of connecting to a Sui
+//! network and having access to the different available APIs.
+//!
+//! A simple example that connects to a running Sui local network,
+//! the Sui devnet, and the Sui testnet is shown below.
+//! To successfully run this program, make sure to spin up a local
+//! network with a local validator, a fullnode, and a faucet server
+//! (see [here](https://github.com/stefan-mysten/sui/tree/rust_sdk_api_examples/crates/sui-sdk/examples#preqrequisites) for more information).
+//!
+//! ```rust,no_run
+//! use sui_sdk::SuiClientBuilder;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), anyhow::Error> {
+//!
+//!     let sui = SuiClientBuilder::default()
+//!         .build("http://127.0.0.1:9000") // provide the Sui network URL
+//!         .await?;
+//!     println!("Sui local network version: {:?}", sui.api_version());
+//!
+//!     // local Sui network, same result as above except using the dedicated function
+//!     let sui_local = SuiClientBuilder::default().build_localnet().await?;
+//!     println!("Sui local network version: {:?}", sui_local.api_version());
+//!
+//!     // Sui devnet running at `https://fullnode.devnet.io:443`
+//!     let sui_devnet = SuiClientBuilder::default().build_devnet().await?;
+//!     println!("Sui devnet version: {:?}", sui_devnet.api_version());
+//!
+//!     // Sui testnet running at `https://testnet.devnet.io:443`
+//!     let sui_testnet = SuiClientBuilder::default().build_testnet().await?;
+//!     println!("Sui testnet version: {:?}", sui_testnet.api_version());
+//!     Ok(())
+//!
+//! }
+//! ```
+//!
+//! ## Examples
+//!
+//! For detailed examples, please check the APIs docs and the examples folder
+//! in the [main repository](https://github.com/MystenLabs/sui/tree/main/crates/sui-sdk/examples).
 
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use anyhow::{anyhow, bail};
 use async_trait::async_trait;
-use futures::StreamExt;
-use futures_core::Stream;
-use jsonrpsee::core::client::{ClientT, Subscription};
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use base64::Engine;
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::http_client::{HeaderMap, HeaderValue, HttpClient, HttpClientBuilder};
+use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-
-use rpc_types::{
-    GetPastObjectDataResponse, SuiCertifiedTransaction, SuiExecuteTransactionResponse,
-    SuiParsedTransactionResponse, SuiTransactionEffects,
-};
 use serde_json::Value;
-pub use sui_config::gateway;
-use sui_core::gateway_state::TxSeqNumber;
+
+use move_core_types::language_storage::StructTag;
 pub use sui_json as json;
-use sui_json_rpc::api::EventReadApiClient;
-use sui_json_rpc::api::EventStreamingApiClient;
-use sui_json_rpc::api::RpcBcsApiClient;
-use sui_json_rpc::api::RpcFullNodeReadApiClient;
-use sui_json_rpc::api::RpcReadApiClient;
-use sui_json_rpc::api::TransactionExecutionApiClient;
+use sui_json_rpc_api::{
+    CLIENT_SDK_TYPE_HEADER, CLIENT_SDK_VERSION_HEADER, CLIENT_TARGET_API_VERSION_HEADER,
+};
 pub use sui_json_rpc_types as rpc_types;
 use sui_json_rpc_types::{
-    EventPage, GetObjectDataResponse, GetRawObjectDataResponse, SuiEventEnvelope, SuiEventFilter,
-    SuiObjectInfo, SuiTransactionResponse, TransactionsPage,
+    ObjectsPage, SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse,
+    SuiObjectResponseQuery,
 };
 use sui_transaction_builder::{DataReader, TransactionBuilder};
 pub use sui_types as types;
-use sui_types::base_types::{ObjectID, SuiAddress, TransactionDigest};
-use sui_types::event::EventID;
-use sui_types::messages::VerifiedTransaction;
-use sui_types::query::{EventQuery, TransactionQuery};
-use types::base_types::SequenceNumber;
-use types::committee::EpochId;
-use types::error::TRANSACTION_NOT_FOUND_MSG_PREFIX;
-use types::messages::{CommitteeInfoResponse, ExecuteTransactionRequestType};
+use sui_types::base_types::{ObjectID, ObjectInfo, SuiAddress};
 
-#[cfg(msim)]
-pub mod embedded_gateway;
+use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
+use crate::error::{Error, SuiRpcResult};
 
-const WAIT_FOR_TX_TIMEOUT_SEC: u64 = 10;
+pub mod apis;
+pub mod error;
+pub mod json_rpc_error;
+pub mod sui_client_config;
+pub mod wallet_context;
 
-#[derive(Debug)]
-pub struct TransactionExecutionResult {
-    pub tx_digest: TransactionDigest,
-    pub tx_cert: Option<SuiCertifiedTransaction>,
-    pub effects: Option<SuiTransactionEffects>,
-    pub confirmed_local_execution: bool,
-    pub timestamp_ms: Option<u64>,
-    pub parsed_data: Option<SuiParsedTransactionResponse>,
+pub const SUI_COIN_TYPE: &str = "0x2::sui::SUI";
+pub const SUI_LOCAL_NETWORK_URL: &str = "http://127.0.0.1:9000";
+pub const SUI_LOCAL_NETWORK_URL_0: &str = "http://0.0.0.0:9000";
+pub const SUI_LOCAL_NETWORK_GAS_URL: &str = "http://127.0.0.1:5003/gas";
+pub const SUI_DEVNET_URL: &str = "https://fullnode.devnet.sui.io:443";
+pub const SUI_TESTNET_URL: &str = "https://fullnode.testnet.sui.io:443";
+
+/// A Sui client builder for connecting to the Sui network
+///
+/// By default the `maximum concurrent requests` is set to 256 and
+/// the `request timeout` is set to 60 seconds. These can be adjusted using the
+/// `max_concurrent_requests` function, and the `request_timeout` function.
+/// If you use the WebSocket, consider setting the `ws_ping_interval` field to a
+/// value of your choice to prevent the inactive WS subscription being
+/// disconnected due to proxy timeout.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use sui_sdk::SuiClientBuilder;
+/// #[tokio::main]
+/// async fn main() -> Result<(), anyhow::Error> {
+///     let sui = SuiClientBuilder::default()
+///         .build("http://127.0.0.1:9000")
+///         .await?;
+///
+///     println!("Sui local network version: {:?}", sui.api_version());
+///     Ok(())
+/// }
+/// ```
+pub struct SuiClientBuilder {
+    request_timeout: Duration,
+    max_concurrent_requests: usize,
+    ws_url: Option<String>,
+    ws_ping_interval: Option<Duration>,
+    basic_auth: Option<(String, String)>,
 }
 
+impl Default for SuiClientBuilder {
+    fn default() -> Self {
+        Self {
+            request_timeout: Duration::from_secs(60),
+            max_concurrent_requests: 256,
+            ws_url: None,
+            ws_ping_interval: None,
+            basic_auth: None,
+        }
+    }
+}
+
+impl SuiClientBuilder {
+    /// Set the request timeout to the specified duration
+    pub fn request_timeout(mut self, request_timeout: Duration) -> Self {
+        self.request_timeout = request_timeout;
+        self
+    }
+
+    /// Set the max concurrent requests allowed
+    pub fn max_concurrent_requests(mut self, max_concurrent_requests: usize) -> Self {
+        self.max_concurrent_requests = max_concurrent_requests;
+        self
+    }
+
+    /// Set the WebSocket URL for the Sui network
+    pub fn ws_url(mut self, url: impl AsRef<str>) -> Self {
+        self.ws_url = Some(url.as_ref().to_string());
+        self
+    }
+
+    /// Set the WebSocket ping interval
+    pub fn ws_ping_interval(mut self, duration: Duration) -> Self {
+        self.ws_ping_interval = Some(duration);
+        self
+    }
+
+    /// Set the basic auth credentials for the HTTP client
+    pub fn basic_auth(mut self, username: impl AsRef<str>, password: impl AsRef<str>) -> Self {
+        self.basic_auth = Some((username.as_ref().to_string(), password.as_ref().to_string()));
+        self
+    }
+
+    /// Returns a [SuiClient] object connected to the Sui network running at the URI provided.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use sui_sdk::SuiClientBuilder;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), anyhow::Error> {
+    ///     let sui = SuiClientBuilder::default()
+    ///         .build("http://127.0.0.1:9000")
+    ///         .await?;
+    ///
+    ///     println!("Sui local version: {:?}", sui.api_version());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn build(self, http: impl AsRef<str>) -> SuiRpcResult<SuiClient> {
+        let client_version = env!("CARGO_PKG_VERSION");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CLIENT_TARGET_API_VERSION_HEADER,
+            // in rust, the client version is the same as the target api version
+            HeaderValue::from_static(client_version),
+        );
+        headers.insert(
+            CLIENT_SDK_VERSION_HEADER,
+            HeaderValue::from_static(client_version),
+        );
+        headers.insert(CLIENT_SDK_TYPE_HEADER, HeaderValue::from_static("rust"));
+
+        if let Some((username, password)) = self.basic_auth {
+            let auth = base64::engine::general_purpose::STANDARD
+                .encode(format!("{}:{}", username, password));
+            headers.insert(
+                "authorization",
+                // reqwest::header::AUTHORIZATION,
+                HeaderValue::from_str(&format!("Basic {}", auth)).unwrap(),
+            );
+        }
+
+        let ws = if let Some(url) = self.ws_url {
+            let mut builder = WsClientBuilder::default()
+                .max_request_body_size(2 << 30)
+                .max_concurrent_requests(self.max_concurrent_requests)
+                .set_headers(headers.clone())
+                .request_timeout(self.request_timeout);
+
+            if let Some(duration) = self.ws_ping_interval {
+                builder = builder.ping_interval(duration)
+            }
+
+            builder.build(url).await.ok()
+        } else {
+            None
+        };
+
+        let http = HttpClientBuilder::default()
+            .max_request_body_size(2 << 30)
+            .max_concurrent_requests(self.max_concurrent_requests)
+            .set_headers(headers.clone())
+            .request_timeout(self.request_timeout)
+            .build(http)?;
+
+        let info = Self::get_server_info(&http, &ws).await?;
+
+        let rpc = RpcClient { http, ws, info };
+        let api = Arc::new(rpc);
+        let read_api = Arc::new(ReadApi::new(api.clone()));
+        let quorum_driver_api = QuorumDriverApi::new(api.clone());
+        let event_api = EventApi::new(api.clone());
+        let transaction_builder = TransactionBuilder::new(read_api.clone());
+        let coin_read_api = CoinReadApi::new(api.clone());
+        let governance_api = GovernanceApi::new(api.clone());
+
+        Ok(SuiClient {
+            api,
+            transaction_builder,
+            read_api,
+            coin_read_api,
+            event_api,
+            quorum_driver_api,
+            governance_api,
+        })
+    }
+
+    /// Returns a [SuiClient] object that is ready to interact with the local
+    /// development network (by default it expects the Sui network to be
+    /// up and running at `127.0.0.1:9000`).
+    ///
+    /// For connecting to a custom URI, use the `build` function instead.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use sui_sdk::SuiClientBuilder;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), anyhow::Error> {
+    ///     let sui = SuiClientBuilder::default()
+    ///         .build_localnet()
+    ///         .await?;
+    ///
+    ///     println!("Sui local version: {:?}", sui.api_version());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn build_localnet(self) -> SuiRpcResult<SuiClient> {
+        self.build(SUI_LOCAL_NETWORK_URL).await
+    }
+
+    /// Returns a [SuiClient] object that is ready to interact with the Sui devnet.
+    ///
+    /// For connecting to a custom URI, use the `build` function instead..
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use sui_sdk::SuiClientBuilder;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), anyhow::Error> {
+    ///     let sui = SuiClientBuilder::default()
+    ///         .build_devnet()
+    ///         .await?;
+    ///
+    ///     println!("{:?}", sui.api_version());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn build_devnet(self) -> SuiRpcResult<SuiClient> {
+        self.build(SUI_DEVNET_URL).await
+    }
+
+    /// Returns a [SuiClient] object that is ready to interact with the Sui testnet.
+    ///
+    /// For connecting to a custom URI, use the `build` function instead.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use sui_sdk::SuiClientBuilder;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), anyhow::Error> {
+    ///     let sui = SuiClientBuilder::default()
+    ///         .build_testnet()
+    ///         .await?;
+    ///
+    ///     println!("{:?}", sui.api_version());
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn build_testnet(self) -> SuiRpcResult<SuiClient> {
+        self.build(SUI_TESTNET_URL).await
+    }
+
+    /// Return the server information as a `ServerInfo` structure.
+    ///
+    /// Fails with an error if it cannot call the RPC discover.
+    async fn get_server_info(
+        http: &HttpClient,
+        ws: &Option<WsClient>,
+    ) -> Result<ServerInfo, Error> {
+        let rpc_spec: Value = http.request("rpc.discover", rpc_params![]).await?;
+        let version = rpc_spec
+            .pointer("/info/version")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::DataError("Fail parsing server version from rpc.discover endpoint.".into())
+            })?;
+        let rpc_methods = Self::parse_methods(&rpc_spec)?;
+
+        let subscriptions = if let Some(ws) = ws {
+            match ws.request("rpc.discover", rpc_params![]).await {
+                Ok(rpc_spec) => Self::parse_methods(&rpc_spec)?,
+                Err(_) => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        Ok(ServerInfo {
+            rpc_methods,
+            subscriptions,
+            version: version.to_string(),
+        })
+    }
+
+    fn parse_methods(server_spec: &Value) -> Result<Vec<String>, Error> {
+        let methods = server_spec
+            .pointer("/methods")
+            .and_then(|methods| methods.as_array())
+            .ok_or_else(|| {
+                Error::DataError(
+                    "Fail parsing server information from rpc.discover endpoint.".into(),
+                )
+            })?;
+
+        Ok(methods
+            .iter()
+            .flat_map(|method| method["name"].as_str())
+            .map(|s| s.into())
+            .collect())
+    }
+}
+
+/// SuiClient is the basic type that provides all the necessary abstractions for interacting with the Sui network.
+///
+/// # Usage
+///
+/// Use [SuiClientBuilder] to build a [SuiClient].
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use sui_sdk::types::base_types::SuiAddress;
+/// use sui_sdk::SuiClientBuilder;
+/// use std::str::FromStr;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), anyhow::Error> {
+///     let sui = SuiClientBuilder::default()
+///      .build("http://127.0.0.1:9000")
+///      .await?;
+///
+///     println!("{:?}", sui.available_rpc_methods());
+///     println!("{:?}", sui.available_subscriptions());
+///     println!("{:?}", sui.api_version());
+///
+///     let address = SuiAddress::from_str("0x0000....0000")?;
+///     let owned_objects = sui
+///        .read_api()
+///        .get_owned_objects(address, None, None, None)
+///        .await?;
+///
+///     println!("{:?}", owned_objects);
+///
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct SuiClient {
     api: Arc<RpcClient>,
     transaction_builder: TransactionBuilder,
     read_api: Arc<ReadApi>,
+    coin_read_api: CoinReadApi,
     event_api: EventApi,
-    quorum_driver: QuorumDriver,
+    quorum_driver_api: QuorumDriverApi,
+    governance_api: GovernanceApi,
 }
 
-struct RpcClient {
+pub(crate) struct RpcClient {
     http: HttpClient,
     ws: Option<WsClient>,
     info: ServerInfo,
@@ -86,410 +454,136 @@ impl Debug for RpcClient {
     }
 }
 
+/// ServerInfo contains all the useful information regarding the API version, the available RPC calls, and subscriptions.
 struct ServerInfo {
     rpc_methods: Vec<String>,
     subscriptions: Vec<String>,
     version: String,
 }
 
-impl RpcClient {
-    pub async fn new(
-        http: &str,
-        ws: Option<&str>,
-        request_timeout: Option<Duration>,
-    ) -> Result<Self, anyhow::Error> {
-        let mut http_builder = HttpClientBuilder::default();
-        if let Some(request_timeout) = request_timeout {
-            http_builder = http_builder.request_timeout(request_timeout);
-        }
-        let http = http_builder.build(http)?;
-
-        let ws = if let Some(url) = ws {
-            let mut ws_builder = WsClientBuilder::default();
-            if let Some(request_timeout) = request_timeout {
-                ws_builder = ws_builder.request_timeout(request_timeout);
-            }
-            let ws = ws_builder.build(url).await?;
-            Some(ws)
-        } else {
-            None
-        };
-        let info = Self::get_server_info(&http, &ws).await?;
-        Ok(Self { http, ws, info })
-    }
-
-    async fn get_server_info(
-        http: &HttpClient,
-        ws: &Option<WsClient>,
-    ) -> Result<ServerInfo, anyhow::Error> {
-        let rpc_spec: Value = http
-            .request("rpc.discover", None)
-            .await
-            .map_err(|e| anyhow!("Fail to connect to the RPC server: {e}"))?;
-        let version = rpc_spec
-            .pointer("/info/version")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Fail parsing server version from rpc.discover endpoint."))?;
-        let rpc_methods = Self::parse_methods(&rpc_spec)?;
-
-        let subscriptions = if let Some(ws) = ws {
-            let rpc_spec: Value = ws
-                .request("rpc.discover", None)
-                .await
-                .map_err(|e| anyhow!("Fail to connect to the Websocket server: {e}"))?;
-            Self::parse_methods(&rpc_spec)?
-        } else {
-            Vec::new()
-        };
-        Ok(ServerInfo {
-            rpc_methods,
-            subscriptions,
-            version: version.to_string(),
-        })
-    }
-
-    fn parse_methods(server_spec: &Value) -> Result<Vec<String>, anyhow::Error> {
-        let methods = server_spec
-            .pointer("/methods")
-            .and_then(|methods| methods.as_array())
-            .ok_or_else(|| {
-                anyhow!("Fail parsing server information from rpc.discover endpoint.")
-            })?;
-
-        Ok(methods
-            .iter()
-            .flat_map(|method| method["name"].as_str())
-            .map(|s| s.into())
-            .collect())
-    }
-}
-
 impl SuiClient {
-    pub async fn new(
-        http_url: &str,
-        ws_url: Option<&str>,
-        request_timeout: Option<Duration>,
-    ) -> Result<Self, anyhow::Error> {
-        let rpc = RpcClient::new(http_url, ws_url, request_timeout).await?;
-        let api = Arc::new(rpc);
-        let read_api = Arc::new(ReadApi { api: api.clone() });
-        let quorum_driver = QuorumDriver { api: api.clone() };
-        let event_api = EventApi(api.clone());
-        let transaction_builder = TransactionBuilder(read_api.clone());
-
-        Ok(SuiClient {
-            api,
-            transaction_builder,
-            read_api,
-            event_api,
-            quorum_driver,
-        })
-    }
-
+    /// Returns a list of RPC methods supported by the node the client is connected to.
     pub fn available_rpc_methods(&self) -> &Vec<String> {
         &self.api.info.rpc_methods
     }
 
+    /// Returns a list of streaming/subscription APIs supported by the node the client is connected to.
     pub fn available_subscriptions(&self) -> &Vec<String> {
         &self.api.info.subscriptions
     }
 
+    /// Returns the API version information as a string.
+    ///
+    /// The format of this string is `<major>.<minor>.<patch>`, e.g., `1.6.0`,
+    /// and it is retrieved from the OpenRPC specification via the discover service method.
     pub fn api_version(&self) -> &str {
         &self.api.info.version
     }
 
-    pub fn check_api_version(&self) -> Result<(), anyhow::Error> {
+    /// Verifies if the API version matches the server version and returns an error if they do not match.
+    pub fn check_api_version(&self) -> SuiRpcResult<()> {
         let server_version = self.api_version();
         let client_version = env!("CARGO_PKG_VERSION");
         if server_version != client_version {
-            return Err(anyhow!("Client/Server api version mismatch, client api version : {client_version}, server api version : {server_version}"));
+            return Err(Error::ServerVersionMismatch {
+                client_version: client_version.to_string(),
+                server_version: server_version.to_string(),
+            });
         };
         Ok(())
     }
-}
 
-#[derive(Debug)]
-pub struct ReadApi {
-    api: Arc<RpcClient>,
-}
-
-impl ReadApi {
-    pub async fn get_objects_owned_by_address(
-        &self,
-        address: SuiAddress,
-    ) -> anyhow::Result<Vec<SuiObjectInfo>> {
-        Ok(self.api.http.get_objects_owned_by_address(address).await?)
+    /// Returns a reference to the coin read API.
+    pub fn coin_read_api(&self) -> &CoinReadApi {
+        &self.coin_read_api
     }
 
-    pub async fn get_objects_owned_by_object(
-        &self,
-        object_id: ObjectID,
-    ) -> anyhow::Result<Vec<SuiObjectInfo>> {
-        Ok(self.api.http.get_objects_owned_by_object(object_id).await?)
-    }
-
-    pub async fn get_parsed_object(
-        &self,
-        object_id: ObjectID,
-    ) -> anyhow::Result<GetObjectDataResponse> {
-        Ok(self.api.http.get_object(object_id).await?)
-    }
-
-    pub async fn try_get_parsed_past_object(
-        &self,
-        object_id: ObjectID,
-        version: SequenceNumber,
-    ) -> anyhow::Result<GetPastObjectDataResponse> {
-        Ok(self
-            .api
-            .http
-            .try_get_past_object(object_id, version)
-            .await?)
-    }
-
-    pub async fn get_object(
-        &self,
-        object_id: ObjectID,
-    ) -> anyhow::Result<GetRawObjectDataResponse> {
-        Ok(self.api.http.get_raw_object(object_id).await?)
-    }
-
-    pub async fn get_total_transaction_number(&self) -> anyhow::Result<u64> {
-        Ok(self.api.http.get_total_transaction_number().await?)
-    }
-
-    pub async fn get_transactions_in_range(
-        &self,
-        start: TxSeqNumber,
-        end: TxSeqNumber,
-    ) -> anyhow::Result<Vec<TransactionDigest>> {
-        Ok(self.api.http.get_transactions_in_range(start, end).await?)
-    }
-
-    pub async fn get_transaction(
-        &self,
-        digest: TransactionDigest,
-    ) -> anyhow::Result<SuiTransactionResponse> {
-        Ok(self.api.http.get_transaction(digest).await?)
-    }
-
-    pub async fn get_committee_info(
-        &self,
-        epoch: Option<EpochId>,
-    ) -> anyhow::Result<CommitteeInfoResponse> {
-        Ok(self.api.http.get_committee_info(epoch).await?)
-    }
-
-    pub async fn get_transactions(
-        &self,
-        query: TransactionQuery,
-        cursor: Option<TransactionDigest>,
-        limit: Option<usize>,
-        descending_order: Option<bool>,
-    ) -> anyhow::Result<TransactionsPage> {
-        Ok(self
-            .api
-            .http
-            .get_transactions(query, cursor, limit, descending_order)
-            .await?)
-    }
-}
-
-#[derive(Clone)]
-pub struct EventApi(Arc<RpcClient>);
-
-impl EventApi {
-    pub async fn subscribe_event(
-        &self,
-        filter: SuiEventFilter,
-    ) -> anyhow::Result<impl Stream<Item = Result<SuiEventEnvelope, anyhow::Error>>> {
-        match &self.0.ws {
-            Some(c) => {
-                let subscription: Subscription<SuiEventEnvelope> =
-                    c.subscribe_event(filter).await?;
-                Ok(subscription.map(|item| Ok(item?)))
-            }
-            _ => Err(anyhow!("Subscription only supported by WebSocket client.")),
-        }
-    }
-
-    pub async fn get_events(
-        &self,
-        query: EventQuery,
-        cursor: Option<EventID>,
-        limit: Option<usize>,
-        descending_order: Option<bool>,
-    ) -> anyhow::Result<EventPage> {
-        Ok(self
-            .0
-            .http
-            .get_events(query, cursor, limit, descending_order)
-            .await?)
-    }
-}
-
-#[derive(Clone)]
-pub struct QuorumDriver {
-    api: Arc<RpcClient>,
-}
-
-impl QuorumDriver {
-    /// Execute a transaction with a FullNode client or embedded Gateway.
-    /// `request_type` is ignored when the client is an embedded Gateway.
-    /// For Fullnode client, `request_type` defaults to
-    /// `ExecuteTransactionRequestType::WaitForLocalExecution`.
-    /// When `ExecuteTransactionRequestType::WaitForLocalExecution` is used,
-    /// but returned `confirmed_local_execution` is false, the client polls
-    /// the fullnode untils the fullnode recognizes this transaction, or
-    /// until times out (see WAIT_FOR_TX_TIMEOUT_SEC). If it times out, an
-    /// error is returned from this call.
-    pub async fn execute_transaction(
-        &self,
-        tx: VerifiedTransaction,
-        request_type: Option<ExecuteTransactionRequestType>,
-    ) -> anyhow::Result<TransactionExecutionResult> {
-        let (tx_bytes, flag, signature, pub_key) = tx.to_network_data_for_execution();
-        let request_type =
-            request_type.unwrap_or(ExecuteTransactionRequestType::WaitForLocalExecution);
-        let resp = TransactionExecutionApiClient::execute_transaction(
-            &self.api.http,
-            tx_bytes,
-            flag,
-            signature,
-            pub_key,
-            request_type.clone(),
-        )
-        .await?;
-
-        Ok(match (request_type, resp) {
-            (
-                ExecuteTransactionRequestType::ImmediateReturn,
-                SuiExecuteTransactionResponse::ImmediateReturn { tx_digest },
-            ) => TransactionExecutionResult {
-                tx_digest,
-                tx_cert: None,
-                effects: None,
-                confirmed_local_execution: false,
-                timestamp_ms: None,
-                parsed_data: None,
-            },
-            (
-                ExecuteTransactionRequestType::WaitForTxCert,
-                SuiExecuteTransactionResponse::TxCert { certificate },
-            ) => TransactionExecutionResult {
-                tx_digest: certificate.transaction_digest,
-                tx_cert: Some(certificate),
-                effects: None,
-                confirmed_local_execution: false,
-                timestamp_ms: None,
-                parsed_data: None,
-            },
-            (
-                ExecuteTransactionRequestType::WaitForEffectsCert,
-                SuiExecuteTransactionResponse::EffectsCert {
-                    certificate,
-                    effects,
-                    confirmed_local_execution,
-                },
-            ) => TransactionExecutionResult {
-                tx_digest: certificate.transaction_digest,
-                tx_cert: Some(certificate),
-                effects: Some(effects.effects),
-                confirmed_local_execution,
-                timestamp_ms: None,
-                parsed_data: None,
-            },
-            (
-                ExecuteTransactionRequestType::WaitForLocalExecution,
-                SuiExecuteTransactionResponse::EffectsCert {
-                    certificate,
-                    effects,
-                    confirmed_local_execution,
-                },
-            ) => {
-                if !confirmed_local_execution {
-                    Self::wait_until_fullnode_sees_tx(&self.api, certificate.transaction_digest)
-                        .await?;
-                }
-                TransactionExecutionResult {
-                    tx_digest: certificate.transaction_digest,
-                    tx_cert: Some(certificate),
-                    effects: Some(effects.effects),
-                    confirmed_local_execution,
-                    timestamp_ms: None,
-                    parsed_data: None,
-                }
-            }
-            (other_request_type, other_resp) => {
-                bail!(
-                    "Invalid response type {:?} for request type: {:?}",
-                    other_resp,
-                    other_request_type
-                );
-            }
-        })
-    }
-
-    async fn wait_until_fullnode_sees_tx(
-        c: &RpcClient,
-        tx_digest: TransactionDigest,
-    ) -> anyhow::Result<()> {
-        let start = Instant::now();
-        loop {
-            let resp = RpcReadApiClient::get_transaction(&c.http, tx_digest).await;
-            if let Err(err) = resp {
-                if err.to_string().contains(TRANSACTION_NOT_FOUND_MSG_PREFIX) {
-                    tokio::time::sleep(Duration::from_millis(300)).await;
-                } else {
-                    // immediately return on other types of errors
-                    bail!(
-                        "Encountered error when confirming tx status for {:?}, err: {:?}",
-                        tx_digest,
-                        err
-                    );
-                }
-            } else {
-                return Ok(());
-            }
-            if start.elapsed().as_secs() >= WAIT_FOR_TX_TIMEOUT_SEC {
-                bail!(
-                    "Failed to confirm tx status for {:?} within {} seconds.",
-                    tx_digest,
-                    WAIT_FOR_TX_TIMEOUT_SEC
-                );
-            }
-        }
-    }
-}
-
-impl SuiClient {
-    pub fn transaction_builder(&self) -> &TransactionBuilder {
-        &self.transaction_builder
-    }
-    pub fn read_api(&self) -> &ReadApi {
-        &self.read_api
-    }
+    /// Returns a reference to the event API.
     pub fn event_api(&self) -> &EventApi {
         &self.event_api
     }
-    pub fn quorum_driver(&self) -> &QuorumDriver {
-        &self.quorum_driver
+
+    /// Returns a reference to the governance API.
+    pub fn governance_api(&self) -> &GovernanceApi {
+        &self.governance_api
+    }
+
+    /// Returns a reference to the quorum driver API.
+    pub fn quorum_driver_api(&self) -> &QuorumDriverApi {
+        &self.quorum_driver_api
+    }
+
+    /// Returns a reference to the read API.
+    pub fn read_api(&self) -> &ReadApi {
+        &self.read_api
+    }
+
+    /// Returns a reference to the transaction builder API.
+    pub fn transaction_builder(&self) -> &TransactionBuilder {
+        &self.transaction_builder
+    }
+
+    /// Returns a reference to the underlying http client.
+    pub fn http(&self) -> &HttpClient {
+        &self.api.http
+    }
+
+    /// Returns a reference to the underlying WebSocket client, if any.
+    pub fn ws(&self) -> Option<&WsClient> {
+        self.api.ws.as_ref()
     }
 }
 
 #[async_trait]
 impl DataReader for ReadApi {
-    async fn get_objects_owned_by_address(
+    async fn get_owned_objects(
         &self,
         address: SuiAddress,
-    ) -> Result<Vec<SuiObjectInfo>, anyhow::Error> {
-        self.get_objects_owned_by_address(address).await
+        object_type: StructTag,
+    ) -> Result<Vec<ObjectInfo>, anyhow::Error> {
+        let mut result = vec![];
+        let query = Some(SuiObjectResponseQuery {
+            filter: Some(SuiObjectDataFilter::StructType(object_type)),
+            options: Some(
+                SuiObjectDataOptions::new()
+                    .with_previous_transaction()
+                    .with_type()
+                    .with_owner(),
+            ),
+        });
+
+        let mut has_next = true;
+        let mut cursor = None;
+
+        while has_next {
+            let ObjectsPage {
+                data,
+                next_cursor,
+                has_next_page,
+            } = self
+                .get_owned_objects(address, query.clone(), cursor, None)
+                .await?;
+            result.extend(
+                data.iter()
+                    .map(|r| r.clone().try_into())
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
+            cursor = next_cursor;
+            has_next = has_next_page;
+        }
+        Ok(result)
     }
 
-    async fn get_object(
+    async fn get_object_with_options(
         &self,
         object_id: ObjectID,
-    ) -> Result<GetRawObjectDataResponse, anyhow::Error> {
-        self.get_object(object_id).await
+        options: SuiObjectDataOptions,
+    ) -> Result<SuiObjectResponse, anyhow::Error> {
+        Ok(self.get_object_with_options(object_id, options).await?)
+    }
+
+    /// Returns the reference gas price as a u64 or an error otherwise
+    async fn get_reference_gas_price(&self) -> Result<u64, anyhow::Error> {
+        Ok(self.get_reference_gas_price().await?)
     }
 }

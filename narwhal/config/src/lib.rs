@@ -9,28 +9,47 @@
 )]
 #![allow(clippy::mutable_key_type)]
 
-use arc_swap::ArcSwap;
 use crypto::{NetworkPublicKey, PublicKey};
 use fastcrypto::traits::EncodeDecodeBase64;
-use multiaddr::Multiaddr;
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use mysten_network::Multiaddr;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, OpenOptions},
     io::{BufWriter, Write as _},
-    sync::Arc,
+    num::NonZeroU32,
     time::Duration,
 };
 use thiserror::Error;
 use tracing::info;
 use utils::get_available_port;
 
+pub mod committee;
+pub use committee::*;
 mod duration_format;
 pub mod utils;
 
 /// The epoch number.
 pub type Epoch = u64;
+
+// Opaque bytes uniquely identifying the current chain. Analogue of the
+// type in `sui-types` crate.
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub struct ChainIdentifier([u8; 32]);
+
+impl ChainIdentifier {
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn unknown() -> Self {
+        Self([0; 32])
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -80,7 +99,11 @@ impl<D: DeserializeOwned> Import for D {}
 pub trait Export: Serialize {
     fn export(&self, path: &str) -> Result<(), ConfigError> {
         let writer = || -> Result<(), std::io::Error> {
-            let file = OpenOptions::new().create(true).write(true).open(path)?;
+            let file = OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(path)?;
             let mut writer = BufWriter::new(file);
             let data = serde_json::to_string_pretty(self).unwrap();
             writer.write_all(data.as_ref())?;
@@ -96,6 +119,8 @@ pub trait Export: Serialize {
 
 impl<S: Serialize> Export for S {}
 
+// TODO: This actually represents voting power (out of 10,000) and not amount staked.
+// Consider renaming to `VotingPower`.
 pub type Stake = u64;
 pub type WorkerId = u32;
 
@@ -105,8 +130,8 @@ pub type WorkerId = u32;
 /// milliseconds or seconds (e.x 5s, 10ms , 2000ms).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Parameters {
-    /// When the primary has at least `header_num_of_batches_threshold` num of batch digests
-    /// available, then it can propose a new header.
+    /// When the primary has `header_num_of_batches_threshold` num of batch digests available,
+    /// then it can propose a new header.
     #[serde(default = "Parameters::default_header_num_of_batches_threshold")]
     pub header_num_of_batches_threshold: usize,
 
@@ -114,44 +139,100 @@ pub struct Parameters {
     #[serde(default = "Parameters::default_max_header_num_of_batches")]
     pub max_header_num_of_batches: usize,
 
-    /// The maximum delay that the primary waits between generating two headers, even if the header
-    /// did not reach `max_header_num_of_batches`.
-    #[serde(with = "duration_format")]
+    /// The maximum delay that the primary should wait between generating two headers, even if
+    /// other conditions are not satisfied besides having enough parent stakes.
+    #[serde(
+        with = "duration_format",
+        default = "Parameters::default_max_header_delay"
+    )]
     pub max_header_delay: Duration,
+    /// When the delay from last header reaches `min_header_delay`, a new header can be proposed
+    /// even if batches have not reached `header_num_of_batches_threshold`.
+    #[serde(
+        with = "duration_format",
+        default = "Parameters::default_min_header_delay"
+    )]
+    pub min_header_delay: Duration,
+
     /// The depth of the garbage collection (Denominated in number of rounds).
+    #[serde(default = "Parameters::default_gc_depth")]
     pub gc_depth: u64,
     /// The delay after which the synchronizer retries to send sync requests. Denominated in ms.
-    #[serde(with = "duration_format")]
+    #[serde(
+        with = "duration_format",
+        default = "Parameters::default_sync_retry_delay"
+    )]
     pub sync_retry_delay: Duration,
     /// Determine with how many nodes to sync when re-trying to send sync-request. These nodes
     /// are picked at random from the committee.
+    #[serde(default = "Parameters::default_sync_retry_nodes")]
     pub sync_retry_nodes: usize,
     /// The preferred batch size. The workers seal a batch of transactions when it reaches this size.
     /// Denominated in bytes.
+    #[serde(default = "Parameters::default_batch_size")]
     pub batch_size: usize,
     /// The delay after which the workers seal a batch of transactions, even if `max_batch_size`
     /// is not reached.
-    #[serde(with = "duration_format")]
+    #[serde(
+        with = "duration_format",
+        default = "Parameters::default_max_batch_delay"
+    )]
     pub max_batch_delay: Duration,
-    /// The parameters for the block synchronizer
-    pub block_synchronizer: BlockSynchronizerParameters,
-    /// The parameters for the Consensus API gRPC server
-    pub consensus_api_grpc: ConsensusAPIGrpcParameters,
     /// The maximum number of concurrent requests for messages accepted from an un-trusted entity
+    #[serde(default = "Parameters::default_max_concurrent_requests")]
     pub max_concurrent_requests: usize,
     /// Properties for the prometheus metrics
+    #[serde(default = "PrometheusMetricsParameters::default")]
     pub prometheus_metrics: PrometheusMetricsParameters,
     /// Network admin server ports for primary & worker.
+    #[serde(default = "NetworkAdminServerParameters::default")]
     pub network_admin_server: NetworkAdminServerParameters,
+    /// Anemo network settings.
+    #[serde(default = "AnemoParameters::default")]
+    pub anemo: AnemoParameters,
 }
 
 impl Parameters {
+    pub const DEFAULT_FILENAME: &'static str = "parameters.json";
+
     fn default_header_num_of_batches_threshold() -> usize {
         32
     }
 
     fn default_max_header_num_of_batches() -> usize {
         1_000
+    }
+
+    fn default_max_header_delay() -> Duration {
+        Duration::from_secs(1)
+    }
+
+    fn default_min_header_delay() -> Duration {
+        Duration::from_secs_f64(0.5)
+    }
+
+    fn default_gc_depth() -> u64 {
+        50
+    }
+
+    fn default_sync_retry_delay() -> Duration {
+        Duration::from_millis(5_000)
+    }
+
+    fn default_sync_retry_nodes() -> usize {
+        3
+    }
+
+    fn default_batch_size() -> usize {
+        5_000_000
+    }
+
+    fn default_max_batch_delay() -> Duration {
+        Duration::from_millis(100)
+    }
+
+    fn default_max_concurrent_requests() -> usize {
+        500_000
     }
 }
 
@@ -173,6 +254,65 @@ impl Default for NetworkAdminServerParameters {
     }
 }
 
+impl NetworkAdminServerParameters {
+    fn with_available_port(&self) -> Self {
+        let mut params = self.clone();
+        let default = Self::default();
+        params.primary_network_admin_server_port = default.primary_network_admin_server_port;
+        params.worker_network_admin_server_base_port =
+            default.worker_network_admin_server_base_port;
+        params
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct AnemoParameters {
+    /// Per-peer rate-limits (in requests/sec) for the PrimaryToPrimary service.
+    pub send_certificate_rate_limit: Option<NonZeroU32>,
+
+    /// Per-peer rate-limits (in requests/sec) for the WorkerToWorker service.
+    pub report_batch_rate_limit: Option<NonZeroU32>,
+    pub request_batches_rate_limit: Option<NonZeroU32>,
+
+    /// Size in bytes above which network messages are considered excessively large. Excessively
+    /// large messages will still be handled, but logged and reported in metrics for debugging.
+    ///
+    /// If unspecified, this will default to 8 MiB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excessive_message_size: Option<usize>,
+}
+
+impl AnemoParameters {
+    // By default, at most 10 certificates can be sent concurrently to a peer.
+    pub fn send_certificate_rate_limit(&self) -> u32 {
+        self.send_certificate_rate_limit
+            .unwrap_or(NonZeroU32::new(20).unwrap())
+            .get()
+    }
+
+    // By default, at most 100 batches can be broadcasted concurrently.
+    pub fn report_batch_rate_limit(&self) -> u32 {
+        self.report_batch_rate_limit
+            .unwrap_or(NonZeroU32::new(200).unwrap())
+            .get()
+    }
+
+    // As of 11/02/2023, when one worker is actively fetching, each peer receives
+    // 20~30 requests per second.
+    pub fn request_batches_rate_limit(&self) -> u32 {
+        self.request_batches_rate_limit
+            .unwrap_or(NonZeroU32::new(100).unwrap())
+            .get()
+    }
+
+    pub fn excessive_message_size(&self) -> usize {
+        const EXCESSIVE_MESSAGE_SIZE: usize = 8 << 20;
+
+        self.excessive_message_size
+            .unwrap_or(EXCESSIVE_MESSAGE_SIZE)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PrometheusMetricsParameters {
     /// Socket address the server should be listening to.
@@ -190,129 +330,45 @@ impl Default for PrometheusMetricsParameters {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ConsensusAPIGrpcParameters {
-    /// Socket address the server should be listening to.
-    pub socket_addr: Multiaddr,
-    /// The timeout configuration when requesting batches from workers.
-    #[serde(with = "duration_format")]
-    pub get_collections_timeout: Duration,
-    /// The timeout configuration when removing batches from workers.
-    #[serde(with = "duration_format")]
-    pub remove_collections_timeout: Duration,
-}
+impl PrometheusMetricsParameters {
+    pub const DEFAULT_PORT: usize = 9184;
 
-impl Default for ConsensusAPIGrpcParameters {
-    fn default() -> Self {
-        let host = "127.0.0.1";
-        Self {
-            socket_addr: format!("/ip4/{}/tcp/{}/http", host, get_available_port(host))
-                .parse()
-                .unwrap(),
-            get_collections_timeout: Duration::from_millis(5_000),
-            remove_collections_timeout: Duration::from_millis(5_000),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default)]
-pub struct BlockSynchronizerParameters {
-    /// The timeout configuration for synchronizing certificate digests from a starting round.
-    #[serde(
-        with = "duration_format",
-        default = "BlockSynchronizerParameters::default_range_synchronize_timeout"
-    )]
-    pub range_synchronize_timeout: Duration,
-    /// The timeout configuration when requesting certificates from peers.
-    #[serde(
-        with = "duration_format",
-        default = "BlockSynchronizerParameters::default_certificates_synchronize_timeout"
-    )]
-    pub certificates_synchronize_timeout: Duration,
-    /// Timeout when has requested the payload for a certificate and is
-    /// waiting to receive them.
-    #[serde(
-        with = "duration_format",
-        default = "BlockSynchronizerParameters::default_payload_synchronize_timeout"
-    )]
-    pub payload_synchronize_timeout: Duration,
-    /// The timeout configuration when for when we ask the other peers to
-    /// discover who has the payload available for the dictated certificates.
-    #[serde(
-        with = "duration_format",
-        default = "BlockSynchronizerParameters::default_payload_availability_timeout"
-    )]
-    pub payload_availability_timeout: Duration,
-    /// When a certificate is fetched on the fly from peers, it is submitted
-    /// from the block synchronizer handler for further processing to core
-    /// to validate and ensure parents are available and history is causal
-    /// complete. This property is the timeout while we wait for core to
-    /// perform this processes and the certificate to become available to
-    /// the handler to consume.
-    #[serde(
-        with = "duration_format",
-        default = "BlockSynchronizerParameters::default_handler_certificate_deliver_timeout"
-    )]
-    pub handler_certificate_deliver_timeout: Duration,
-}
-
-impl BlockSynchronizerParameters {
-    fn default_range_synchronize_timeout() -> Duration {
-        Duration::from_secs(30)
-    }
-    fn default_certificates_synchronize_timeout() -> Duration {
-        Duration::from_secs(30)
-    }
-    fn default_payload_synchronize_timeout() -> Duration {
-        Duration::from_secs(30)
-    }
-    fn default_payload_availability_timeout() -> Duration {
-        Duration::from_secs(30)
-    }
-    fn default_handler_certificate_deliver_timeout() -> Duration {
-        Duration::from_secs(30)
-    }
-}
-
-impl Default for BlockSynchronizerParameters {
-    fn default() -> Self {
-        Self {
-            range_synchronize_timeout:
-                BlockSynchronizerParameters::default_range_synchronize_timeout(),
-            certificates_synchronize_timeout:
-                BlockSynchronizerParameters::default_certificates_synchronize_timeout(),
-            payload_synchronize_timeout:
-                BlockSynchronizerParameters::default_payload_synchronize_timeout(),
-            payload_availability_timeout:
-                BlockSynchronizerParameters::default_payload_availability_timeout(),
-            handler_certificate_deliver_timeout:
-                BlockSynchronizerParameters::default_handler_certificate_deliver_timeout(),
-        }
+    fn with_available_port(&self) -> Self {
+        let mut params = self.clone();
+        let default = Self::default();
+        params.socket_addr = default.socket_addr;
+        params
     }
 }
 
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            header_num_of_batches_threshold: 32,
-            max_header_num_of_batches: 1000,
-            max_header_delay: Duration::from_millis(100),
-            gc_depth: 50,
-            sync_retry_delay: Duration::from_millis(5_000),
-            sync_retry_nodes: 3,
-            batch_size: 500_000,
-            max_batch_delay: Duration::from_millis(100),
-            block_synchronizer: BlockSynchronizerParameters::default(),
-            consensus_api_grpc: ConsensusAPIGrpcParameters::default(),
-            max_concurrent_requests: 500_000,
+            header_num_of_batches_threshold: Parameters::default_header_num_of_batches_threshold(),
+            max_header_num_of_batches: Parameters::default_max_header_num_of_batches(),
+            max_header_delay: Parameters::default_max_header_delay(),
+            min_header_delay: Parameters::default_min_header_delay(),
+            gc_depth: Parameters::default_gc_depth(),
+            sync_retry_delay: Parameters::default_sync_retry_delay(),
+            sync_retry_nodes: Parameters::default_sync_retry_nodes(),
+            batch_size: Parameters::default_batch_size(),
+            max_batch_delay: Parameters::default_max_batch_delay(),
+            max_concurrent_requests: Parameters::default_max_concurrent_requests(),
             prometheus_metrics: PrometheusMetricsParameters::default(),
             network_admin_server: NetworkAdminServerParameters::default(),
+            anemo: AnemoParameters::default(),
         }
     }
 }
 
 impl Parameters {
+    pub fn with_available_ports(&self) -> Self {
+        let mut params = self.clone();
+        params.prometheus_metrics = params.prometheus_metrics.with_available_port();
+        params.network_admin_server = params.network_admin_server.with_available_port();
+        params
+    }
+
     pub fn tracing(&self) {
         info!(
             "Header number of batches threshold set to {}",
@@ -326,6 +382,10 @@ impl Parameters {
             "Max header delay set to {} ms",
             self.max_header_delay.as_millis()
         );
+        info!(
+            "Min header delay set to {} ms",
+            self.min_header_delay.as_millis()
+        );
         info!("Garbage collection depth set to {} rounds", self.gc_depth);
         info!(
             "Sync retry delay set to {} ms",
@@ -336,48 +396,6 @@ impl Parameters {
         info!(
             "Max batch delay set to {} ms",
             self.max_batch_delay.as_millis()
-        );
-        info!(
-            "Synchronize range timeout set to {} s",
-            self.block_synchronizer.range_synchronize_timeout.as_secs()
-        );
-        info!(
-            "Synchronize certificates timeout set to {} s",
-            self.block_synchronizer
-                .certificates_synchronize_timeout
-                .as_secs()
-        );
-        info!(
-            "Payload (batches) availability timeout set to {} s",
-            self.block_synchronizer
-                .payload_availability_timeout
-                .as_secs()
-        );
-        info!(
-            "Synchronize payload (batches) timeout set to {} s",
-            self.block_synchronizer
-                .payload_synchronize_timeout
-                .as_secs()
-        );
-        info!(
-            "Consensus API gRPC Server set to listen on on {}",
-            self.consensus_api_grpc.socket_addr
-        );
-        info!(
-            "Get collections timeout set to {} ms",
-            self.consensus_api_grpc.get_collections_timeout.as_millis()
-        );
-        info!(
-            "Remove collections timeout set to {} ms",
-            self.consensus_api_grpc
-                .remove_collections_timeout
-                .as_millis()
-        );
-        info!(
-            "Handler certificate deliver timeout set to {} s",
-            self.block_synchronizer
-                .handler_certificate_deliver_timeout
-                .as_secs()
         );
         info!(
             "Max concurrent requests set to {}",
@@ -409,8 +427,6 @@ pub struct WorkerInfo {
     pub worker_address: Multiaddr,
 }
 
-pub type SharedWorkerCache = Arc<ArcSwap<WorkerCache>>;
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WorkerIndex(pub BTreeMap<WorkerId, WorkerInfo>);
 
@@ -420,12 +436,6 @@ pub struct WorkerCache {
     pub workers: BTreeMap<PublicKey, WorkerIndex>,
     /// The epoch number for workers
     pub epoch: Epoch,
-}
-
-impl From<WorkerCache> for SharedWorkerCache {
-    fn from(worker_cache: WorkerCache) -> Self {
-        Arc::new(ArcSwap::from_pointee(worker_cache))
-    }
 }
 
 impl std::fmt::Display for WorkerIndex {
@@ -449,13 +459,21 @@ impl std::fmt::Display for WorkerCache {
             self.epoch(),
             self.workers
                 .iter()
-                .map(|(k, v)| { format!("{}: {}", k.encode_base64().get(0..16).unwrap(), v) })
+                .map(|(k, v)| {
+                    if let Some(x) = k.encode_base64().get(0..16) {
+                        format!("{}: {}", x, v)
+                    } else {
+                        format!("Invalid key: {}", k)
+                    }
+                })
                 .collect::<Vec<_>>()
         )
     }
 }
 
 impl WorkerCache {
+    pub const DEFAULT_FILENAME: &'static str = "workers.json";
+
     /// Returns the current epoch.
     pub fn epoch(&self) -> Epoch {
         self.epoch
@@ -543,283 +561,5 @@ impl WorkerCache {
                     .chain(authority.0.values().map(|address| &address.worker_address))
             })
             .collect()
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub struct Authority {
-    /// The voting power of this authority.
-    pub stake: Stake,
-    /// The network address of the primary.
-    pub primary_address: Multiaddr,
-    /// Network key of the primary.
-    pub network_key: NetworkPublicKey,
-}
-
-pub type SharedCommittee = Arc<ArcSwap<Committee>>;
-
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub struct Committee {
-    /// The authorities of epoch.
-    pub authorities: BTreeMap<PublicKey, Authority>,
-    /// The epoch number of this committee
-    pub epoch: Epoch,
-}
-
-impl From<Committee> for SharedCommittee {
-    fn from(committee: Committee) -> Self {
-        Arc::new(ArcSwap::from_pointee(committee))
-    }
-}
-
-impl std::fmt::Display for Committee {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Committee E{}: {:?}",
-            self.epoch(),
-            self.authorities
-                .keys()
-                .map(|x| { x.encode_base64().get(0..16).unwrap().to_string() })
-                .collect::<Vec<_>>()
-        )
-    }
-}
-
-impl Committee {
-    /// Returns the current epoch.
-    pub fn epoch(&self) -> Epoch {
-        self.epoch
-    }
-
-    /// Returns the keys in the committee
-    pub fn keys(&self) -> Vec<&PublicKey> {
-        self.authorities.keys().clone().collect::<Vec<&PublicKey>>()
-    }
-
-    pub fn authorities(&self) -> impl Iterator<Item = (&PublicKey, &Authority)> {
-        self.authorities.iter()
-    }
-
-    pub fn authority_by_network_key(
-        &self,
-        network_key: &NetworkPublicKey,
-    ) -> Option<(&PublicKey, &Authority)> {
-        self.authorities
-            .iter()
-            .find(|(_, authority)| authority.network_key == *network_key)
-    }
-
-    /// Returns the number of authorities.
-    pub fn size(&self) -> usize {
-        self.authorities.len()
-    }
-
-    /// Return the stake of a specific authority.
-    pub fn stake(&self, name: &PublicKey) -> Stake {
-        self.authorities
-            .get(&name.clone())
-            .map_or_else(|| 0, |x| x.stake)
-    }
-
-    /// Returns the stake required to reach a quorum (2f+1).
-    pub fn quorum_threshold(&self) -> Stake {
-        // If N = 3f + 1 + k (0 <= k < 3)
-        // then (2 N + 3) / 3 = 2f + 1 + (2k + 2)/3 = 2f + 1 + k = N - f
-        let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
-        2 * total_votes / 3 + 1
-    }
-
-    /// Returns the stake required to reach availability (f+1).
-    pub fn validity_threshold(&self) -> Stake {
-        // If N = 3f + 1 + k (0 <= k < 3)
-        // then (N + 2) / 3 = f + 1 + k/3 = f + 1
-        let total_votes: Stake = self.authorities.values().map(|x| x.stake).sum();
-        (total_votes + 2) / 3
-    }
-
-    /// Returns a leader node as a weighted choice seeded by the provided integer
-    pub fn leader(&self, seed: u64) -> PublicKey {
-        let mut seed_bytes = [0u8; 32];
-        seed_bytes[32 - 8..].copy_from_slice(&seed.to_le_bytes());
-        let mut rng = StdRng::from_seed(seed_bytes);
-        let choices = self
-            .authorities
-            .iter()
-            .map(|(name, authority)| (name, authority.stake as f32))
-            .collect::<Vec<_>>();
-        choices
-            .choose_weighted(&mut rng, |item| item.1)
-            .expect("Weighted choice error: stake values incorrect!")
-            .0
-            .clone()
-    }
-
-    /// Returns the primary address of the target primary.
-    pub fn primary(&self, to: &PublicKey) -> Result<Multiaddr, ConfigError> {
-        self.authorities
-            .get(&to.clone())
-            .map(|x| x.primary_address.clone())
-            .ok_or_else(|| ConfigError::NotInCommittee((*to).encode_base64()))
-    }
-
-    pub fn network_key(&self, pk: &PublicKey) -> Result<NetworkPublicKey, ConfigError> {
-        self.authorities
-            .get(&pk.clone())
-            .map(|x| x.network_key.clone())
-            .ok_or_else(|| ConfigError::NotInCommittee((*pk).encode_base64()))
-    }
-
-    /// Return all the network addresses in the committee.
-    pub fn others_primaries(
-        &self,
-        myself: &PublicKey,
-    ) -> Vec<(PublicKey, Multiaddr, NetworkPublicKey)> {
-        self.authorities
-            .iter()
-            .filter(|(name, _)| *name != myself)
-            .map(|(name, authority)| {
-                (
-                    name.clone(),
-                    authority.primary_address.clone(),
-                    authority.network_key.clone(),
-                )
-            })
-            .collect()
-    }
-
-    fn get_all_network_addresses(&self) -> HashSet<&Multiaddr> {
-        self.authorities
-            .values()
-            .map(|authority| &authority.primary_address)
-            .collect()
-    }
-
-    /// Return the network addresses that are present in the current committee but that are absent
-    /// from the new committee (provided as argument).
-    pub fn network_diff<'a>(&'a self, other: &'a Self) -> HashSet<&Multiaddr> {
-        self.get_all_network_addresses()
-            .difference(&other.get_all_network_addresses())
-            .cloned()
-            .collect()
-    }
-
-    /// Update the networking information of some of the primaries. The arguments are a full vector of
-    /// authorities which Public key and Stake must match the one stored in the current Committee. Any discrepancy
-    /// will generate no update and return a vector of errors.
-    pub fn update_primary_network_info(
-        &mut self,
-        mut new_info: BTreeMap<PublicKey, (Stake, Multiaddr)>,
-    ) -> Result<(), Vec<CommitteeUpdateError>> {
-        let mut errors = None;
-
-        let table = &self.authorities;
-        let push_error_and_return = |acc, error| {
-            let mut error_table = if let Err(errors) = acc {
-                errors
-            } else {
-                Vec::new()
-            };
-            error_table.push(error);
-            Err(error_table)
-        };
-
-        let res = table
-            .iter()
-            .fold(Ok(BTreeMap::new()), |acc, (pk, authority)| {
-                if let Some((stake, address)) = new_info.remove(pk) {
-                    if stake == authority.stake {
-                        match acc {
-                            // No error met yet, update the accumulator
-                            Ok(mut bmap) => {
-                                let mut res = authority.clone();
-                                res.primary_address = address;
-                                bmap.insert(pk.clone(), res);
-                                Ok(bmap)
-                            }
-                            // in error mode, continue
-                            _ => acc,
-                        }
-                    } else {
-                        // Stake does not match: create or append error
-                        push_error_and_return(
-                            acc,
-                            CommitteeUpdateError::DifferentStake(pk.to_string()),
-                        )
-                    }
-                } else {
-                    // This key is absent from new information
-                    push_error_and_return(
-                        acc,
-                        CommitteeUpdateError::MissingFromUpdate(pk.to_string()),
-                    )
-                }
-            });
-
-        // If there are elements left in new_info, they are not in the original table
-        // If new_info is empty, this is a no-op.
-        let res = new_info.iter().fold(res, |acc, (pk, _)| {
-            push_error_and_return(acc, CommitteeUpdateError::NotInCommittee(pk.to_string()))
-        });
-
-        match res {
-            Ok(new_table) => self.authorities = new_table,
-            Err(errs) => {
-                errors = Some(errs);
-            }
-        };
-
-        errors.map(Err).unwrap_or(Ok(()))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::Parameters;
-    use tracing_test::traced_test;
-
-    #[test]
-    #[traced_test]
-    fn tracing_should_print_parameters() {
-        // GIVEN
-        let parameters = Parameters::default();
-
-        // WHEN
-        parameters.tracing();
-
-        // THEN
-        assert!(logs_contain("Header number of batches threshold set to 32"));
-        assert!(logs_contain("Header max number of batches set to 1000"));
-        assert!(logs_contain("Max header delay set to 100 ms"));
-        assert!(logs_contain("Garbage collection depth set to 50 rounds"));
-        assert!(logs_contain("Sync retry delay set to 5000 ms"));
-        assert!(logs_contain("Sync retry nodes set to 3 nodes"));
-        assert!(logs_contain("Batch size set to 500000 B"));
-        assert!(logs_contain("Max batch delay set to 100 ms"));
-        assert!(logs_contain("Synchronize certificates timeout set to 30 s"));
-        assert!(logs_contain(
-            "Payload (batches) availability timeout set to 30 s"
-        ));
-        assert!(logs_contain(
-            "Synchronize payload (batches) timeout set to 30 s"
-        ));
-        assert!(logs_contain(
-            "Handler certificate deliver timeout set to 30 s"
-        ));
-        assert!(logs_contain(
-            "Consensus API gRPC Server set to listen on on /ip4/127.0.0.1/tcp"
-        ));
-        assert!(logs_contain("Get collections timeout set to 5000 ms"));
-        assert!(logs_contain("Remove collections timeout set to 5000 ms"));
-        assert!(logs_contain("Max concurrent requests set to 500000"));
-        assert!(logs_contain(
-            "Prometheus metrics server will run on /ip4/127.0.0.1/tcp"
-        ));
-        assert!(logs_contain(
-            "Primary network admin server will run on 127.0.0.1:"
-        ));
-        assert!(logs_contain(
-            "Worker network admin server will run starting on base port 127.0.0.1:"
-        ));
     }
 }

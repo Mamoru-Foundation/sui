@@ -1,45 +1,36 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import cl from 'classnames';
-import { useSearchParams } from 'react-router-dom';
-
-import { Content } from '_app/shared/bottom-menu-layout';
-import PageTitle from '_app/shared/page-title';
-import ActiveCoinsCard from '_components/active-coins-card';
-import { GAS_TYPE_ARG } from '_redux/slices/sui-objects/Coin';
-
-import st from './CoinSelector.module.scss';
+import { ActiveCoinsCard } from '_components/active-coins-card';
+import Overlay from '_components/overlay';
+import { useUnlockedGuard } from '_src/ui/app/hooks/useUnlockedGuard';
+import { SUI_TYPE_ARG } from '@mysten/sui/utils';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 function CoinsSelectorPage() {
-    const [searchParams] = useSearchParams();
-    const coinType = searchParams.get('type') || GAS_TYPE_ARG;
+	const [searchParams] = useSearchParams();
+	const coinType = searchParams.get('type') || SUI_TYPE_ARG;
+	const navigate = useNavigate();
 
-    return (
-        <div className={st.container}>
-            <PageTitle
-                title="Select Coin"
-                backLink={`/send?${new URLSearchParams({
-                    type: coinType,
-                }).toString()}`}
-                className={st.pageTitle}
-            />
-            <Content className={st.selectorContent}>
-                <div className={cl(st.searchCoin, 'sui-icons-search')}>
-                    <input
-                        type="text"
-                        name="name"
-                        placeholder="Search coins"
-                        className={st.searchInput}
-                    />
-                </div>
-                <ActiveCoinsCard
-                    activeCoinType={coinType}
-                    showActiveCoin={false}
-                />
-            </Content>
-        </div>
-    );
+	if (useUnlockedGuard()) {
+		return null;
+	}
+
+	return (
+		<Overlay
+			showModal={true}
+			title="Select Coin"
+			closeOverlay={() =>
+				navigate(
+					`/send?${new URLSearchParams({
+						type: coinType,
+					}).toString()}`,
+				)
+			}
+		>
+			<ActiveCoinsCard activeCoinType={coinType} showActiveCoin={false} />
+		</Overlay>
+	);
 }
 
 export default CoinsSelectorPage;

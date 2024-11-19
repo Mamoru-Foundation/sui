@@ -6,38 +6,56 @@ license = "Apache-2.0"
 publish = false
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 anemo.workspace = true
 anemo-tower.workspace = true
-axum = "0.5.16"
-anyhow = { version = "1.0.64", features = ["backtrace"] }
-clap = { version = "3.2.17", features = ["derive"] }
-multiaddr = "0.16.0"
-prometheus = "0.13.3"
-tokio = { version = "1.20.1", features = ["full"] }
-tracing = "0.1.36"
-parking_lot = "0.12.1"
-futures = "0.3.23"
-chrono = "0.4.0"
-tower = "0.4.13"
+arc-swap.workspace = true
+axum.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+bcs.workspace = true
+clap.workspace = true
+consensus-core.workspace = true
+prometheus.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+futures.workspace = true
+parking_lot.workspace = true
+tower.workspace = true
+reqwest.workspace = true
+tap.workspace = true
+serde.workspace = true
+bin-version.workspace = true
+url.workspace = true
+humantime.workspace = true
 
-sui-config = { path = "../sui-config" }
-sui-core = { path = "../sui-core" }
-sui-storage = { path = "../sui-storage" }
-sui-network = { path = "../sui-network" }
-sui-json-rpc = { path = "../sui-json-rpc" }
-sui-telemetry = { path = "../sui-telemetry" }
-sui-types = { path = "../sui-types" }
-sui-metrics = { path = "../sui-metrics" }
-narwhal-network = { path = "../../narwhal/network" }
-narwhal-types = { path = "../../narwhal/types" }
+sui-archival.workspace = true
+sui-tls.workspace = true
+sui-macros.workspace = true
+sui-config.workspace = true
+sui-core.workspace = true
+sui-rest-api.workspace = true
+sui-storage.workspace = true
+sui-network.workspace = true
+sui-json-rpc.workspace = true
+sui-json-rpc-api.workspace = true
+sui-protocol-config.workspace = true
+sui-snapshot.workspace = true
+sui-telemetry.workspace = true
+sui-types.workspace = true
+mysten-metrics.workspace = true
+mysten-service.workspace = true
+mysten-common.workspace = true
+narwhal-network.workspace = true
 typed-store.workspace = true
 mysten-network.workspace = true
 telemetry-subscribers.workspace = true
-
-ying-profiler = { git = "https://github.com/velvia/ying-profiler", features = ["profile-spans"] }
-
-workspace-hack.workspace = true
+fastcrypto.workspace = true
+fastcrypto-zkp.workspace = true
+move-vm-profiler.workspace = true
 
 [target.'cfg(msim)'.dependencies]
-sui-simulator = { path = "../sui-simulator" }
+sui-simulator.workspace = true

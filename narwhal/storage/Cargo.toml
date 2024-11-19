@@ -8,21 +8,22 @@ publish = false
 
 
 [dependencies]
-tempfile = "3.3.0"
-dashmap = "5.4.0"
+tempfile.workspace = true
 fastcrypto.workspace = true
-futures = "0.3.24"
-thiserror = "1.0.35"
-tokio = { version = "1.20.1", features = ["sync", "rt", "macros"] }
-tokio-util = { version = "0.7.4", features = ["codec"] }
-tonic = { version = "0.8.2", features = ["tls"] }
-tracing = "0.1.36"
-crypto = { path = "../crypto", package = "narwhal-crypto" }
+fastcrypto-tbls.workspace = true
+mysten-common.workspace = true
+mysten-metrics.workspace = true
+futures.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+tracing.workspace = true
 types = { path = "../types", package = "narwhal-types" }
 store = { path = "../../crates/typed-store", package = "typed-store" }
+sui-macros.workspace = true
 config = { path = "../config", package = "narwhal-config" }
-
-workspace-hack.workspace = true
+prometheus.workspace = true
+lru.workspace = true
+parking_lot.workspace = true
+tap.workspace = true
 
 [dev-dependencies]
 test-utils = { path = "../test-utils", package = "narwhal-test-utils" }

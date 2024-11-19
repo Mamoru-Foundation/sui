@@ -4,11 +4,12 @@ use crate::metrics::{DefaultMetricsCallbackProvider, MetricsCallbackProvider};
 use crate::{
     client::{connect_lazy_with_config, connect_with_config},
     server::ServerBuilder,
+    Multiaddr,
 };
 use eyre::Result;
-use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use tokio_rustls::rustls::ClientConfig;
 use tonic::transport::Channel;
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -90,11 +91,19 @@ impl Config {
         ServerBuilder::from_config(self, metrics_provider)
     }
 
-    pub async fn connect(&self, addr: &Multiaddr) -> Result<Channel> {
-        connect_with_config(addr, self).await
+    pub async fn connect(
+        &self,
+        addr: &Multiaddr,
+        tls_config: Option<ClientConfig>,
+    ) -> Result<Channel> {
+        connect_with_config(addr, tls_config, self).await
     }
 
-    pub fn connect_lazy(&self, addr: &Multiaddr) -> Result<Channel> {
-        connect_lazy_with_config(addr, self)
+    pub fn connect_lazy(
+        &self,
+        addr: &Multiaddr,
+        tls_config: Option<ClientConfig>,
+    ) -> Result<Channel> {
+        connect_lazy_with_config(addr, tls_config, self)
     }
 }
