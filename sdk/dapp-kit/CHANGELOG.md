@@ -1,5 +1,48 @@
 # @mysten/dapp-kit
 
+## 0.14.33
+
+### Patch Changes
+
+- Updated dependencies [1765780]
+  - @mysten/zksend@0.12.1
+
+## 0.14.32
+
+### Patch Changes
+
+- Updated dependencies [60bdb62]
+- Updated dependencies [364a93a]
+- Updated dependencies [364a93a]
+  - @mysten/zksend@0.12.0
+
+## 0.14.31
+
+### Patch Changes
+
+- Updated dependencies [d5a23d7]
+  - @mysten/sui@1.14.3
+  - @mysten/wallet-standard@0.13.12
+  - @mysten/zksend@0.11.12
+
+## 0.14.30
+
+### Patch Changes
+
+- Updated dependencies [e7bc63e]
+  - @mysten/sui@1.14.2
+  - @mysten/wallet-standard@0.13.11
+  - @mysten/zksend@0.11.11
+
+## 0.14.29
+
+### Patch Changes
+
+- Updated dependencies [69ef100]
+  - @mysten/sui@1.14.1
+  - @mysten/wallet-standard@0.13.10
+  - @mysten/zksend@0.11.10
+
 ## 0.14.28
 
 ### Patch Changes

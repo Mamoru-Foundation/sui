@@ -26,7 +26,9 @@ use sui_network::default_mysten_network_config;
 use sui_swarm_config::network_config_builder::ConfigBuilder;
 use sui_test_transaction_builder::batch_make_transfer_transactions;
 use sui_types::{
+    crypto::Ed25519SuiSignature,
     quorum_driver_types::ExecuteTransactionRequestType,
+    signature::GenericSignature,
     traffic_control::{
         FreqThresholdConfig, PolicyConfig, PolicyType, RemoteFirewallConfig, Weight,
     },
@@ -225,7 +227,7 @@ async fn test_validator_traffic_control_error_blocked() -> Result<(), anyhow::Er
         .with_policy_config(Some(policy_config))
         .build();
     let committee = network_config.committee_with_network();
-    let _test_cluster = TestClusterBuilder::new()
+    let test_cluster = TestClusterBuilder::new()
         .set_network_config(network_config)
         .build()
         .await;
@@ -235,12 +237,13 @@ async fn test_validator_traffic_control_error_blocked() -> Result<(), anyhow::Er
     );
     let (_, auth_client) = local_clients.first_key_value().unwrap();
 
-    // transaction signed using user wallet from a different chain/genesis,
-    // therefore we should fail with UserInputError
-    let other_cluster = TestClusterBuilder::new().build().await;
-
-    let mut txns = batch_make_transfer_transactions(&other_cluster.wallet, n as usize).await;
-    let tx = txns.swap_remove(0);
+    let mut txns = batch_make_transfer_transactions(&test_cluster.wallet, n as usize).await;
+    let mut tx = txns.swap_remove(0);
+    let signatures = tx.tx_signatures_mut_for_testing();
+    signatures.pop();
+    signatures.push(GenericSignature::Signature(
+        sui_types::crypto::Signature::Ed25519SuiSignature(Ed25519SuiSignature::default()),
+    ));
 
     // it should take no more than 4 requests to be added to the blocklist
     for _ in 0..n {
@@ -251,7 +254,7 @@ async fn test_validator_traffic_control_error_blocked() -> Result<(), anyhow::Er
             }
         }
     }
-    panic!("Expected spam policy to trigger within {n} requests");
+    panic!("Expected error policy to trigger within {n} requests");
 }
 
 #[tokio::test]
@@ -723,6 +726,63 @@ async fn test_fullnode_traffic_control_error_blocked() -> Result<(), anyhow::Err
 }
 
 #[tokio::test]
+async fn test_fullnode_traffic_control_error_blocked() -> Result<(), anyhow::Error> {
+    let txn_count = 5;
+    let policy_config = PolicyConfig {
+        connection_blocklist_ttl_sec: 3,
+        error_policy_type: PolicyType::TestNConnIP(txn_count - 1),
+        dry_run: false,
+        ..Default::default()
+    };
+    let test_cluster = TestClusterBuilder::new()
+        .with_fullnode_policy_config(Some(policy_config))
+        .build()
+        .await;
+
+    let jsonrpc_client = &test_cluster.fullnode_handle.rpc_client;
+    let context = test_cluster.wallet;
+
+    let mut txns = batch_make_transfer_transactions(&context, txn_count as usize).await;
+    assert!(
+        txns.len() >= txn_count as usize,
+        "Expect at least {} txns. Do we generate enough gas objects during genesis?",
+        txn_count,
+    );
+
+    // it should take no more than 4 requests to be added to the blocklist
+    for _ in 0..txn_count {
+        let txn = txns.swap_remove(0);
+        let tx_digest = txn.digest();
+        let (tx_bytes, _signatures) = txn.to_tx_bytes_and_signatures();
+        // create invalid (empty) client signature
+        let signatures: Vec<Base64> = vec![];
+        let params = rpc_params![
+            tx_bytes,
+            signatures,
+            SuiTransactionBlockResponseOptions::new(),
+            ExecuteTransactionRequestType::WaitForLocalExecution
+        ];
+        let response: RpcResult<SuiTransactionBlockResponse> = jsonrpc_client
+            .request("sui_executeTransactionBlock", params.clone())
+            .await;
+        if let Err(err) = response {
+            if err.to_string().contains("Too many requests") {
+                return Ok(());
+            }
+        } else {
+            let SuiTransactionBlockResponse {
+                digest,
+                confirmed_local_execution,
+                ..
+            } = response.unwrap();
+            assert_eq!(&digest, tx_digest);
+            assert!(confirmed_local_execution.unwrap());
+        }
+    }
+    panic!("Expected spam policy to trigger within {txn_count} requests");
+}
+
+#[tokio::test]
 async fn test_validator_traffic_control_error_delegated() -> Result<(), anyhow::Error> {
     let n = 5;
     let port = 65000;
@@ -749,7 +809,7 @@ async fn test_validator_traffic_control_error_delegated() -> Result<(), anyhow::
         .with_firewall_config(Some(firewall_config))
         .build();
     let committee = network_config.committee_with_network();
-    let _test_cluster = TestClusterBuilder::new()
+    let test_cluster = TestClusterBuilder::new()
         .set_network_config(network_config)
         .build()
         .await;
@@ -759,12 +819,13 @@ async fn test_validator_traffic_control_error_delegated() -> Result<(), anyhow::
     );
     let (_, auth_client) = local_clients.first_key_value().unwrap();
 
-    // transaction signed using user wallet from a different chain/genesis,
-    // therefore we should fail with UserInputError
-    let other_cluster = TestClusterBuilder::new().build().await;
-
-    let mut txns = batch_make_transfer_transactions(&other_cluster.wallet, n as usize).await;
-    let tx = txns.swap_remove(0);
+    let mut txns = batch_make_transfer_transactions(&test_cluster.wallet, n as usize).await;
+    let mut tx = txns.swap_remove(0);
+    let signatures = tx.tx_signatures_mut_for_testing();
+    signatures.pop();
+    signatures.push(GenericSignature::Signature(
+        sui_types::crypto::Signature::Ed25519SuiSignature(Ed25519SuiSignature::default()),
+    ));
 
     // start test firewall server
     let mut server = NodeFwTestServer::new();

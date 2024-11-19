@@ -163,16 +163,16 @@ impl Interpreter {
                 .map_err(|e| {
                     e.at_code_offset(function.index(), 0)
                         .finish(Location::Module(function.module_id().clone()))
-                })?;
+                });
 
             close_initial_frame!(tracer, &function, &return_values, gas_meter);
 
-            return_values.into_iter().collect()
+            Ok(return_values?.into_iter().collect())
         } else {
             interpreter.execute_main(
                 loader, data_store, gas_meter, extensions, function, ty_args, args, tracer,
-            )?
-        };
+            )
+        }?;
 
         Ok(InterpreterEntrypointResult {
             values,
@@ -263,7 +263,6 @@ impl Interpreter {
                                 .checked_sub(gas_used_before_call)
                                 .unwrap()
                                 .value();
-
                             err
                         })?;
 
@@ -274,7 +273,8 @@ impl Interpreter {
                         &self,
                         &loader,
                         gas_meter,
-                        link_context
+                        link_context,
+                        None
                     );
 
                     if let Some(frame) = self.call_stack.pop() {
@@ -314,9 +314,9 @@ impl Interpreter {
 
                     if func.is_native() {
                         let func_clone = func.clone();
-                        self.call_native(&resolver, gas_meter, extensions, func, vec![])?;
-
-                        current_frame.pc += 1; // advance past the Call instruction in the caller
+                        // Defer the error handling until we can trace the closure of the frame.
+                        let deferred_err =
+                            self.call_native(&resolver, gas_meter, extensions, func, vec![]);
 
                         close_frame!(
                             tracer,
@@ -325,8 +325,15 @@ impl Interpreter {
                             &self,
                             &loader,
                             gas_meter,
-                            link_context
+                            link_context,
+                            deferred_err.as_ref().err()
                         );
+
+                        // Now raise the error from the `call_native` if there was one.
+                        deferred_err?;
+
+                        current_frame.pc += 1; // advance past the Call instruction in the caller
+
                         continue;
                     }
                     let frame = self
@@ -374,8 +381,9 @@ impl Interpreter {
 
                     if func.is_native() {
                         let func_clone = func.clone();
-                        self.call_native(&resolver, gas_meter, extensions, func, ty_args)?;
-                        current_frame.pc += 1; // advance past the Call instruction in the caller
+                        // Defer the error handling until we can trace the closure of the frame.
+                        let deferred_err =
+                            self.call_native(&resolver, gas_meter, extensions, func, ty_args);
                         close_frame!(
                             tracer,
                             &current_frame,
@@ -383,9 +391,14 @@ impl Interpreter {
                             &self,
                             &loader,
                             gas_meter,
-                            link_context
+                            link_context,
+                            deferred_err.as_ref().err()
                         );
 
+                        // Now raise the error from the `call_native` if there was one.
+                        deferred_err?;
+
+                        current_frame.pc += 1; // advance past the Call instruction in the caller
                         continue;
                     }
                     let frame = self
