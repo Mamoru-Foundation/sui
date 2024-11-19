@@ -1,5 +1,24 @@
 # @mysten/sui.js
 
+## 1.14.3
+
+### Patch Changes
+
+- d5a23d7: Add tx.object.option for creatnig object options in transaction builder
+
+## 1.14.2
+
+### Patch Changes
+
+- e7bc63e: Allow 0 amounts with `coinWithBalance` intent when the wallet has no coin objects of the
+  required type.
+
+## 1.14.1
+
+### Patch Changes
+
+- 69ef100: revert adding client-request-method header
+
 ## 1.14.0
 
 ### Minor Changes

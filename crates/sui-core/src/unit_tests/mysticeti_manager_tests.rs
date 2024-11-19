@@ -15,6 +15,7 @@ use tokio::{sync::mpsc, time::sleep};
 use crate::{
     authority::{test_authority_builder::TestAuthorityBuilder, AuthorityState},
     checkpoints::{CheckpointMetrics, CheckpointService, CheckpointServiceNoop},
+    consensus_adapter::NoopConsensusOverloadChecker,
     consensus_handler::ConsensusHandlerInitializer,
     consensus_manager::{
         mysticeti_manager::MysticetiManager, ConsensusManagerMetrics, ConsensusManagerTrait,
@@ -96,7 +97,8 @@ async fn test_mysticeti_manager() {
                 epoch_store.clone(),
                 consensus_handler_initializer,
                 SuiTxValidator::new(
-                    epoch_store.clone(),
+                    state.clone(),
+                    Arc::new(NoopConsensusOverloadChecker {}),
                     Arc::new(CheckpointServiceNoop {}),
                     state.transaction_manager().clone(),
                     SuiTxValidatorMetrics::new(&Registry::new()),
@@ -132,8 +134,5 @@ async fn test_mysticeti_manager() {
 
         // THEN
         assert!(!manager.is_running().await);
-
-        let boot_counter = *manager.boot_counter.lock().await;
-        assert_eq!(boot_counter, i);
     }
 }

@@ -16,7 +16,7 @@ echo
 echo "Building sui-indexer-alt docker image"
 ========
 echo "Building sui-mvr-indexer docker image"
->>>>>>>> testnet-v1.37.3:docker/sui-mvr-indexer/build.sh
+>>>>>>>> testnet-v1.38.0:docker/sui-mvr-indexer/build.sh
 echo "Dockerfile: \t$DOCKERFILE"
 echo "docker context: $REPO_ROOT"
 echo "build date: \t$BUILD_DATE"

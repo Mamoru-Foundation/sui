@@ -18,7 +18,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 68;
+const MAX_PROTOCOL_VERSION: u64 = 69;
 
 // Record history of protocol version allocations here:
 //
@@ -195,6 +195,9 @@ const MAX_PROTOCOL_VERSION: u64 = 68;
 //             Enable gas based congestion control with overage.
 //             Further reduce minimum number of random beacon shares.
 //             Disallow adding new modules in `deps-only` packages.
+// Version 69: Sets number of rounds allowed for fastpath voting in consensus.
+//             Enable smart ancestor selection in devnet.
+//             Enable G1Uncompressed group in testnet.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -564,6 +567,10 @@ struct FeatureFlags {
 
     #[serde(skip_serializing_if = "is_false")]
     disallow_new_modules_in_deps_only_packages: bool,
+
+    // Use smart ancestor selection in consensus.
+    #[serde(skip_serializing_if = "is_false")]
+    consensus_smart_ancestor_selection: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -1256,6 +1263,9 @@ pub struct ProtocolConfig {
     /// The maximum number of transactions included in a consensus block.
     consensus_max_num_transactions_in_block: Option<u64>,
 
+    /// The maximum number of rounds where transaction voting is allowed.
+    consensus_voting_rounds: Option<u32>,
+
     /// DEPRECATED. Do not use.
     max_accumulated_txn_cost_per_object_in_narwhal_commit: Option<u64>,
 
@@ -1653,6 +1663,9 @@ impl ProtocolConfig {
     }
 
     pub fn mysticeti_fastpath(&self) -> bool {
+        if let Some(enabled) = is_mysticeti_fpc_enabled_in_env() {
+            return enabled;
+        }
         self.feature_flags.mysticeti_fastpath
     }
 
@@ -1667,6 +1680,10 @@ impl ProtocolConfig {
     pub fn disallow_new_modules_in_deps_only_packages(&self) -> bool {
         self.feature_flags
             .disallow_new_modules_in_deps_only_packages
+    }
+
+    pub fn consensus_smart_ancestor_selection(&self) -> bool {
+        self.feature_flags.consensus_smart_ancestor_selection
     }
 }
 
@@ -2172,6 +2189,8 @@ impl ProtocolConfig {
             consensus_max_transactions_in_block_bytes: None,
 
             consensus_max_num_transactions_in_block: None,
+
+            consensus_voting_rounds: None,
 
             max_accumulated_txn_cost_per_object_in_narwhal_commit: None,
 
@@ -2932,6 +2951,19 @@ impl ProtocolConfig {
 
                     cfg.feature_flags.disallow_new_modules_in_deps_only_packages = true;
                 }
+                69 => {
+                    // Sets number of rounds allowed for fastpath voting in consensus.
+                    cfg.consensus_voting_rounds = Some(40);
+
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        // Enable smart ancestor selection for devnet
+                        cfg.feature_flags.consensus_smart_ancestor_selection = true;
+                    }
+
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.uncompressed_g1_group_elements = true;
+                    }
+                }
                 // Use this template when making changes:
                 //
                 //     // modify an existing constant.
@@ -3094,10 +3126,6 @@ impl ProtocolConfig {
         self.feature_flags.consensus_round_prober = val;
     }
 
-    pub fn set_gc_depth_for_testing(&mut self, val: u32) {
-        self.consensus_gc_depth = Some(val);
-    }
-
     pub fn set_disallow_new_modules_in_deps_only_packages_for_testing(&mut self, val: bool) {
         self.feature_flags
             .disallow_new_modules_in_deps_only_packages = val;
@@ -3190,6 +3218,17 @@ macro_rules! check_limit_by_meter {
         };
         result
     }};
+}
+
+pub fn is_mysticeti_fpc_enabled_in_env() -> Option<bool> {
+    if let Ok(v) = std::env::var("CONSENSUS") {
+        if v == "mysticeti_fpc" {
+            return Some(true);
+        } else if v == "mysticeti" {
+            return Some(false);
+        }
+    }
+    None
 }
 
 #[cfg(all(test, not(msim)))]
