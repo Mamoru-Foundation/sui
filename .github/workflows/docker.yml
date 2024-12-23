@@ -1,10 +1,11 @@
 name: "Build docker image"
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - devnet
-      - testnet
+      - testnet*
       - testnet4
       - testnet4-wit
 env:
