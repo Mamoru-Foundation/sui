@@ -233,9 +233,7 @@ enum GlobalValueImpl {
     /// No resource resides in this slot or in storage.
     None,
     /// A resource has been published to this slot and it did not previously exist in storage.
-    Fresh {
-        fields: RcId<RefCell<Vec<ValueImpl>>>,
-    },
+    Fresh { fields: RcId<RefCell<Vec<ValueImpl>>> },
     /// A resource resides in this slot and also in storage. The status flag indicates whether
     /// it has potentially been altered.
     Cached {
@@ -954,9 +952,9 @@ impl ContainerRef {
                             return Err(PartialVMError::new(
                                 StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
                             )
-                            .with_message(
-                                "failed to write_ref: container type mismatch".to_string(),
-                            ))
+                                .with_message(
+                                    "failed to write_ref: container type mismatch".to_string(),
+                                ))
                         }
                     },
                     Container::Vec(r) => assign!(r, Vec),
@@ -972,7 +970,7 @@ impl ContainerRef {
                         return Err(PartialVMError::new(
                             StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
                         )
-                        .with_message("cannot overwrite Container::Locals".to_string()))
+                            .with_message("cannot overwrite Container::Locals".to_string()))
                     }
                 }
                 self.mark_dirty();
@@ -1216,10 +1214,10 @@ impl VariantRef {
                             return Err(PartialVMError::new(
                                 StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
                             )
-                            .with_message(format!(
-                            "cannot unpack a reference value {:?} held inside a variant ref {:?}",
-                            x, self
-                        )))
+                                .with_message(format!(
+                                    "cannot unpack a reference value {:?} held inside a variant ref {:?}",
+                                    x, self
+                                )))
                         }
                     };
                     res.push(Value(ref_));
@@ -1314,7 +1312,7 @@ impl Locals {
             Some(ValueImpl::Invalid) => Err(PartialVMError::new(
                 StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
             )
-            .with_message(format!("cannot copy invalid value at index {}", idx))),
+                .with_message(format!("cannot copy invalid value at index {}", idx))),
             Some(v) => Ok(Value(v.copy_value()?)),
             None => Err(
                 PartialVMError::new(StatusCode::VERIFIER_INVARIANT_VIOLATION).with_message(
@@ -1334,9 +1332,9 @@ impl Locals {
                             return Err(PartialVMError::new(
                                 StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
                             )
-                            .with_message(
-                                "moving container with dangling references".to_string(),
-                            ));
+                                .with_message(
+                                    "moving container with dangling references".to_string(),
+                                ));
                         }
                     }
                 }
@@ -1355,7 +1353,7 @@ impl Locals {
             Value(ValueImpl::Invalid) => Err(PartialVMError::new(
                 StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
             )
-            .with_message(format!("cannot move invalid value at index {}", idx))),
+                .with_message(format!("cannot move invalid value at index {}", idx))),
             v => Ok(v),
         }
     }
@@ -1521,9 +1519,9 @@ impl Value {
 
     // REVIEW: This API can break
     pub fn vector_for_testing_only(it: impl IntoIterator<Item = Value>) -> Self {
-        Self(ValueImpl::Container(Container::Vec(RcId::new(
-            RefCell::new(it.into_iter().map(|v| v.0).collect()),
-        ))))
+        Self(ValueImpl::Container(Container::Vec(RcId::new(RefCell::new(
+            it.into_iter().map(|v| v.0).collect(),
+        )))))
     }
 }
 
@@ -2343,10 +2341,10 @@ fn check_elem_layout(ty: &Type, v: &Container) -> PartialVMResult<()> {
         | (Type::DatatypeInstantiation(_), _) => Err(PartialVMError::new(
             StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
         )
-        .with_message(format!(
-            "vector elem layout mismatch, expected {:?}, got {:?}",
-            ty, v
-        ))),
+            .with_message(format!(
+                "vector elem layout mismatch, expected {:?}, got {:?}",
+                ty, v
+            ))),
     }
 }
 
@@ -2579,9 +2577,9 @@ impl Vector {
             ),
 
             Type::Signer | Type::Vector(_) | Type::Datatype(_) | Type::DatatypeInstantiation(_) => {
-                Value(ValueImpl::Container(Container::Vec(RcId::new(
-                    RefCell::new(elements.into_iter().map(|v| v.0).collect()),
-                ))))
+                Value(ValueImpl::Container(Container::Vec(RcId::new(RefCell::new(
+                    elements.into_iter().map(|v| v.0).collect(),
+                )))))
             }
 
             Type::Reference(_) | Type::MutableReference(_) | Type::TyParam(_) => {
@@ -3289,7 +3287,7 @@ pub mod debug {
             Container::Locals(_) => Err(PartialVMError::new(
                 StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
             )
-            .with_message("debug print - invalid container: Locals".to_string())),
+                .with_message("debug print - invalid container: Locals".to_string())),
         }
     }
 
@@ -3393,25 +3391,9 @@ impl Value {
             layout,
             val: &self.0,
         })
-        .ok()
+            .ok()
     }
 }
-
-/*
-impl Struct {
-    pub fn simple_deserialize(blob: &[u8], layout: &MoveStructLayout) -> Option<Struct> {
-        bcs::from_bytes_seed(SeedWrapper { layout }, blob).ok()
-    }
-
-    pub fn simple_serialize(&self, layout: &MoveStructLayout) -> Option<Vec<u8>> {
-        bcs::to_bytes(&AnnotatedValue {
-            layout,
-            val: &self.fields,
-        })
-        .ok()
-    }
-}
-*/
 
 struct AnnotatedValue<'a, 'b, T1, T2> {
     layout: &'a T1,
@@ -3441,7 +3423,7 @@ impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveTypeLayout, ValueIm
                     layout: &**struct_layout,
                     val: &*r.borrow(),
                 })
-                .serialize(serializer)
+                    .serialize(serializer)
             }
 
             (MoveTypeLayout::Enum(enum_layout), ValueImpl::Container(Container::Variant(r))) => {
@@ -3449,7 +3431,7 @@ impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveTypeLayout, ValueIm
                     layout: &**enum_layout,
                     val: &*r.borrow(),
                 })
-                .serialize(serializer)
+                    .serialize(serializer)
             }
 
             (MoveTypeLayout::Vector(layout), ValueImpl::Container(c)) => {
@@ -3500,7 +3482,7 @@ impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveTypeLayout, ValueIm
                     layout: &MoveTypeLayout::Address,
                     val: &v[0],
                 })
-                .serialize(serializer)
+                    .serialize(serializer)
             }
 
             (ty, val) => Err(invariant_violation::<S>(format!(
@@ -3533,7 +3515,7 @@ impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveStructLayout, Vec<V
 }
 
 impl<'a, 'b> serde::Serialize
-    for AnnotatedValue<'a, 'b, MoveEnumLayout, (VariantTag, Vec<ValueImpl>)>
+for AnnotatedValue<'a, 'b, MoveEnumLayout, (VariantTag, Vec<ValueImpl>)>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let (tag, values) = &self.val;
@@ -3617,12 +3599,12 @@ impl<'d> serde::de::DeserializeSeed<'d> for SeedWrapper<&MoveTypeLayout> {
             L::Struct(struct_layout) => Ok(SeedWrapper {
                 layout: &**struct_layout,
             }
-            .deserialize(deserializer)?),
+                .deserialize(deserializer)?),
 
             L::Enum(enum_layout) => Ok(SeedWrapper {
                 layout: &**enum_layout,
             }
-            .deserialize(deserializer)?),
+                .deserialize(deserializer)?),
 
             L::Vector(layout) => {
                 let container = match &**layout {
@@ -4205,9 +4187,9 @@ pub mod prop {
                     .boxed(),
                 layout => vec(value_strategy_with_layout(layout), 0..10)
                     .prop_map(|vals| {
-                        Value(ValueImpl::Container(Container::Vec(RcId::new(
-                            RefCell::new(vals.into_iter().map(|val| val.0).collect()),
-                        ))))
+                        Value(ValueImpl::Container(Container::Vec(RcId::new(RefCell::new(
+                            vals.into_iter().map(|val| val.0).collect(),
+                        )))))
                     })
                     .boxed(),
             },

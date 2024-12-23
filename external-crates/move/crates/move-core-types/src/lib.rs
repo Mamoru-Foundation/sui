@@ -30,7 +30,6 @@ pub mod u256;
 #[cfg(test)]
 mod unit_tests;
 pub mod vm_status;
-
 pub const VARIANT_COUNT_MAX: u64 = 127;
 
 pub(crate) fn fmt_list<T: fmt::Display>(

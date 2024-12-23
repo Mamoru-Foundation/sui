@@ -9,7 +9,7 @@ use sui_data_ingestion_core::Worker;
 use tokio::sync::Mutex;
 use tracing::error;
 
-use sui_rest_api::{CheckpointData, CheckpointTransaction};
+use sui_rpc_api::{CheckpointData, CheckpointTransaction};
 use sui_types::effects::TransactionEffects;
 use sui_types::effects::TransactionEffectsAPI;
 use sui_types::transaction::{Command, TransactionDataAPI, TransactionKind};
@@ -214,7 +214,7 @@ mod tests {
         let checkpoint = sim.create_checkpoint();
         let checkpoint_data = sim.get_checkpoint_data(
             checkpoint.clone(),
-            sim.get_checkpoint_contents_by_digest(&checkpoint.content_digest)?
+            sim.get_checkpoint_contents_by_digest(&checkpoint.content_digest)
                 .unwrap(),
         )?;
         let txn_handler = TransactionHandler::new();

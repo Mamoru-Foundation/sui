@@ -514,7 +514,7 @@ fn register_object_changes(
         let object_id = object_ref.0;
 
         match written.get_object(&object_id) {
-            Ok(Some(object)) => {
+            Some(object) => {
                 if let Data::Move(move_object) = &object.as_inner().data {
                     let struct_tag = move_object.type_().clone().into();
                     let Ok(datatype_layout) = layout_resolver.get_annotated_layout(&struct_tag)
@@ -538,16 +538,16 @@ fn register_object_changes(
 
                 None
             }
-            Ok(None) => {
+            None => {
                 warn!(%object_id, "Can't fetch object by object id");
 
                 None
             }
-            Err(err) => {
-                warn!(%err, "Can't fetch object by object id, error");
-
-                None
-            }
+            // Err(err) => {
+            //     warn!(%err, "Can't fetch object by object id, error");
+            //
+            //     None
+            // }
         }
     };
 
@@ -569,7 +569,7 @@ fn register_object_changes(
 
             data.object_changes
                 .owners
-                .push(sui_owner_to_mamoru(object_owner_seq, *owner));
+                .push(sui_owner_to_mamoru(object_owner_seq, owner.clone()));
             object_owner_seq += 1;
         }
     }
@@ -591,7 +591,7 @@ fn register_object_changes(
 
             data.object_changes
                 .owners
-                .push(sui_owner_to_mamoru(object_owner_seq, *owner));
+                .push(sui_owner_to_mamoru(object_owner_seq, owner.clone()));
             object_owner_seq += 1;
         }
     }
@@ -669,6 +669,15 @@ fn sui_owner_to_mamoru(seq: u64, owner: Owner) -> ObjectOwner {
             owner_address: None,
             initial_shared_version: None,
         },
+        Owner::ConsensusV2 {
+            start_version,
+            authenticator,
+        } => ObjectOwner {
+            seq,
+            owner_kind: ObjectOwnerKind::Immutable as u32,
+            owner_address: None,
+            initial_shared_version: None,
+        }
     }
 }
 

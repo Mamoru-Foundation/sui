@@ -145,7 +145,7 @@ async fn fetch_coins<P: ObjectProvider<Error = E>, E>(
                 let [coin_type]: [TypeTag; 1] =
                     type_.clone().into_type_params().try_into().unwrap();
                 all_mutated_coins.push((
-                    o.owner,
+                    o.owner.clone(),
                     coin_type,
                     // we know this is a coin, safe to unwrap
                     Coin::extract_balance_if_coin(&o).unwrap().unwrap().1,
@@ -229,36 +229,6 @@ impl<P> ObjectProviderCache<P> {
                 }
                 None => {
                     last_version_cache.insert(key, object_ref.1);
-                }
-            }
-        }
-
-        Self {
-            object_cache: RwLock::new(object_cache),
-            last_version_cache: RwLock::new(last_version_cache),
-            provider,
-        }
-    }
-
-    pub fn new_with_output_objects(provider: P, output_objects: Vec<Object>) -> Self {
-        let mut object_cache = BTreeMap::new();
-        let mut last_version_cache = BTreeMap::new();
-
-        for object in output_objects {
-            let object_id = object.id();
-            let version = object.version();
-
-            let key = (object_id, version);
-            object_cache.insert(key, object.clone());
-
-            match last_version_cache.get_mut(&key) {
-                Some(existing_seq_number) => {
-                    if version > *existing_seq_number {
-                        *existing_seq_number = version
-                    }
-                }
-                None => {
-                    last_version_cache.insert(key, version);
                 }
             }
         }

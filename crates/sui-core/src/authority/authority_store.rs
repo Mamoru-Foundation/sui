@@ -13,7 +13,7 @@ use crate::authority::authority_store_types::{
     get_store_object_pair, ObjectContentDigest, StoreObject, StoreObjectPair, StoreObjectWrapper,
 };
 use crate::authority::epoch_start_configuration::{EpochFlag, EpochStartConfiguration};
-use crate::rest_index::RestIndexStore;
+use crate::rpc_index::RpcIndexStore;
 use crate::state_accumulator::AccumulatorStore;
 use crate::transaction_outputs::TransactionOutputs;
 use either::Either;
@@ -593,7 +593,7 @@ impl AuthorityStore {
     pub fn get_objects(&self, objects: &[ObjectID]) -> Result<Vec<Option<Object>>, SuiError> {
         let mut result = Vec::new();
         for id in objects {
-            result.push(self.get_object(id)?);
+            result.push(self.get_object(id));
         }
         Ok(result)
     }
@@ -1791,7 +1791,7 @@ impl AuthorityStore {
     pub async fn prune_objects_and_compact_for_testing(
         &self,
         checkpoint_store: &Arc<CheckpointStore>,
-        rest_index: Option<&RestIndexStore>,
+        rpc_index: Option<&RpcIndexStore>,
     ) {
         let pruning_config = AuthorityStorePruningConfig {
             num_epochs_to_retain: 0,
@@ -1800,7 +1800,7 @@ impl AuthorityStore {
         let _ = AuthorityStorePruner::prune_objects_for_eligible_epochs(
             &self.perpetual_tables,
             checkpoint_store,
-            rest_index,
+            rpc_index,
             &self.objects_lock_table,
             pruning_config,
             AuthorityStorePruningMetrics::new_for_test(),
@@ -1920,18 +1920,11 @@ impl AccumulatorStore for AuthorityStore {
 
 impl ObjectStore for AuthorityStore {
     /// Read an object and return it, or Ok(None) if the object was not found.
-    fn get_object(
-        &self,
-        object_id: &ObjectID,
-    ) -> Result<Option<Object>, sui_types::storage::error::Error> {
+    fn get_object(&self, object_id: &ObjectID) -> Option<Object> {
         self.perpetual_tables.as_ref().get_object(object_id)
     }
 
-    fn get_object_by_key(
-        &self,
-        object_id: &ObjectID,
-        version: VersionNumber,
-    ) -> Result<Option<Object>, sui_types::storage::error::Error> {
+    fn get_object_by_key(&self, object_id: &ObjectID, version: VersionNumber) -> Option<Object> {
         self.perpetual_tables.get_object_by_key(object_id, version)
     }
 }

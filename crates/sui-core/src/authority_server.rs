@@ -185,6 +185,8 @@ pub struct ValidatorServiceMetrics {
     pub handle_certificate_consensus_latency: Histogram,
     pub handle_certificate_non_consensus_latency: Histogram,
     pub handle_soft_bundle_certificates_consensus_latency: Histogram,
+    pub handle_soft_bundle_certificates_count: Histogram,
+    pub handle_soft_bundle_certificates_size_bytes: Histogram,
     pub handle_transaction_consensus_latency: Histogram,
 
     num_rejected_tx_in_epoch_boundary: IntCounter,
@@ -267,6 +269,20 @@ impl ValidatorServiceMetrics {
                 "validator_service_handle_soft_bundle_certificates_consensus_latency",
                 "Latency of handling a consensus soft bundle",
                 mysten_metrics::COARSE_LATENCY_SEC_BUCKETS.to_vec(),
+                registry,
+            )
+            .unwrap(),
+            handle_soft_bundle_certificates_count: register_histogram_with_registry!(
+                "handle_soft_bundle_certificates_count",
+                "The number of certificates included in a soft bundle",
+                mysten_metrics::COUNT_BUCKETS.to_vec(),
+                registry,
+            )
+            .unwrap(),
+            handle_soft_bundle_certificates_size_bytes: register_histogram_with_registry!(
+                "handle_soft_bundle_certificates_size_bytes",
+                "The size of soft bundle in bytes",
+                mysten_metrics::BYTES_BUCKETS.to_vec(),
                 registry,
             )
             .unwrap(),
@@ -986,6 +1002,7 @@ impl ValidatorService {
         &self,
         certificates: &NonEmpty<CertifiedTransaction>,
         epoch_store: &Arc<AuthorityPerEpochStore>,
+        total_size_bytes: u64,
     ) -> Result<(), tonic::Status> {
         let protocol_config = epoch_store.protocol_config();
         let node_config = &self.state.config;
@@ -1008,6 +1025,7 @@ impl ValidatorService {
         // - All certs must not be already executed.
         // - All certs must have the same gas price.
         // - Number of certs must not exceed the max allowed.
+        // - Total size of all certs must not exceed the max allowed.
         fp_ensure!(
             certificates.len() as u64 <= protocol_config.max_soft_bundle_size(),
             SuiError::UserInputError {
@@ -1017,6 +1035,23 @@ impl ValidatorService {
             }
             .into()
         );
+
+        // We set the soft bundle max size to be half of the consensus max transactions in block size. We do this to account for
+        // serialization overheads and to ensure that the soft bundle is not too large when is attempted to be posted via consensus.
+        // Although half the block size is on the extreme side, it's should be good enough for now.
+        let soft_bundle_max_size_bytes =
+            protocol_config.consensus_max_transactions_in_block_bytes() / 2;
+        fp_ensure!(
+            total_size_bytes <= soft_bundle_max_size_bytes,
+            SuiError::UserInputError {
+                error: UserInputError::SoftBundleTooLarge {
+                    size: total_size_bytes,
+                    limit: soft_bundle_max_size_bytes,
+                },
+            }
+            .into()
+        );
+
         let mut gas_price = None;
         for certificate in certificates {
             let tx_digest = *certificate.digest();
@@ -1028,7 +1063,7 @@ impl ValidatorService {
                 .into()
             );
             fp_ensure!(
-                !self.state.is_tx_already_executed(&tx_digest)?,
+                !self.state.is_tx_already_executed(&tx_digest),
                 SuiError::UserInputError {
                     error: UserInputError::AlreadyExecutedError { digest: tx_digest }
                 }
@@ -1080,17 +1115,28 @@ impl ValidatorService {
 
         let certificates = NonEmpty::from_vec(request.certificates)
             .ok_or_else(|| SuiError::NoCertificateProvidedError)?;
+        let mut total_size_bytes = 0;
         for certificate in &certificates {
             // We need to check this first because we haven't verified the cert signature.
-            certificate.validity_check(epoch_store.protocol_config(), epoch_store.epoch())?;
+            total_size_bytes += certificate
+                .validity_check(epoch_store.protocol_config(), epoch_store.epoch())?
+                as u64;
         }
 
+        self.metrics
+            .handle_soft_bundle_certificates_count
+            .observe(certificates.len() as f64);
+
+        self.metrics
+            .handle_soft_bundle_certificates_size_bytes
+            .observe(total_size_bytes as f64);
+
         // Now that individual certificates are valid, we check if the bundle is valid.
-        self.soft_bundle_validity_check(&certificates, &epoch_store)
+        self.soft_bundle_validity_check(&certificates, &epoch_store, total_size_bytes)
             .await?;
 
         info!(
-            "Received Soft Bundle with {} certificates, from {}, tx digests are [{}]",
+            "Received Soft Bundle with {} certificates, from {}, tx digests are [{}], total size [{}]bytes",
             certificates.len(),
             client_addr
                 .map(|x| x.to_string())
@@ -1099,8 +1145,10 @@ impl ValidatorService {
                 .iter()
                 .map(|x| x.digest().to_string())
                 .collect::<Vec<_>>()
-                .join(", ")
+                .join(", "),
+            total_size_bytes
         );
+
         let span = error_span!("handle_soft_bundle_certificates_v3");
         self.handle_certificates(
             certificates,

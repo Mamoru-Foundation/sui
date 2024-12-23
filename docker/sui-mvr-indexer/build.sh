@@ -12,11 +12,7 @@ GIT_REVISION="$(git describe --always --abbrev=12 --dirty --exclude '*')"
 BUILD_DATE="$(date -u +'%Y-%m-%d')"
 
 echo
-<<<<<<<< HEAD:docker/sui-indexer-alt/build.sh
-echo "Building sui-indexer-alt docker image"
-========
 echo "Building sui-mvr-indexer docker image"
->>>>>>>> testnet-v1.38.0:docker/sui-mvr-indexer/build.sh
 echo "Dockerfile: \t$DOCKERFILE"
 echo "docker context: $REPO_ROOT"
 echo "build date: \t$BUILD_DATE"

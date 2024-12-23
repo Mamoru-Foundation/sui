@@ -5,20 +5,22 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use diesel_async::RunQueryDsl;
+use sui_indexer_alt_framework::{
+    db,
+    pipeline::{concurrent::Handler, Processor},
+};
 use sui_protocol_config::ProtocolConfig;
 use sui_types::full_checkpoint_content::CheckpointData;
 
 use crate::{
-    db,
     models::{checkpoints::StoredGenesis, epochs::StoredFeatureFlag},
-    pipeline::{concurrent::Handler, Processor},
     schema::kv_feature_flags,
 };
 
-pub struct KvFeatureFlags(pub StoredGenesis);
+pub(crate) struct KvFeatureFlags(pub(crate) StoredGenesis);
 
 impl Processor for KvFeatureFlags {
-    const NAME: &'static str = "kv_protocol_configs";
+    const NAME: &'static str = "kv_feature_flags";
     type Value = StoredFeatureFlag;
 
     fn process(&self, checkpoint: &Arc<CheckpointData>) -> Result<Vec<Self::Value>> {
@@ -55,7 +57,6 @@ impl Processor for KvFeatureFlags {
 #[async_trait::async_trait]
 impl Handler for KvFeatureFlags {
     const MIN_EAGER_ROWS: usize = 1;
-    const MAX_CHUNK_ROWS: usize = i16::MAX as usize / 3;
     const MAX_PENDING_ROWS: usize = 10000;
 
     async fn commit(values: &[Self::Value], conn: &mut db::Connection<'_>) -> Result<usize> {

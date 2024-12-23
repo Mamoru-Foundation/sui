@@ -275,7 +275,7 @@ impl<'backing> TemporaryStore<'backing> {
     ) -> (InnerTemporaryStore, TransactionEffects) {
         let updated_gas_object_info = if let Some(coin_id) = gas_charger.gas_coin() {
             let object = &self.execution_results.written_objects[&coin_id];
-            (object.compute_object_reference(), object.owner)
+            (object.compute_object_reference(), object.owner.clone())
         } else {
             (
                 (ObjectID::ZERO, SequenceNumber::default(), ObjectDigest::MIN),
@@ -299,7 +299,7 @@ impl<'backing> TemporaryStore<'backing> {
             .iter()
             .for_each(|(id, object)| {
                 let object_ref = object.compute_object_reference();
-                let owner = object.owner;
+                let owner = object.owner.clone();
                 if let Some(old_object_meta) = self.get_object_modified_at(id) {
                     modified_at_versions.push((*id, old_object_meta.version));
                     mutated.push((object_ref, owner));
@@ -460,7 +460,7 @@ impl<'backing> TemporaryStore<'backing> {
             DynamicallyLoadedObjectMetadata {
                 version: old_ref.1,
                 digest: old_ref.2,
-                owner: old_object.owner,
+                owner: old_object.owner.clone(),
                 storage_rebate: old_object.storage_rebate,
                 previous_transaction: old_object.previous_transaction,
             },
@@ -642,7 +642,7 @@ impl<'backing> TemporaryStore<'backing> {
                         |((version, digest), owner)| DynamicallyLoadedObjectMetadata {
                             version: *version,
                             digest: *digest,
-                            owner: *owner,
+                            owner: owner.clone(),
                             // It's guaranteed that a mutable input object is an input object.
                             storage_rebate: self.input_objects[object_id].storage_rebate,
                             previous_transaction: self.input_objects[object_id]
@@ -658,7 +658,7 @@ impl<'backing> TemporaryStore<'backing> {
                         DynamicallyLoadedObjectMetadata {
                             version: obj.version(),
                             digest: obj.digest(),
-                            owner: obj.owner,
+                            owner: obj.owner.clone(),
                             storage_rebate: obj.storage_rebate,
                             previous_transaction: obj.previous_transaction,
                         }
@@ -715,6 +715,9 @@ impl<'backing> TemporaryStore<'backing> {
                     Owner::ObjectOwner(_parent) => {
                         unreachable!("Input objects must be address owned, shared, or immutable")
                     }
+                    Owner::ConsensusV2 { .. } => {
+                        unimplemented!("ConsensusV2 does not exist for this execution version")
+                    }
                 }
             })
             .filter(|id| {
@@ -745,7 +748,7 @@ impl<'backing> TemporaryStore<'backing> {
                 // For example, the ID is for a wrapped table or bag.
                 *container_id
             } else {
-                let Some(old_obj) = self.store.get_object(&to_authenticate)? else {
+                let Some(old_obj) = self.store.get_object(&to_authenticate) else {
                     panic!(
                         "
                         Failed to load object {to_authenticate:?}. \n\
@@ -780,6 +783,9 @@ impl<'backing> TemporaryStore<'backing> {
                             "Only system packages can be upgraded"
                         );
                         continue;
+                    }
+                    Owner::ConsensusV2 { .. } => {
+                        unimplemented!("ConsensusV2 does not exist for this execution version")
                     }
                 }
             };
@@ -920,7 +926,7 @@ impl<'backing> TemporaryStore<'backing> {
             })
         } else {
             // not in input objects, must be a dynamic field
-            let Ok(Some(obj)) = self.store.get_object_by_key(id, expected_version) else {
+            let Some(obj) = self.store.get_object_by_key(id, expected_version) else {
                 invariant_violation!(
                     "Failed looking up dynamic field {id} in SUI conservation checking"
                 );
@@ -1258,10 +1264,7 @@ impl<'backing> ResourceResolver for TemporaryStore<'backing> {
 }
 
 impl<'backing> ParentSync for TemporaryStore<'backing> {
-    fn get_latest_parent_entry_ref_deprecated(
-        &self,
-        _object_id: ObjectID,
-    ) -> SuiResult<Option<ObjectRef>> {
+    fn get_latest_parent_entry_ref_deprecated(&self, _object_id: ObjectID) -> Option<ObjectRef> {
         unreachable!("Never called in newer protocol versions")
     }
 }

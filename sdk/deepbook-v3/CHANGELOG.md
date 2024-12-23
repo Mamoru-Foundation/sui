@@ -1,5 +1,63 @@
 # @mysten/deepbook-v3
 
+## 0.12.16
+
+### Patch Changes
+
+- f78d42a: AUSD pool support
+
+## 0.12.15
+
+### Patch Changes
+
+- Updated dependencies [ec2dc7f]
+- Updated dependencies [ec2dc7f]
+  - @mysten/sui@1.16.0
+
+## 0.12.14
+
+### Patch Changes
+
+- @mysten/sui@1.15.1
+
+## 0.12.13
+
+### Patch Changes
+
+- 9c0987c: AUSD Coin
+
+## 0.12.12
+
+### Patch Changes
+
+- Updated dependencies [6460e45]
+  - @mysten/sui@1.15.0
+
+## 0.12.11
+
+### Patch Changes
+
+- 4cf47ad: Typus pool
+
+## 0.12.10
+
+### Patch Changes
+
+- 46bdaf9: Typus coin type
+
+## 0.12.9
+
+### Patch Changes
+
+- 2a532bc: Governance function update
+
+## 0.12.8
+
+### Patch Changes
+
+- Updated dependencies [938fb6e]
+  - @mysten/sui@1.14.4
+
 ## 0.12.7
 
 ### Patch Changes

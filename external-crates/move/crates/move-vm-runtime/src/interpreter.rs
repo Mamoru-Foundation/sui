@@ -219,26 +219,18 @@ impl Interpreter {
 
         loop {
             let resolver = current_frame.resolver(link_context, loader);
-            let execution_result = current_frame //self
+            let exit_code = current_frame //self
                 .execute_code(&resolver, self, gas_meter, tracer)
-                .map_err(|err| self.maybe_core_dump(err, &current_frame));
+                .map_err(|err| self.maybe_core_dump(err, &current_frame))?;
 
             let gas_used_after_call = gas_meter.charged_already_total().unwrap();
 
-            let exit_code = {
-                let call_trace = &mut self.call_traces[current_frame.call_trace_idx];
+            let call_trace = &mut self.call_traces[current_frame.call_trace_idx];
 
-                call_trace.gas_used += gas_used_after_call
-                    .checked_sub(gas_used_before_call)
-                    .unwrap()
-                    .value();
-
-                execution_result.map_err(|err| {
-                    call_trace.err = Some(err.major_status());
-
-                    err
-                })?
-            };
+            call_trace.gas_used += gas_used_after_call
+                .checked_sub(gas_used_before_call)
+                .unwrap()
+                .value();
 
             gas_used_before_call = gas_used_after_call;
             match exit_code {
@@ -266,6 +258,17 @@ impl Interpreter {
 
                             err
                         })?;
+
+                    close_frame!(
+                        tracer,
+                        &current_frame,
+                        &current_frame.function,
+                        &self,
+                        &loader,
+                        gas_meter,
+                        link_context,
+                        None
+                    );
 
                     close_frame!(
                         tracer,
@@ -308,10 +311,10 @@ impl Interpreter {
                             func.name(),
                             self.operand_stack
                                 .last_n(func.arg_count())
-                                .map_err(|e| set_err_info!(current_frame, e.clone()))?,
+                                .map_err(|e| set_err_info!(current_frame, e))?,
                             (func.local_count() as u64).into(),
                         )
-                        .map_err(|e| set_err_info!(current_frame, e.clone()))?;
+                        .map_err(|e| set_err_info!(current_frame, e))?;
 
                     if func.is_native() {
                         let func_clone = func.clone();
@@ -353,7 +356,7 @@ impl Interpreter {
                     // TODO(Gas): We should charge gas as we do type substitution...
                     let ty_args = resolver
                         .instantiate_generic_function(idx, current_frame.ty_args())
-                        .map_err(|e| set_err_info!(current_frame, e.clone()))?;
+                        .map_err(|e| set_err_info!(current_frame, e))?;
                     let func = resolver.function_from_instantiation(idx);
                     open_frame!(
                         tracer,
@@ -375,10 +378,10 @@ impl Interpreter {
                             ty_args.iter().map(|ty| TypeWithLoader { ty, loader }),
                             self.operand_stack
                                 .last_n(func.arg_count())
-                                .map_err(|e| set_err_info!(current_frame, e.clone()))?,
+                                .map_err(|e| set_err_info!(current_frame, e))?,
                             (func.local_count() as u64).into(),
                         )
-                        .map_err(|e| set_err_info!(current_frame, e.clone()))?;
+                        .map_err(|e| set_err_info!(current_frame, e))?;
 
                     if func.is_native() {
                         let func_clone = func.clone();
@@ -923,7 +926,7 @@ impl CallStack {
 /// A `Frame` is the execution context for a function. It holds the locals of the function and
 /// the function itself.
 // #[derive(Debug)]
-pub(crate) struct  Frame {
+pub(crate) struct Frame {
     pub(crate) pc: u16,
     pub(crate) locals: Locals,
     pub(crate) function: Arc<Function>,

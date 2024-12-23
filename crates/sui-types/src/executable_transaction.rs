@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::messages_checkpoint::CheckpointSequenceNumber;
-use crate::messages_consensus::{AuthorityIndex, Round, TransactionIndex};
 use crate::{committee::EpochId, crypto::AuthorityStrongQuorumSignInfo};
 
 use crate::message_envelope::{Envelope, TrustedEnvelope, VerifiedEnvelope};

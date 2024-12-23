@@ -149,7 +149,8 @@ fn build_anemo_services(out_dir: &Path) {
                 .response_type("crate::discovery::GetKnownPeersResponseV2")
                 .codec_path(codec_path)
                 .build(),
-        ).build();
+        )
+        .build();
 
     let state_sync = anemo_build::manual::Service::builder()
         .name("StateSync")
